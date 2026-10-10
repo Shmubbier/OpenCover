@@ -43,6 +43,7 @@ import dev.opencover.layout.Item
 import dev.opencover.layout.Layout
 import dev.opencover.layout.addPage
 import dev.opencover.layout.removePage
+import dev.opencover.notify.NotificationStore
 import dev.opencover.watcher.KeepAwake
 import dev.opencover.widgets.WidgetHost
 import kotlinx.coroutines.launch
@@ -184,7 +185,7 @@ fun Shell(
                 },
             ) { i ->
                 when (i) {
-                    NOTIFICATIONS_PAGE -> Placeholder("Notifications")
+                    NOTIFICATIONS_PAGE -> NotificationsPage(NotificationStore.notes)
                     HOME_PAGE -> HomeScreen(layout.home, wallpaper, a) { slot ->
                         if (layout.home.quick[slot] == null) overlay = Overlay.PickSlot(slot) else slotMenu = slot
                     }
