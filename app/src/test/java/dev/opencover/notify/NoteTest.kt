@@ -41,6 +41,13 @@ class NoteTest {
         assertTrue(pop)
     }
 
+    // Discord re-posts one alert-once notification per channel; a newer last message is still news.
+    @Test fun newerChatMessagePopsEvenWhenAlertOnce() =
+        assertTrue(post(listOf(n("1").copy(messageTime = 1)), n("1").copy(text = "x", messageTime = 2, alertOnce = true), "me").second)
+
+    @Test fun sameChatMessageStaysQuiet() =
+        assertFalse(post(listOf(n("1").copy(messageTime = 2)), n("1").copy(messageTime = 2), "me").second)
+
     @Test fun alertOnceUpdateStaysQuiet() = assertFalse(post(listOf(n("1")), n("1").copy(text = "x", alertOnce = true), "me").second)
 
     @Test fun silentIsListedWithoutBanner() {

@@ -110,5 +110,6 @@ fun StatusBarNotification.toNote(serial: Long, alerting: Boolean): Note {
         summary = n.flags and Notification.FLAG_GROUP_SUMMARY != 0,
         alerting = alerting,
         alertOnce = n.flags and Notification.FLAG_ONLY_ALERT_ONCE != 0,
+        messageTime = lastMessage?.getLong("time")?.takeIf { it > 0 },
     )
 }
