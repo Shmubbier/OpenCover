@@ -43,7 +43,10 @@ class CoverWatcher : Service() {
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
             when (i.action) {
-                Intent.ACTION_USER_PRESENT -> if (coverActive()) openLauncher("unlock")
+                Intent.ACTION_USER_PRESENT -> {
+                    BankingMode.resume(this@CoverWatcher) // backstop if usage access is missing
+                    if (coverActive()) openLauncher("unlock")
+                }
                 Intent.ACTION_SCREEN_OFF -> paused = false
             }
             onCoverStateMaybeChanged()

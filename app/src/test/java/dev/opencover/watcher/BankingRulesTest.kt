@@ -29,3 +29,10 @@ class BankingRulesTest {
     @Test fun nonLaunchableHelperStaysPaused() = assertFalse(resume("com.google.android.gms"))
     @Test fun otherSystemUiWindowStaysPaused() = assertFalse(resume("com.android.systemui", "com.android.systemui.Dialog"))
 }
+
+class TopEdgeRulesTest {
+    @Test fun samsungPanelIsTallTypeMinusOne() = assertTrue(isSamsungPanel(type = -1, heightPx = 720))
+    @Test fun keyboardIsNotThePanel() = assertFalse(isSamsungPanel(type = 2, heightPx = 500)) // TYPE_INPUT_METHOD
+    @Test fun systemDialogIsNotThePanel() = assertFalse(isSamsungPanel(type = 3, heightPx = 720)) // TYPE_SYSTEM
+    @Test fun shortUnknownWindowIsNotThePanel() = assertFalse(isSamsungPanel(type = -1, heightPx = 60))
+}

@@ -1,6 +1,11 @@
 package dev.opencover.watcher
 
 import android.Manifest
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Intent
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
@@ -36,7 +41,24 @@ object BankingMode {
     fun resume(ctx: Context) {
         if (pausedFor(ctx) == null) return
         prefs(ctx).edit().remove("paused").commit()
-        if (canResume(ctx)) setService(ctx, on = true) // otherwise the user turns it back on in Settings
+        if (canResume(ctx)) setService(ctx, on = true) else askToReEnable(ctx)
+    }
+
+    /** Without WRITE_SECURE_SETTINGS we can't turn ourselves back on: say so, with a tap to Settings. */
+    private fun askToReEnable(ctx: Context) {
+        val open = PendingIntent.getActivity(
+            ctx, 0, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_IMMUTABLE,
+        )
+        val nm = ctx.getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(NotificationChannel("banking", "Banking mode", NotificationManager.IMPORTANCE_DEFAULT))
+        nm.notify(2, Notification.Builder(ctx, "banking")
+            .setSmallIcon(android.R.drawable.ic_menu_view)
+            .setContentTitle("Turn OpenCover back on")
+            .setContentText("Accessibility was paused for a banking app. Tap to turn it back on.")
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build())
     }
 
     private fun setService(ctx: Context, on: Boolean) {

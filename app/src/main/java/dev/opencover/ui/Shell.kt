@@ -65,6 +65,8 @@ class LauncherActions(
     val setBankingApps: (Set<String>) -> Unit,
     val topEdge: () -> Boolean,
     val setTopEdge: (Boolean) -> Unit,
+    val usageGranted: () -> Boolean,
+    val grantUsage: () -> Unit,
 )
 
 @Composable
@@ -136,6 +138,8 @@ fun Shell(
         panel = Panel.QUICK_SETTINGS
         reveal.animateTo(1f)
     }
+    // Edit mode belongs to the apps pages; swiping to Home or Notifications ends it.
+    LaunchedEffect(pager.settledPage) { if (pager.settledPage < FIRST_APPS_PAGE) editing = false }
     BackHandler(enabled = editing) { editing = false }
     BackHandler(enabled = panel != null) { closePanel() }
 
@@ -262,6 +266,8 @@ fun Shell(
                     selected = selected,
                     onChange = { selected = it; a.setBankingApps(it) },
                     onClose = { overlay = Overlay.Settings },
+                    needsUsageAccess = selected.isNotEmpty() && !a.usageGranted(),
+                    onGrantUsage = a.grantUsage,
                 )
             }
             null -> {}

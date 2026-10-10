@@ -19,15 +19,17 @@ object AppLauncher {
         ctx.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), options())
     }
 
-    /** Launches an installed app on the cover display as the given user (serial number). */
-    fun launch(ctx: Context, pkg: String, activity: String, user: Long) {
+    /** Launches an installed app on the cover display as the given user (serial number). False if it failed. */
+    fun launch(ctx: Context, pkg: String, activity: String, user: Long): Boolean {
         val handle = ctx.getSystemService(UserManager::class.java).getUserForSerialNumber(user)
         try {
             requireNotNull(handle) { "user $user gone" }
             ctx.getSystemService(LauncherApps::class.java)
                 .startMainActivity(ComponentName(pkg, activity), handle, null, options())
+            return true
         } catch (e: Exception) {
             Toast.makeText(ctx, "Couldn't open $pkg", Toast.LENGTH_SHORT).show()
+            return false
         }
     }
 }

@@ -55,9 +55,7 @@ class CoverAccessibility : AccessibilityService() {
     /** Samsung's panel (window "SubScreenQuickPanel") shows up as a full-screen type -1 window on top. */
     private fun samsungPanel(): AccessibilityWindowInfo? {
         val top = windowsOnAllDisplays[COVER_DISPLAY]?.firstOrNull() ?: return null
-        val isPanel = top.type != AccessibilityWindowInfo.TYPE_APPLICATION &&
-            top.type != AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY &&
-            Rect().also(top::getBoundsInScreen).height() > COVER_HEIGHT_PX / 2
+        val isPanel = isSamsungPanel(top.type, Rect().also(top::getBoundsInScreen).height())
         return top.takeIf { isPanel }
     }
 
@@ -106,7 +104,6 @@ class CoverAccessibility : AccessibilityService() {
 
     companion object {
         private const val TAG = "CoverWatcher"
-        private const val COVER_HEIGHT_PX = 720
         var instance: CoverAccessibility? = null
             private set
     }

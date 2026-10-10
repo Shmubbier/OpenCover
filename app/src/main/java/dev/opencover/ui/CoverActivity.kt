@@ -115,7 +115,8 @@ class CoverActivity : ComponentActivity() {
             launch = { pkg, activity, user ->
                 // Step aside before a banking app checks for accessibility services.
                 if (pkg in BankingMode.apps(this)) BankingMode.pause(this, pkg)
-                AppLauncher.launch(this, pkg, activity, user)
+                // Didn't open: we're still in OpenCover, so turn accessibility straight back on.
+                if (!AppLauncher.launch(this, pkg, activity, user)) BankingMode.resume(this)
             },
             change = ::update,
             addApp = { e, page -> place(page, 1, 1, { AppItem(newId(), it, e.pkg, e.activity, e.user) }) },
@@ -133,6 +134,8 @@ class CoverActivity : ComponentActivity() {
             setBankingApps = { BankingMode.setApps(this, it) },
             topEdge = { TopEdge.enabled(this) },
             setTopEdge = { TopEdge.setEnabled(this, it) },
+            usageGranted = { Permissions.usage(this) },
+            grantUsage = { openSettings(Settings.ACTION_USAGE_ACCESS_SETTINGS, withPackage = true) },
         )
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {

@@ -21,3 +21,6 @@ fun shouldResume(
     resumedClass == SAMSUNG_COVER_HOME || resumedPkg == ownPkg -> true
     else -> launchable(resumedPkg) // helper screens (Play services, dialogs) aren't launchable
 }
+
+/** Samsung's cover pull-down panel ("SubScreenQuickPanel") as measured: type -1, taller than half the screen. */
+fun isSamsungPanel(type: Int, heightPx: Int) = type == -1 && heightPx > 720 / 2

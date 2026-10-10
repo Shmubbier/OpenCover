@@ -24,14 +24,18 @@ needs.
 - By default the service only hears window changes from Samsung's system UI and the banking
   apps you pick. It never reads screen content or what you type.
 - The experimental "Top-edge priority" setting (off by default) also reads the window list to
-  catch Samsung's pull-down panel. Android requires the screen-access capability to be declared
-  up front, so the Accessibility consent screen mentions it either way.
+  catch Samsung's pull-down panel. While it's on, window-change events from every app arrive
+  (they can include short text such as dialog titles; OpenCover doesn't read it). Android
+  requires the screen-access capability to be declared up front, so the Accessibility consent
+  screen mentions it either way.
 - OpenCover has no internet permission. Nothing leaves your phone.
 
 ## Banking apps
 Some banking apps refuse to run while any accessibility service is on. Pick them under
 Settings > Banking apps and OpenCover steps aside while they're open. To let it turn itself back
 on afterwards, run once: `adb shell pm grant dev.opencover android.permission.WRITE_SECURE_SETTINGS`.
+That permission allows changing any secure setting; OpenCover only uses it to switch its own
+accessibility service. It also needs Usage access to notice when you leave the banking app.
 
 ## Status
 Sub-project 1 of 8. See `docs/superpowers/specs/` for the roadmap.

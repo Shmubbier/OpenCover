@@ -23,13 +23,26 @@ import dev.opencover.apps.AppEntry
 
 /** Pick apps that refuse to run while OpenCover's accessibility service is on. */
 @Composable
-fun BankingPicker(apps: List<AppEntry>, selected: Set<String>, onChange: (Set<String>) -> Unit, onClose: () -> Unit) {
+fun BankingPicker(
+    apps: List<AppEntry>,
+    selected: Set<String>,
+    onChange: (Set<String>) -> Unit,
+    onClose: () -> Unit,
+    needsUsageAccess: Boolean,
+    onGrantUsage: () -> Unit,
+) {
     BackHandler(onBack = onClose)
     val byPackage = remember(apps) { apps.distinctBy { it.pkg }.sortedBy { it.label.lowercase() } }
     Column(Modifier.fillMaxSize().background(Color(0xF0101010))) {
         Text(
             "Banking apps: OpenCover steps aside while these are open.",
             color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(12.dp),
+        )
+        // Without usage access OpenCover can't tell when you leave the banking app.
+        if (needsUsageAccess) Text(
+            "Needs Usage access to turn back on when you leave. Tap to grant.",
+            color = Color(0xFFFFB74D), fontSize = 12.sp,
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onGrantUsage).padding(12.dp),
         )
         LazyColumn {
             items(byPackage, key = { it.pkg }) { app ->
