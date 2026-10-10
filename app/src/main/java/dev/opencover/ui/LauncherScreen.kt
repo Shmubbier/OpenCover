@@ -46,6 +46,7 @@ class LauncherActions(
     val addWidget: (AppWidgetProviderInfo, page: Int) -> Unit,
     val samsungWidgets: () -> Unit,
     val setKeepAwake: (Boolean) -> Unit,
+    val openSetup: () -> Unit,
 )
 
 @Composable
@@ -132,6 +133,7 @@ fun LauncherScreen(layout: Layout, apps: List<AppEntry>, a: LauncherActions, pro
                 keepAwake = keepAwake,
                 onKeepAwake = { keepAwake = it; a.setKeepAwake(it) },
                 onSamsungWidgets = { overlay = Overlay.NONE; editing = false; a.samsungWidgets() },
+                onSetup = { overlay = Overlay.NONE; editing = false; a.openSetup() },
                 onClose = { overlay = Overlay.NONE },
             )
             Overlay.NONE -> {}
