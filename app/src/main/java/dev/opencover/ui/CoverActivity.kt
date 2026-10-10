@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import dev.opencover.COVER_DISPLAY
 import dev.opencover.apps.AppLauncher
+import dev.opencover.watcher.CoverWatcher
 import dev.opencover.widgets.WidgetHost
 
 class CoverActivity : ComponentActivity() {
@@ -32,6 +33,7 @@ class CoverActivity : ComponentActivity() {
             Toast.makeText(this, "PROBE widget $id added: ${info.provider}", Toast.LENGTH_LONG).show()
             Log.i("OCPROBE", "added $id ${info.provider}")
         }
+        startForegroundService(Intent(this, CoverWatcher::class.java))
         // PROBE (removed in Task 9): adb ... --es probeWidget <pkg/cls>
         intent.getStringExtra("probeWidget")?.let { flat ->
             widgets.find(flat)?.let { widgets.begin(it, 0) } ?: Log.e("OCPROBE", "no provider $flat")

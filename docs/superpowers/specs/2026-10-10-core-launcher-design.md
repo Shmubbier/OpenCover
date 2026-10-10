@@ -134,8 +134,8 @@ The foreground-service notification permission is requested in the same list.
 | # | Assumption | Fallback if false | Result |
 |---|---|---|---|
 | R1 | Widget bind dialog can be shown on display 1 | One-time `adb shell appwidget grantbind --package dev.opencover` | PASS 2026-10-10: Samsung "Allow access to widget content?" dialog shows on the cover; "Always allow" ticked |
-| R2 | UsageEvents report `SubHomeActivity` resumes promptly (<500 ms) | AccessibilityService listening only for `TYPE_WINDOW_STATE_CHANGED` | pending |
-| R3 | `SYSTEM_ALERT_WINDOW` permits starting `CoverActivity` from the service on unlock | A MultiStar tile that launches the launcher manually | pending |
+| R2 | UsageEvents report `SubHomeActivity` resumes promptly (<500 ms) | AccessibilityService listening only for `TYPE_WINDOW_STATE_CHANGED` | PASS 2026-10-10: SubHomeActivity resume seen and redirect issued in the same 300 ms poll |
+| R3 | `SYSTEM_ALERT_WINDOW` permits starting `CoverActivity` from the service on unlock | A MultiStar tile that launches the launcher manually | PASS 2026-10-10: `open launcher (unlock)` brought CoverActivity to front over Chrome |
 
 ## Testing
 - **Unit (JUnit):** GridEngine covers placement, overlap, bounds, move and resize
