@@ -14,10 +14,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,6 +42,7 @@ import dev.opencover.notify.groupConversations
 
 private val Card = Color(0xFF1E1E1E)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationsPage(notes: List<Note>) {
     val ctx = LocalContext.current
@@ -48,6 +52,20 @@ fun NotificationsPage(notes: List<Note>) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No notifications", color = Color.Gray) }
         return
     }
+    // Pull down past the threshold and release to clear all, like refreshing a browser page.
+    val pull = rememberPullToRefreshState()
+    PullToRefreshBox(
+        isRefreshing = false,
+        onRefresh = { NotificationStore.clearAll() },
+        state = pull,
+        indicator = {
+            if (pull.distanceFraction > 0f) Text(
+                if (pull.distanceFraction >= 1f) "Release to clear all" else "Pull to clear all",
+                color = Color.White, fontSize = 12.sp,
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp),
+            )
+        },
+    ) {
     LazyColumn(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(groups, key = { it.key }) { c ->
             val open = c.key in expanded
@@ -64,6 +82,7 @@ fun NotificationsPage(notes: List<Note>) {
             }
         }
     }
+}
 }
 
 @Composable

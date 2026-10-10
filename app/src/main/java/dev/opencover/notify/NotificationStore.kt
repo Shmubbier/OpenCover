@@ -73,6 +73,11 @@ object NotificationStore {
         NotificationAccess.instance?.cancelNotification(key)
     }
 
+    /** Like "Clear all" on the main screen: ongoing notifications stay. */
+    fun clearAll() {
+        NotificationAccess.instance?.cancelAllNotifications()
+    }
+
     private fun sendOnCover(ctx: Context, pi: PendingIntent): Boolean = try {
         val options = ActivityOptions.makeBasic()
             .setLaunchDisplayId(COVER_DISPLAY)
