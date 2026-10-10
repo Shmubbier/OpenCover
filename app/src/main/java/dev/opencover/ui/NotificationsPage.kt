@@ -29,6 +29,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -41,6 +44,7 @@ import dev.opencover.notify.ReplyActivity
 import dev.opencover.notify.groupConversations
 
 private val Card = Color(0xFF1E1E1E)
+private val PULL_TO_CLEAR = 72.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,14 +63,26 @@ fun NotificationsPage(notes: List<Note>) {
         onRefresh = { NotificationStore.clearAll() },
         state = pull,
         indicator = {
-            if (pull.distanceFraction > 0f) Text(
-                if (pull.distanceFraction >= 1f) "Release to clear all" else "Pull to clear all",
-                color = Color.White, fontSize = 12.sp,
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp),
-            )
+            // A clear-all badge in the gap the list leaves: grows with the pull, turns red when release will clear.
+            val f = pull.distanceFraction
+            if (f > 0f) Column(
+                Modifier.align(Alignment.TopCenter).padding(top = 12.dp).graphicsLayer { alpha = f.coerceAtMost(1f) },
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    Modifier.size(36.dp).graphicsLayer { val s = 0.6f + 0.4f * f.coerceAtMost(1f); scaleX = s; scaleY = s }
+                        .background(if (f >= 1f) Color(0xFFB00020) else Color(0xFF444444), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) { Text("✕", color = Color.White, fontSize = 18.sp) }
+                Text(if (f >= 1f) "Release to clear all" else "Pull to clear all", color = Color.White, fontSize = 11.sp)
+            }
         },
     ) {
-    LazyColumn(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(
+        // The list slides down with the finger, up to the threshold distance and a bit beyond.
+        Modifier.fillMaxSize().graphicsLayer { translationY = pull.distanceFraction * PULL_TO_CLEAR.toPx() }.padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         items(groups, key = { it.key }) { c ->
             val open = c.key in expanded
             Column(
