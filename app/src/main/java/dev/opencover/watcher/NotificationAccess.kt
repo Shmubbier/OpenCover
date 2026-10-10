@@ -4,6 +4,7 @@ import android.app.NotificationManager
 import android.os.UserManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import dev.opencover.notify.Banner
 import dev.opencover.notify.NotificationStore
 import dev.opencover.notify.toNote
 
@@ -24,6 +25,7 @@ class NotificationAccess : NotificationListenerService() {
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         NotificationStore.removed(sbn.key)
+        Banner.removed(sbn.key)
     }
 
     private fun add(sbn: StatusBarNotification, ranking: RankingMap, banner: Boolean) {
@@ -31,7 +33,7 @@ class NotificationAccess : NotificationListenerService() {
         val alerting = ranking.getRanking(sbn.key, r) && r.importance >= NotificationManager.IMPORTANCE_DEFAULT
         val serial = getSystemService(UserManager::class.java).getSerialNumberForUser(sbn.user)
         val note = sbn.toNote(serial, alerting)
-        NotificationStore.posted(this, sbn, note) // banner hookup arrives in Task 3
+        if (NotificationStore.posted(this, sbn, note) && banner) Banner.show(this, note)
     }
 
     companion object {

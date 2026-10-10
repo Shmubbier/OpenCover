@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun SettingsPanel(
     keepAwake: Boolean,
+    popups: Boolean,
+    onPopups: (Boolean) -> Unit,
     onKeepAwake: (Boolean) -> Unit,
     onSamsungWidgets: () -> Unit,
     onSetup: () -> Unit,
@@ -41,6 +43,10 @@ fun SettingsPanel(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Keep cover screen awake", color = Color.White, modifier = Modifier.weight(1f))
             Switch(checked = keepAwake, onCheckedChange = onKeepAwake)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Notification pop-ups", color = Color.White, modifier = Modifier.weight(1f))
+            Switch(checked = popups, onCheckedChange = onPopups)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {

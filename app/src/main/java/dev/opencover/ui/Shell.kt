@@ -68,6 +68,8 @@ class LauncherActions(
     val setTopEdge: (Boolean) -> Unit,
     val usageGranted: () -> Boolean,
     val grantUsage: () -> Unit,
+    val popups: () -> Boolean,
+    val setPopups: (Boolean) -> Unit,
 )
 
 @Composable
@@ -117,6 +119,7 @@ fun Shell(
     val labels = remember(apps) { apps.associate { it.key to it.label } }
     var keepAwake by remember { mutableStateOf(KeepAwake.isOn) }
     var topEdge by remember { mutableStateOf(a.topEdge()) }
+    var popups by remember { mutableStateOf(a.popups()) }
 
     fun closePanel() {
         scope.launch { reveal.animateTo(0f); panel = null }
@@ -243,6 +246,8 @@ fun Shell(
             }
             Overlay.Settings -> SettingsPanel(
                 keepAwake = keepAwake,
+                popups = popups,
+                onPopups = { popups = it; a.setPopups(it) },
                 onKeepAwake = { keepAwake = it; a.setKeepAwake(it) },
                 onSamsungWidgets = { overlay = null; editing = false; a.samsungWidgets() },
                 onSetup = { overlay = null; editing = false; a.openSetup() },

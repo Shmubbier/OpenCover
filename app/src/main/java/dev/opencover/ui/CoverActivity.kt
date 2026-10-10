@@ -29,6 +29,7 @@ import dev.opencover.apps.AppRepository
 import dev.opencover.grid.Cell
 import dev.opencover.grid.cellSpan
 import dev.opencover.home.Wallpaper
+import dev.opencover.notify.NotificationStore
 import dev.opencover.layout.QuickApp
 import dev.opencover.layout.setQuick
 import dev.opencover.layout.AppItem
@@ -136,6 +137,8 @@ class CoverActivity : ComponentActivity() {
             setTopEdge = { TopEdge.setEnabled(this, it) },
             usageGranted = { Permissions.usage(this) },
             grantUsage = { openSettings(Settings.ACTION_USAGE_ACCESS_SETTINGS, withPackage = true) },
+            popups = { NotificationStore.popupsEnabled(this) },
+            setPopups = { NotificationStore.setPopups(this, it) },
         )
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
