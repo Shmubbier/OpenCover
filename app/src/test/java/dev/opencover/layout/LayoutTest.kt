@@ -92,5 +92,16 @@ class LayoutTest {
         assertEquals(Cell(3, 1, 1, 1), items[7].cell)
     }
 
+    @Test fun moveOrSwapMovesIntoFreeCell() =
+        assertEquals(Cell(3, 0, 1, 1), base.moveOrSwap(0, "a", 3, 0)!!.pages[0].items.first { it.id == "a" }.cell)
+
+    @Test fun moveOrSwapSwapsSameSizeItems() {
+        val l = base.moveOrSwap(0, "a", 1, 0)!!
+        assertEquals(Cell(1, 0, 1, 1), l.pages[0].items.first { it.id == "a" }.cell)
+        assertEquals(Cell(0, 0, 1, 1), l.pages[0].items.first { it.id == "b" }.cell)
+    }
+
+    @Test fun moveOrSwapRejectsDifferentSizes() = assertNull(base.moveOrSwap(0, "a", 0, 2))
+
     @Test fun jsonRoundTrip() = assertEquals(base, LayoutJson.decode(LayoutJson.encode(base)))
 }

@@ -1,6 +1,7 @@
 package dev.opencover.watcher
 
 import android.accessibilityservice.AccessibilityService
+import android.app.KeyguardManager
 import android.content.Intent
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
@@ -20,6 +21,9 @@ class CoverAccessibility : AccessibilityService() {
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         if (event.displayId != COVER_DISPLAY || CoverWatcher.paused) return
         if (event.className?.toString() != SAMSUNG_COVER_HOME) return
+        // Samsung's cover home also sits behind the lock screen; redirecting there fights the
+        // PIN/face unlock UI (flicker). CoverWatcher opens the launcher on unlock instead.
+        if (getSystemService(KeyguardManager::class.java).isKeyguardLocked) return
         Log.i(TAG, "open launcher (home)")
         AppLauncher.start(this, Intent(this, CoverActivity::class.java))
     }

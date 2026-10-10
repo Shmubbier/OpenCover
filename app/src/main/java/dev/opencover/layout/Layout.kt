@@ -57,6 +57,22 @@ private fun Layout.reshape(page: Int, id: String, f: (Cell) -> Cell): Layout? {
 fun Layout.moveItem(page: Int, id: String, x: Int, y: Int) = reshape(page, id) { it.copy(x = x, y = y) }
 fun Layout.resizeItem(page: Int, id: String, w: Int, h: Int) = reshape(page, id) { it.copy(w = w, h = h) }
 
+/** Drag-and-drop: move into free space, or swap with a same-sized item sitting exactly at (x, y). */
+fun Layout.moveOrSwap(page: Int, id: String, x: Int, y: Int): Layout? {
+    moveItem(page, id, x, y)?.let { return it }
+    val p = pages.getOrNull(page) ?: return null
+    val moving = p.items.find { it.id == id } ?: return null
+    val other = p.items.find { it.id != id && it.cell.x == x && it.cell.y == y } ?: return null
+    if (other.cell.w != moving.cell.w || other.cell.h != moving.cell.h) return null
+    return withPage(page, p.copy(items = p.items.map {
+        when (it.id) {
+            id -> it.withCell(other.cell)
+            other.id -> it.withCell(moving.cell)
+            else -> it
+        }
+    }))
+}
+
 /** Places a w×h item at the first free spot on [page]; null if the page has no room. */
 fun Layout.addItem(page: Int, w: Int, h: Int, make: (Cell) -> Item): Layout? {
     val p = pages.getOrNull(page) ?: return null

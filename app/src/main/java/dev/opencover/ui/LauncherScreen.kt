@@ -4,7 +4,8 @@ import android.appwidget.AppWidgetProviderInfo
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -56,10 +57,8 @@ fun EditBar(
     onDone: () -> Unit,
     extra: @Composable RowScope.() -> Unit = {},
 ) {
-    Row(
-        Modifier.fillMaxWidth().background(Color(0xCC202020)),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-    ) {
+    // Scrolls sideways: seven buttons don't fit across a 352 dp cover screen.
+    Row(Modifier.fillMaxWidth().background(Color(0xCC202020)).horizontalScroll(rememberScrollState())) {
         extra()
         TextButton(onClick = onAddPage) { Text("+ Page") }
         TextButton(onClick = { onRemovePage?.invoke() }, enabled = onRemovePage != null) { Text("− Page") }
@@ -70,7 +69,7 @@ fun EditBar(
 /** Shown when something doesn't fit on the current page. */
 class PageFullPrompt(val confirm: () -> Unit, val cancel: () -> Unit)
 
-private enum class Overlay { NONE, DRAWER, WIDGETS, SETTINGS }
+private enum class Overlay { NONE, DRAWER, ADD_APP, WIDGETS, SETTINGS }
 
 @Composable
 fun LauncherScreen(layout: Layout, apps: List<AppEntry>, a: LauncherActions, prompt: PageFullPrompt?) {
@@ -92,6 +91,7 @@ fun LauncherScreen(layout: Layout, apps: List<AppEntry>, a: LauncherActions, pro
                     onRemovePage = removable?.let { l -> { a.change(l) } },
                     onDone = { editing = false },
                     extra = {
+                        TextButton(onClick = { overlay = Overlay.ADD_APP }) { Text("+ App") }
                         TextButton(onClick = { overlay = Overlay.WIDGETS }) { Text("+ Widget") }
                         TextButton(onClick = { overlay = Overlay.SETTINGS }) { Text("Settings") }
                     },
@@ -116,6 +116,15 @@ fun LauncherScreen(layout: Layout, apps: List<AppEntry>, a: LauncherActions, pro
                 onLaunch = { overlay = Overlay.NONE; a.launch(it.pkg, it.activity, it.user) },
                 onAddToHome = { overlay = Overlay.NONE; a.addApp(it, pager.currentPage) },
                 onClose = { overlay = Overlay.NONE },
+                hint = "Long-press an app to add it to Home",
+            )
+            Overlay.ADD_APP -> AppDrawer(
+                apps = apps,
+                icon = { a.repo.icon(it.pkg, it.activity, it.user) },
+                onLaunch = { overlay = Overlay.NONE; a.addApp(it, pager.currentPage) },
+                onAddToHome = { overlay = Overlay.NONE; a.addApp(it, pager.currentPage) },
+                onClose = { overlay = Overlay.NONE },
+                hint = "Tap an app to add it to this page",
             )
             Overlay.WIDGETS -> {
                 val pm = LocalContext.current.packageManager
