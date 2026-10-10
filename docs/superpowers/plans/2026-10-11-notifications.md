@@ -769,7 +769,7 @@ Import `dev.opencover.notify.ReplyActivity`.
             Permissions.mic(this)) { requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 2) },
 ```
 
-- [ ] **Step 5: Build, install, device check 3 (voice).** Run `adb shell "dumpsys package com.google.android.tts | head -1"` is not needed; instead open Setup, grant Microphone, then ask the user to reply to a Messenger message: once typed, once by voice. Expected: the sheet opens on the cover, Mic fills the box, Send delivers and closes the sheet. Then ask them to reply to a message they already read on another device (reply action often cancelled): expected "Couldn't send" and the text stays.
+- [ ] **Step 5: Build, install, device check 3 (voice).** Open Setup, grant Microphone, then ask the user to reply to a Messenger message: once typed, once by voice. Expected: the sheet opens on the cover, Mic fills the box, Send delivers and closes the sheet. Then ask them to reply to a message they already read on another device (reply action often cancelled): expected "Couldn't send" and the text stays.
 
 - [ ] **Step 6: Commit** `Add reply sheet with voice input`
 
