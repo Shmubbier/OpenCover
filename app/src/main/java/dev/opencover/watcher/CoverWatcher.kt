@@ -5,6 +5,10 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.app.usage.UsageEvents
+import android.app.usage.UsageStatsManager
+import android.content.pm.LauncherApps
+import android.os.Process
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -46,8 +50,42 @@ class CoverWatcher : Service() {
         }
     }
 
+    // Banking mode: while paused, check once a second whether the user has left the banking app.
+    private var lastSeen = 0L
+    private val bankingPoll = object : Runnable {
+        override fun run() {
+            val paused = BankingMode.pausedFor(this@CoverWatcher) ?: return
+            if (leftBankingApp(paused)) BankingMode.resume(this@CoverWatcher) else handler.postDelayed(this, 1000)
+        }
+    }
+
+    fun watchForResume() {
+        lastSeen = System.currentTimeMillis()
+        handler.removeCallbacks(bankingPoll)
+        handler.post(bankingPoll)
+    }
+
+    private fun leftBankingApp(paused: String): Boolean {
+        val events = getSystemService(UsageStatsManager::class.java).queryEvents(lastSeen, System.currentTimeMillis())
+        val e = UsageEvents.Event()
+        val launcherApps = getSystemService(LauncherApps::class.java)
+        var left = false
+        while (events.hasNextEvent()) {
+            events.getNextEvent(e)
+            if (e.eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
+                left = shouldResume(paused, e.packageName, e.className, packageName, BankingMode.apps(this)) {
+                    launcherApps.getActivityList(it, Process.myUserHandle()).isNotEmpty()
+                }
+            }
+            lastSeen = maxOf(lastSeen, e.timeStamp + 1)
+        }
+        return left
+    }
+
     override fun onCreate() {
         super.onCreate()
+        instance = this
+        if (BankingMode.pausedFor(this) != null) watchForResume()
         displays = getSystemService(DisplayManager::class.java)
         keyguard = getSystemService(KeyguardManager::class.java)
         startForeground(1, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
@@ -63,6 +101,8 @@ class CoverWatcher : Service() {
     override fun onBind(intent: Intent?) = null
 
     override fun onDestroy() {
+        instance = null
+        handler.removeCallbacksAndMessages(null)
         displays.unregisterDisplayListener(displayListener)
         unregisterReceiver(receiver)
         super.onDestroy()
@@ -98,6 +138,8 @@ class CoverWatcher : Service() {
     companion object {
         /** Set by "Open Samsung widgets"; cleared when the screen turns off. */
         @Volatile var paused = false
+        var instance: CoverWatcher? = null
+            private set
         private const val CHANNEL = "watcher"
         private const val TAG = "CoverWatcher"
     }

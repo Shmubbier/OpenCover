@@ -25,6 +25,7 @@ fun SettingsPanel(
     onSamsungWidgets: () -> Unit,
     onSetup: () -> Unit,
     onWallpaper: () -> Unit,
+    onBanking: () -> Unit,
     onClose: () -> Unit,
 ) {
     BackHandler(onBack = onClose)
@@ -40,6 +41,7 @@ fun SettingsPanel(
         Button(onClick = onSamsungWidgets) { Text("Open Samsung widgets") }
         Button(onClick = onSetup) { Text("Setup & permissions") }
         Button(onClick = onWallpaper) { Text("Set wallpaper") }
+        Button(onClick = onBanking) { Text("Banking apps") }
         TextButton(onClick = onClose) { Text("Close") }
     }
 }

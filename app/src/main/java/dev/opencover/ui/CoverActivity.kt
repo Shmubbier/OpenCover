@@ -42,6 +42,7 @@ import dev.opencover.layout.newId
 import dev.opencover.layout.pruneMissing
 import dev.opencover.layout.removeItem
 import dev.opencover.layout.removePackage
+import dev.opencover.watcher.BankingMode
 import dev.opencover.watcher.CoverWatcher
 import dev.opencover.watcher.KeepAwake
 import dev.opencover.watcher.NotificationAccess
@@ -102,7 +103,11 @@ class CoverActivity : ComponentActivity() {
         val actions = LauncherActions(
             repo = repo,
             widgets = widgets,
-            launch = { pkg, activity, user -> AppLauncher.launch(this, pkg, activity, user) },
+            launch = { pkg, activity, user ->
+                // Step aside before a banking app checks for accessibility services.
+                if (pkg in BankingMode.apps(this)) BankingMode.pause(this, pkg)
+                AppLauncher.launch(this, pkg, activity, user)
+            },
             change = ::update,
             addApp = { e, page -> place(page, 1, 1, { AppItem(newId(), it, e.pkg, e.activity, e.user) }) },
             remove = ::remove,
@@ -115,6 +120,8 @@ class CoverActivity : ComponentActivity() {
             openSetup = { showSetup = true },
             setQuick = { slot, e -> update(layout.setQuick(slot, e?.let { QuickApp(it.pkg, it.activity, it.user) })) },
             pickWallpaper = ::pickWallpaper,
+            bankingApps = { BankingMode.apps(this) },
+            setBankingApps = { BankingMode.setApps(this, it) },
         )
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
@@ -146,6 +153,9 @@ class CoverActivity : ComponentActivity() {
                 ComponentName(this, NotificationAccess::class.java).flattenToString(),
             ))
         },
+        SetupStep("Banking apps auto-resume (optional)",
+            "Run once on a computer: adb shell pm grant dev.opencover android.permission.WRITE_SECURE_SETTINGS",
+            BankingMode.canResume(this)) {},
         SetupStep("Notifications (optional)", "Shows that OpenCover is running",
             Permissions.notifications(this)) { requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1) },
     )
@@ -168,6 +178,7 @@ class CoverActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        BankingMode.resume(this) // back in OpenCover, so any banking app was left
         resumeTick++
         refreshApps()
         if (!loaded) loadLayout()
