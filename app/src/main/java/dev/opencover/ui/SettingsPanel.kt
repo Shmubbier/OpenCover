@@ -2,6 +2,8 @@ package dev.opencover.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,17 +28,27 @@ fun SettingsPanel(
     onSetup: () -> Unit,
     onWallpaper: () -> Unit,
     onBanking: () -> Unit,
+    topEdge: Boolean,
+    onTopEdge: (Boolean) -> Unit,
     onClose: () -> Unit,
 ) {
     BackHandler(onBack = onClose)
     Column(
-        Modifier.fillMaxSize().background(Color(0xF0101010)).padding(16.dp),
+        Modifier.fillMaxSize().background(Color(0xF0101010)).verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Settings", color = Color.White, fontSize = 20.sp)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Keep cover screen awake", color = Color.White, modifier = Modifier.weight(1f))
             Switch(checked = keepAwake, onCheckedChange = onKeepAwake)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Top-edge priority", color = Color.White)
+                Text("Replaces Samsung's pull-down panel with ours. Lets OpenCover read the window list.",
+                    color = Color.Gray, fontSize = 11.sp)
+            }
+            Switch(checked = topEdge, onCheckedChange = onTopEdge)
         }
         Button(onClick = onSamsungWidgets) { Text("Open Samsung widgets") }
         Button(onClick = onSetup) { Text("Setup & permissions") }

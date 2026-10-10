@@ -63,6 +63,8 @@ class LauncherActions(
     val pickWallpaper: () -> Unit,
     val bankingApps: () -> Set<String>,
     val setBankingApps: (Set<String>) -> Unit,
+    val topEdge: () -> Boolean,
+    val setTopEdge: (Boolean) -> Unit,
 )
 
 @Composable
@@ -99,6 +101,7 @@ fun Shell(
     prompt: PageFullPrompt?,
     wallpaper: ImageBitmap?,
     homeRequests: Int,
+    quickSettingsRequests: Int,
 ) {
     var editing by remember { mutableStateOf(false) }
     var overlay by remember { mutableStateOf<Overlay?>(null) }
@@ -110,6 +113,7 @@ fun Shell(
     val pager = rememberPagerState(initialPage = HOME_PAGE) { pageCount }
     val labels = remember(apps) { apps.associate { it.key to it.label } }
     var keepAwake by remember { mutableStateOf(KeepAwake.isOn) }
+    var topEdge by remember { mutableStateOf(a.topEdge()) }
 
     fun closePanel() {
         scope.launch { reveal.animateTo(0f); panel = null }
@@ -123,6 +127,14 @@ fun Shell(
         panel = null
         reveal.snapTo(0f)
         pager.scrollToPage(HOME_PAGE)
+    }
+    // Top-edge priority: Samsung's panel was just closed, open ours in its place.
+    LaunchedEffect(quickSettingsRequests) {
+        if (quickSettingsRequests == 0) return@LaunchedEffect
+        overlay = null
+        slotMenu = null
+        panel = Panel.QUICK_SETTINGS
+        reveal.animateTo(1f)
     }
     BackHandler(enabled = editing) { editing = false }
     BackHandler(enabled = panel != null) { closePanel() }
@@ -231,6 +243,8 @@ fun Shell(
                 onSetup = { overlay = null; editing = false; a.openSetup() },
                 onWallpaper = { overlay = null; a.pickWallpaper() },
                 onBanking = { overlay = Overlay.Banking },
+                topEdge = topEdge,
+                onTopEdge = { topEdge = it; a.setTopEdge(it) },
                 onClose = { overlay = null },
             )
             is Overlay.PickSlot -> AppDrawer(

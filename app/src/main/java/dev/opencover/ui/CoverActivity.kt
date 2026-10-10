@@ -48,6 +48,7 @@ import dev.opencover.watcher.BankingMode
 import dev.opencover.watcher.CoverWatcher
 import dev.opencover.watcher.KeepAwake
 import dev.opencover.watcher.NotificationAccess
+import dev.opencover.watcher.TopEdge
 import dev.opencover.widgets.WidgetHost
 
 class CoverActivity : ComponentActivity() {
@@ -62,6 +63,12 @@ class CoverActivity : ComponentActivity() {
     private var showSetup by mutableStateOf(false)
     private var wallpaper by mutableStateOf<ImageBitmap?>(null)
     private var homeRequests by mutableIntStateOf(0)
+    private var quickSettingsRequests by mutableIntStateOf(0)
+
+    /** Called by the accessibility service after it closes Samsung's panel. */
+    fun requestQuickSettings() {
+        quickSettingsRequests++
+    }
 
     private val appsCallback = object : LauncherApps.Callback() {
         override fun onPackageRemoved(pkg: String, user: UserHandle) {
@@ -124,12 +131,14 @@ class CoverActivity : ComponentActivity() {
             pickWallpaper = ::pickWallpaper,
             bankingApps = { BankingMode.apps(this) },
             setBankingApps = { BankingMode.setApps(this, it) },
+            topEdge = { TopEdge.enabled(this) },
+            setTopEdge = { TopEdge.setEnabled(this, it) },
         )
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 resumeTick // re-read permissions every time we come back from Settings
                 val required = Permissions.required(this)
-                if (required && !showSetup) Shell(layout, apps, actions, prompt, wallpaper, homeRequests)
+                if (required && !showSetup) Shell(layout, apps, actions, prompt, wallpaper, homeRequests, quickSettingsRequests)
                 else Checklist(
                     steps = setupSteps(),
                     onAppInfo = { openSettings(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, withPackage = true) },
@@ -178,8 +187,14 @@ class CoverActivity : ComponentActivity() {
         super.onStop()
     }
 
+    override fun onPause() {
+        current = null
+        super.onPause()
+    }
+
     override fun onResume() {
         super.onResume()
+        current = this
         BankingMode.resume(this) // back in OpenCover, so any banking app was left
         // Full screen: a top-edge swipe only peeks the status bar, so Samsung's quick panel
         // doesn't fight our swipe-down quick settings.
@@ -268,6 +283,10 @@ class CoverActivity : ComponentActivity() {
     }
 
     companion object {
+        /** The launcher while it's in front (resumed), else null. */
+        var current: CoverActivity? = null
+            private set
+
         // 748×720 px at 340 dpi ≈ 352×339 dp, split 4×4.
         private const val CELL_W_DP = 88
         private const val CELL_H_DP = 84

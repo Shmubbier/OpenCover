@@ -1,6 +1,9 @@
 package dev.opencover.watcher
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
+import android.graphics.Rect
+import android.view.accessibility.AccessibilityWindowInfo
 import android.app.KeyguardManager
 import android.content.Intent
 import android.util.Log
@@ -27,14 +30,40 @@ class CoverAccessibility : AccessibilityService() {
         super.onDestroy()
     }
 
-    /** Listen to Samsung's system UI plus the banking apps, so we can step aside for them. */
+    /**
+     * Default: listen to Samsung's system UI plus the banking apps only.
+     * With top-edge priority on: also watch the window list (all apps) to catch Samsung's panel.
+     */
     fun refreshScope() {
+        val topEdge = TopEdge.enabled(this)
         serviceInfo = serviceInfo.apply {
-            packageNames = (setOf("com.android.systemui") + BankingMode.apps(this@CoverAccessibility)).toTypedArray()
+            packageNames = if (topEdge) null
+            else (setOf("com.android.systemui") + BankingMode.apps(this@CoverAccessibility)).toTypedArray()
+            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+                (if (topEdge) AccessibilityEvent.TYPE_WINDOWS_CHANGED else 0)
+            flags = if (topEdge) flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+            else flags and AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS.inv()
         }
     }
 
+    /** Samsung's panel opened over OpenCover: close it and open ours instead. */
+    private fun takeTopEdge() {
+        val activity = CoverActivity.current ?: return
+        val cover = windowsOnAllDisplays[COVER_DISPLAY] ?: return
+        // The panel is a large system window; the status bar itself is a thin one.
+        val panelOpen = cover.any { w ->
+            w.type == AccessibilityWindowInfo.TYPE_SYSTEM && Rect().also(w::getBoundsInScreen).height() > COVER_HEIGHT_PX / 2
+        }
+        if (!panelOpen) return
+        performGlobalAction(GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
+        activity.requestQuickSettings()
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
+            if (TopEdge.enabled(this)) takeTopEdge()
+            return
+        }
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString()
         if (pkg != null && pkg in BankingMode.apps(this)) {
@@ -54,6 +83,7 @@ class CoverAccessibility : AccessibilityService() {
 
     companion object {
         private const val TAG = "CoverWatcher"
+        private const val COVER_HEIGHT_PX = 720
         var instance: CoverAccessibility? = null
             private set
     }
