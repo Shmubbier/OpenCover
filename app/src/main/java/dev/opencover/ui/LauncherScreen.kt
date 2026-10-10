@@ -33,6 +33,7 @@ import dev.opencover.layout.Item
 import dev.opencover.layout.Layout
 import dev.opencover.layout.addPage
 import dev.opencover.layout.removePage
+import dev.opencover.watcher.KeepAwake
 import dev.opencover.widgets.WidgetHost
 
 class LauncherActions(
@@ -43,6 +44,8 @@ class LauncherActions(
     val addApp: (AppEntry, page: Int) -> Unit,
     val remove: (Item) -> Unit,
     val addWidget: (AppWidgetProviderInfo, page: Int) -> Unit,
+    val samsungWidgets: () -> Unit,
+    val setKeepAwake: (Boolean) -> Unit,
 )
 
 @Composable
@@ -66,7 +69,7 @@ fun EditBar(
 /** Shown when something doesn't fit on the current page. */
 class PageFullPrompt(val confirm: () -> Unit, val cancel: () -> Unit)
 
-private enum class Overlay { NONE, DRAWER, WIDGETS }
+private enum class Overlay { NONE, DRAWER, WIDGETS, SETTINGS }
 
 @Composable
 fun LauncherScreen(layout: Layout, apps: List<AppEntry>, a: LauncherActions, prompt: PageFullPrompt?) {
@@ -76,6 +79,7 @@ fun LauncherScreen(layout: Layout, apps: List<AppEntry>, a: LauncherActions, pro
     val pager = rememberPagerState { pageCount }
     val labels = remember(apps) { apps.associate { it.key to it.label } }
     var dragTotal by remember { mutableFloatStateOf(0f) }
+    var keepAwake by remember { mutableStateOf(KeepAwake.isOn) }
     BackHandler(enabled = editing) { editing = false }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -86,7 +90,10 @@ fun LauncherScreen(layout: Layout, apps: List<AppEntry>, a: LauncherActions, pro
                     onAddPage = { a.change(layout.addPage()) },
                     onRemovePage = removable?.let { l -> { a.change(l) } },
                     onDone = { editing = false },
-                    extra = { TextButton(onClick = { overlay = Overlay.WIDGETS }) { Text("+ Widget") } },
+                    extra = {
+                        TextButton(onClick = { overlay = Overlay.WIDGETS }) { Text("+ Widget") }
+                        TextButton(onClick = { overlay = Overlay.SETTINGS }) { Text("Settings") }
+                    },
                 )
             }
             HorizontalPager(
@@ -121,6 +128,12 @@ fun LauncherScreen(layout: Layout, apps: List<AppEntry>, a: LauncherActions, pro
                     onClose = { overlay = Overlay.NONE },
                 )
             }
+            Overlay.SETTINGS -> SettingsPanel(
+                keepAwake = keepAwake,
+                onKeepAwake = { keepAwake = it; a.setKeepAwake(it) },
+                onSamsungWidgets = { overlay = Overlay.NONE; editing = false; a.samsungWidgets() },
+                onClose = { overlay = Overlay.NONE },
+            )
             Overlay.NONE -> {}
         }
         prompt?.let { p ->

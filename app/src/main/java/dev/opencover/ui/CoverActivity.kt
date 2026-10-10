@@ -32,6 +32,7 @@ import dev.opencover.layout.pruneMissing
 import dev.opencover.layout.removeItem
 import dev.opencover.layout.removePackage
 import dev.opencover.watcher.CoverWatcher
+import dev.opencover.watcher.KeepAwake
 import dev.opencover.widgets.WidgetHost
 
 class CoverActivity : ComponentActivity() {
@@ -88,6 +89,11 @@ class CoverActivity : ComponentActivity() {
             addApp = { e, page -> place(page, 1, 1, { AppItem(newId(), it, e.pkg, e.activity, e.user) }) },
             remove = ::remove,
             addWidget = { info, page -> widgets.begin(info, page) },
+            samsungWidgets = {
+                CoverWatcher.paused = true // cleared when the screen turns off
+                moveTaskToBack(true)
+            },
+            setKeepAwake = { KeepAwake.set(this, it) },
         )
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
