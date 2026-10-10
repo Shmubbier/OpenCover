@@ -6,6 +6,7 @@ A free, open-source (GPL-3.0) launcher for the Galaxy Z Flip 5 cover screen. No 
 - Home with wallpaper, clock and 4 shortcuts. Swipe left for notifications, right for apps, up for media, down for quick settings.
 - Apps pages: put apps and widgets anywhere on a 4x4 grid. Swipe up for the app drawer.
 - Opens automatically when you unlock the cover screen; Samsung's Home gesture returns to OpenCover.
+- Notifications: swipe left from Home. Grouped by conversation, with actions, swipe to dismiss, and replies by text or voice. New ones pop up over any app.
 - Keep the cover screen awake in any app.
 - "Open Samsung widgets" in settings to reach Samsung's own cover widgets.
 
@@ -15,6 +16,7 @@ A free, open-source (GPL-3.0) launcher for the Galaxy Z Flip 5 cover screen. No 
 3. Open OpenCover on the cover screen and follow the setup checklist. Because the app is
    sideloaded, Android first needs App info → ⋮ → **Allow restricted settings** before the
    Accessibility and Notification access switches can be turned on.
+4. Turn off Samsung's own cover notification pop-ups to avoid doubles: Settings > Notifications > Cover screen.
 
 ## Why Accessibility?
 On Android 16, only apps with a system-bound service such as an accessibility service may
