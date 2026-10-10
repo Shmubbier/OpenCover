@@ -24,6 +24,7 @@ fun SettingsPanel(
     onKeepAwake: (Boolean) -> Unit,
     onSamsungWidgets: () -> Unit,
     onSetup: () -> Unit,
+    onWallpaper: () -> Unit,
     onClose: () -> Unit,
 ) {
     BackHandler(onBack = onClose)
@@ -38,6 +39,7 @@ fun SettingsPanel(
         }
         Button(onClick = onSamsungWidgets) { Text("Open Samsung widgets") }
         Button(onClick = onSetup) { Text("Setup & permissions") }
+        Button(onClick = onWallpaper) { Text("Set wallpaper") }
         TextButton(onClick = onClose) { Text("Close") }
     }
 }

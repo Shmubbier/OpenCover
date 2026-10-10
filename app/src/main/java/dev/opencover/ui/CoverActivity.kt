@@ -8,7 +8,9 @@ import android.content.res.Resources
 import android.net.Uri
 import android.os.Bundle
 import android.os.UserHandle
+import android.provider.MediaStore
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
@@ -17,12 +19,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
 import dev.opencover.COVER_DISPLAY
 import dev.opencover.apps.AppEntry
 import dev.opencover.apps.AppLauncher
 import dev.opencover.apps.AppRepository
 import dev.opencover.grid.Cell
 import dev.opencover.grid.cellSpan
+import dev.opencover.home.Wallpaper
+import dev.opencover.layout.QuickApp
+import dev.opencover.layout.setQuick
 import dev.opencover.layout.AppItem
 import dev.opencover.layout.Item
 import dev.opencover.layout.Layout
@@ -51,6 +57,8 @@ class CoverActivity : ComponentActivity() {
     private var loaded = false
     private var resumeTick by mutableIntStateOf(0)
     private var showSetup by mutableStateOf(false)
+    private var wallpaper by mutableStateOf<ImageBitmap?>(null)
+    private var homeRequests by mutableIntStateOf(0)
 
     private val appsCallback = object : LauncherApps.Callback() {
         override fun onPackageRemoved(pkg: String, user: UserHandle) {
@@ -78,6 +86,7 @@ class CoverActivity : ComponentActivity() {
         }
         store = LayoutStore(filesDir)
         repo = AppRepository(this)
+        wallpaper = Wallpaper.load(this)
         widgets = WidgetHost(this) { id, info, page ->
             // Provider sizes are px at the main display's density; convert to dp, then to cells.
             val sys = Resources.getSystem().displayMetrics.density
@@ -104,12 +113,14 @@ class CoverActivity : ComponentActivity() {
             },
             setKeepAwake = { KeepAwake.set(this, it) },
             openSetup = { showSetup = true },
+            setQuick = { slot, e -> update(layout.setQuick(slot, e?.let { QuickApp(it.pkg, it.activity, it.user) })) },
+            pickWallpaper = ::pickWallpaper,
         )
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 resumeTick // re-read permissions every time we come back from Settings
                 val required = Permissions.required(this)
-                if (required && !showSetup) LauncherScreen(layout, apps, actions, prompt)
+                if (required && !showSetup) Shell(layout, apps, actions, prompt, wallpaper, homeRequests)
                 else Checklist(
                     steps = setupSteps(),
                     onAppInfo = { openSettings(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, withPackage = true) },
@@ -169,7 +180,29 @@ class CoverActivity : ComponentActivity() {
 
     @Deprecated("Widget flows need startActivityForResult with display options")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == REQ_WALLPAPER) {
+            val uri = data?.data
+            if (resultCode == RESULT_OK && uri != null) {
+                if (Wallpaper.save(this, uri)) wallpaper = Wallpaper.load(this)
+                else Toast.makeText(this, "Couldn't use that photo", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
         if (!widgets.onResult(requestCode, resultCode)) super.onActivityResult(requestCode, resultCode, data)
+    }
+
+    // Every launch through AppLauncher.start (Home gesture, unlock, fold) lands here: go to Home.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        homeRequests++
+    }
+
+    private fun pickWallpaper() {
+        try {
+            startActivityForResult(Intent(MediaStore.ACTION_PICK_IMAGES).setType("image/*"), REQ_WALLPAPER, AppLauncher.options())
+        } catch (e: Exception) {
+            Toast.makeText(this, "Couldn't open the photo picker", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun refreshApps() {
@@ -219,5 +252,6 @@ class CoverActivity : ComponentActivity() {
         // 748×720 px at 340 dpi ≈ 352×339 dp, split 4×4.
         private const val CELL_W_DP = 88
         private const val CELL_H_DP = 84
+        private const val REQ_WALLPAPER = 21
     }
 }
