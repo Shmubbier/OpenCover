@@ -2,10 +2,9 @@ package dev.opencover.ui
 
 import android.content.Intent
 import android.content.pm.LauncherApps
+import android.content.res.Resources
 import android.os.Bundle
 import android.os.UserHandle
-import android.util.Log
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
@@ -18,6 +17,7 @@ import dev.opencover.apps.AppEntry
 import dev.opencover.apps.AppLauncher
 import dev.opencover.apps.AppRepository
 import dev.opencover.grid.Cell
+import dev.opencover.grid.cellSpan
 import dev.opencover.layout.AppItem
 import dev.opencover.layout.Item
 import dev.opencover.layout.Layout
@@ -69,13 +69,13 @@ class CoverActivity : ComponentActivity() {
         }
         store = LayoutStore(filesDir)
         repo = AppRepository(this)
-        widgets = WidgetHost(this) { id, info, _ ->
-            Toast.makeText(this, "PROBE widget $id added: ${info.provider}", Toast.LENGTH_LONG).show()
-            Log.i("OCPROBE", "added $id ${info.provider}")
-        }
-        // PROBE (removed in Task 9): adb ... --es probeWidget <pkg/cls>
-        intent.getStringExtra("probeWidget")?.let { flat ->
-            widgets.find(flat)?.let { widgets.begin(it, 0) } ?: Log.e("OCPROBE", "no provider $flat")
+        widgets = WidgetHost(this) { id, info, page ->
+            // Provider sizes are px at the main display's density; convert to dp, then to cells.
+            val sys = Resources.getSystem().displayMetrics.density
+            val w = cellSpan(info.targetCellWidth, (info.minWidth / sys).toInt(), CELL_W_DP)
+            val h = cellSpan(info.targetCellHeight, (info.minHeight / sys).toInt(), CELL_H_DP)
+            val provider = info.provider.flattenToString()
+            place(page, w, h, { WidgetItem(newId(), it, id, provider) }, onCancel = { widgets.delete(id) })
         }
         startForegroundService(Intent(this, CoverWatcher::class.java))
         repo.register(appsCallback)
@@ -87,6 +87,7 @@ class CoverActivity : ComponentActivity() {
             change = ::update,
             addApp = { e, page -> place(page, 1, 1, { AppItem(newId(), it, e.pkg, e.activity, e.user) }) },
             remove = ::remove,
+            addWidget = { info, page -> widgets.begin(info, page) },
         )
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
@@ -158,5 +159,11 @@ class CoverActivity : ComponentActivity() {
                 prompt = null
             },
         )
+    }
+
+    companion object {
+        // 748×720 px at 340 dpi ≈ 352×339 dp, split 4×4.
+        private const val CELL_W_DP = 88
+        private const val CELL_H_DP = 84
     }
 }

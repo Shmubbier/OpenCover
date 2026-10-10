@@ -25,14 +25,17 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import dev.opencover.grid.GRID
 import dev.opencover.layout.AppItem
 import dev.opencover.layout.Layout
 import dev.opencover.layout.WidgetItem
 import dev.opencover.layout.moveItem
+import dev.opencover.layout.resizeItem
 import kotlin.math.roundToInt
 
 @Composable
@@ -72,7 +75,7 @@ fun GridPage(
                                 onLongClick = onLongPress,
                             ),
                         )
-                        is WidgetItem -> {} // Task 9
+                        is WidgetItem -> WidgetCell(item, a, cw * c.w, ch * c.h)
                     }
                     if (editing) {
                         // Transparent layer on top so drags reach us, not the app icon or widget.
@@ -101,9 +104,47 @@ fun GridPage(
                                 .clickable { a.remove(item) }
                                 .padding(horizontal = 6.dp),
                         )
+                        if (item is WidgetItem) {
+                            var grow by remember { mutableStateOf(Offset.Zero) }
+                            Box(
+                                Modifier.align(Alignment.BottomEnd).size(28.dp)
+                                    .offset { IntOffset(grow.x.roundToInt(), grow.y.roundToInt()) }
+                                    .background(Color(0xCC2060C0), CircleShape)
+                                    .pointerInput(item.id, c) {
+                                        detectDragGestures(
+                                            onDragEnd = {
+                                                val nw = c.w + (grow.x / cwPx).roundToInt()
+                                                val nh = c.h + (grow.y / chPx).roundToInt()
+                                                layout.resizeItem(pageIndex, item.id, nw, nh)?.let(a.change)
+                                                grow = Offset.Zero
+                                            },
+                                            onDragCancel = { grow = Offset.Zero },
+                                        ) { change, delta ->
+                                            change.consume()
+                                            grow += delta
+                                        }
+                                    }
+                            )
+                        }
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun WidgetCell(item: WidgetItem, a: LauncherActions, width: Dp, height: Dp) {
+    val view = remember(item.widgetId) { a.widgets.view(item.widgetId) }
+    if (view == null) {
+        Box(Modifier.fillMaxSize().background(Color.DarkGray), contentAlignment = Alignment.Center) {
+            Text("Widget unavailable", color = Color.White, fontSize = 11.sp)
+        }
+        return
+    }
+    AndroidView(
+        factory = { view },
+        modifier = Modifier.fillMaxSize(),
+        update = { a.widgets.resize(it, width.value, height.value) },
+    )
 }

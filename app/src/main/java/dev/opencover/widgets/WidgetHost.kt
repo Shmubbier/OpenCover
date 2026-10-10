@@ -30,7 +30,6 @@ class WidgetHost(
         activity.getSystemService(LauncherApps::class.java).profiles
             .flatMap { manager.getInstalledProvidersForProfile(it) }
 
-    fun find(flatProvider: String) = providers().find { it.provider.flattenToString() == flatProvider }
     fun exists(widgetId: Int) = manager.getAppWidgetInfo(widgetId) != null
     fun delete(widgetId: Int) = host.deleteAppWidgetId(widgetId)
     fun startListening() = host.startListening()

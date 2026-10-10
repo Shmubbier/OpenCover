@@ -1,5 +1,6 @@
 package dev.opencover.ui
 
+import android.appwidget.AppWidgetProviderInfo
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -25,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import dev.opencover.apps.AppEntry
 import dev.opencover.apps.AppRepository
 import dev.opencover.layout.Item
@@ -40,6 +42,7 @@ class LauncherActions(
     val change: (Layout) -> Unit,
     val addApp: (AppEntry, page: Int) -> Unit,
     val remove: (Item) -> Unit,
+    val addWidget: (AppWidgetProviderInfo, page: Int) -> Unit,
 )
 
 @Composable
@@ -63,7 +66,7 @@ fun EditBar(
 /** Shown when something doesn't fit on the current page. */
 class PageFullPrompt(val confirm: () -> Unit, val cancel: () -> Unit)
 
-private enum class Overlay { NONE, DRAWER }
+private enum class Overlay { NONE, DRAWER, WIDGETS }
 
 @Composable
 fun LauncherScreen(layout: Layout, apps: List<AppEntry>, a: LauncherActions, prompt: PageFullPrompt?) {
@@ -83,6 +86,7 @@ fun LauncherScreen(layout: Layout, apps: List<AppEntry>, a: LauncherActions, pro
                     onAddPage = { a.change(layout.addPage()) },
                     onRemovePage = removable?.let { l -> { a.change(l) } },
                     onDone = { editing = false },
+                    extra = { TextButton(onClick = { overlay = Overlay.WIDGETS }) { Text("+ Widget") } },
                 )
             }
             HorizontalPager(
@@ -105,6 +109,18 @@ fun LauncherScreen(layout: Layout, apps: List<AppEntry>, a: LauncherActions, pro
                 onAddToHome = { overlay = Overlay.NONE; a.addApp(it, pager.currentPage) },
                 onClose = { overlay = Overlay.NONE },
             )
+            Overlay.WIDGETS -> {
+                val pm = LocalContext.current.packageManager
+                WidgetPicker(
+                    providers = remember { a.widgets.providers() },
+                    label = { p ->
+                        val app = pm.getApplicationLabel(pm.getApplicationInfo(p.provider.packageName, 0))
+                        "$app · ${p.loadLabel(pm)}"
+                    },
+                    onPick = { overlay = Overlay.NONE; a.addWidget(it, pager.currentPage) },
+                    onClose = { overlay = Overlay.NONE },
+                )
+            }
             Overlay.NONE -> {}
         }
         prompt?.let { p ->
