@@ -3,8 +3,8 @@
 A free, open-source (GPL-3.0) launcher for the Galaxy Z Flip 5 cover screen. No ads, no paywall.
 
 ## What works
-- Swipeable home pages: put apps and widgets anywhere on a 4×4 grid, drag, resize widgets, add/remove pages.
-- App drawer: swipe up; search, A–Z or recently used, letter index. Apps open on the cover screen.
+- Home with wallpaper, clock and 4 shortcuts. Swipe left for notifications, right for apps, up for media, down for quick settings.
+- Apps pages: put apps and widgets anywhere on a 4x4 grid. Swipe up for the app drawer.
 - Opens automatically when you unlock the cover screen; Samsung's Home gesture returns to OpenCover.
 - Keep the cover screen awake in any app.
 - "Open Samsung widgets" in settings to reach Samsung's own cover widgets.
