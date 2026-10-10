@@ -32,7 +32,7 @@ No allowlist, root or Shizuku needed.
 
 - **CoverActivity**: the launcher UI on display 1. Home pages, drawer, edit mode, settings, setup checklist.
 - **CoverWatcher** (foreground service): opens the launcher on unlock or fold. Holds a 1x1 invisible overlay used for keep-awake.
-- **CoverAccessibility**: redirects Home to OpenCover when Samsung's cover home appears. Needed because Android 16 blocks background starts for overlay-only apps. Listens to `com.android.systemui` window events only and never reads screen content. Skips while locked.
+- **CoverAccessibility**: redirects Home to OpenCover when Samsung's cover home appears (needed because Android 16 blocks background starts for overlay-only apps), steps aside for banking apps, and optionally (experimental, off by default) replaces Samsung's pull-down panel. Skips while locked.
 - **NotificationAccess**: empty listener, reserved for sub-project 2.
 - **AppLauncher**: opens apps on display 1 as the right profile.
 - **GridEngine**: pure Kotlin placement, collision and free-spot logic.

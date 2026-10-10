@@ -3,6 +3,8 @@ package dev.opencover.watcher
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.graphics.Rect
+import android.os.Handler
+import android.os.Looper
 import android.view.accessibility.AccessibilityWindowInfo
 import android.app.KeyguardManager
 import android.content.Intent
@@ -47,16 +49,37 @@ class CoverAccessibility : AccessibilityService() {
     }
 
     /** Samsung's panel opened over OpenCover: close it and open ours instead. */
+    private val handler = Handler(Looper.getMainLooper())
+    private var panelUp = false
+
+    /** Samsung's panel (window "SubScreenQuickPanel") shows up as a full-screen type -1 window on top. */
+    private fun samsungPanel(): AccessibilityWindowInfo? {
+        val top = windowsOnAllDisplays[COVER_DISPLAY]?.firstOrNull() ?: return null
+        val isPanel = top.type != AccessibilityWindowInfo.TYPE_APPLICATION &&
+            top.type != AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY &&
+            Rect().also(top::getBoundsInScreen).height() > COVER_HEIGHT_PX / 2
+        return top.takeIf { isPanel }
+    }
+
     private fun takeTopEdge() {
-        val activity = CoverActivity.current ?: return
-        val cover = windowsOnAllDisplays[COVER_DISPLAY] ?: return
-        // The panel is a large system window; the status bar itself is a thin one.
-        val panelOpen = cover.any { w ->
-            w.type == AccessibilityWindowInfo.TYPE_SYSTEM && Rect().also(w::getBoundsInScreen).height() > COVER_HEIGHT_PX / 2
+        val up = samsungPanel() != null
+        // Act once when it appears; its closing animation also reports it "on top".
+        if (up && !panelUp) CoverActivity.current?.let {
+            Log.i(TAG, "replace Samsung panel")
+            closeSamsungPanel(attempt = 0)
+            it.requestQuickSettings()
         }
-        if (!panelOpen) return
-        performGlobalAction(GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
-        activity.requestQuickSettings()
+        panelUp = up
+    }
+
+    /** Back closes the panel, but it's ignored while the finger is still dragging it: retry while it has focus. */
+    private fun closeSamsungPanel(attempt: Int) {
+        // Dismiss-shade removes the panel window outright; Back only collapses it, leaving an invisible
+        // window that swallows touches for ~2.5 s. Back stays as the fallback.
+        performGlobalAction(if (attempt % 2 == 0) GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE else GLOBAL_ACTION_BACK)
+        if (attempt < 8) handler.postDelayed({
+            if (samsungPanel()?.isFocused == true) closeSamsungPanel(attempt + 1)
+        }, 250)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {

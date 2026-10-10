@@ -44,8 +44,8 @@ fun SettingsPanel(
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Top-edge priority", color = Color.White)
-                Text("Replaces Samsung's pull-down panel with ours. Lets OpenCover read the window list.",
+                Text("Top-edge priority (experimental)", color = Color.White)
+                Text("Replaces Samsung's pull-down panel with ours. Its panel still flashes and blocks touches for ~2 s. Lets OpenCover read the window list.",
                     color = Color.Gray, fontSize = 11.sp)
             }
             Switch(checked = topEdge, onCheckedChange = onTopEdge)
