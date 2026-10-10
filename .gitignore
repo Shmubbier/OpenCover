@@ -1,0 +1,6 @@
+﻿spike/out/
+*.keystore
+.gradle/
+build/
+local.properties
+.idea/
