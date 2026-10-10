@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_description">Brings OpenCover back when you swipe Home on the cover screen, and lets it open when you unlock. It only sees which app is in front, never what is on screen or what you type.</string>
+</resources>

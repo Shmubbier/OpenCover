@@ -5,8 +5,6 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
-import android.app.usage.UsageEvents
-import android.app.usage.UsageStatsManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -18,21 +16,18 @@ import android.os.Looper
 import android.util.Log
 import android.view.Display
 import dev.opencover.COVER_DISPLAY
-import dev.opencover.SAMSUNG_COVER_HOME
 import dev.opencover.apps.AppLauncher
 import dev.opencover.ui.CoverActivity
 
 /**
- * Opens the launcher when the cover screen becomes usable, and brings it back whenever
- * Samsung's cover home is resumed (the user swiped Home) unless [paused].
+ * Opens the launcher when the cover screen becomes usable (unlock, or fold while unlocked).
+ * The Home redirect lives in [CoverAccessibility], whose presence also exempts these starts
+ * from Android 16's background-activity-start block.
  */
 class CoverWatcher : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var displays: DisplayManager
-    private lateinit var usage: UsageStatsManager
     private lateinit var keyguard: KeyguardManager
-    private var lastSeen = 0L
-    private var polling = false
     private var wasActive = false
 
     private val displayListener = object : DisplayManager.DisplayListener {
@@ -51,21 +46,9 @@ class CoverWatcher : Service() {
         }
     }
 
-    private val poll = object : Runnable {
-        override fun run() {
-            if (!coverActive()) {
-                polling = false
-                return
-            }
-            if (!paused && samsungHomeResumed()) openLauncher("home")
-            handler.postDelayed(this, 300)
-        }
-    }
-
     override fun onCreate() {
         super.onCreate()
         displays = getSystemService(DisplayManager::class.java)
-        usage = getSystemService(UsageStatsManager::class.java)
         keyguard = getSystemService(KeyguardManager::class.java)
         startForeground(1, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         displays.registerDisplayListener(displayListener, handler)
@@ -73,7 +56,6 @@ class CoverWatcher : Service() {
             addAction(Intent.ACTION_USER_PRESENT)
             addAction(Intent.ACTION_SCREEN_OFF)
         })
-        lastSeen = System.currentTimeMillis()
         onCoverStateMaybeChanged()
     }
 
@@ -83,7 +65,6 @@ class CoverWatcher : Service() {
     override fun onDestroy() {
         displays.unregisterDisplayListener(displayListener)
         unregisterReceiver(receiver)
-        handler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
 
@@ -92,28 +73,11 @@ class CoverWatcher : Service() {
             displays.getDisplay(Display.DEFAULT_DISPLAY)?.state != Display.STATE_ON
 
     private fun onCoverStateMaybeChanged() {
+        KeepAwake.attach(this) // retries if the overlay permission arrived after we started
         val active = coverActive()
         if (active && !wasActive && !keyguard.isKeyguardLocked) openLauncher("fold")
         if (displays.getDisplay(Display.DEFAULT_DISPLAY)?.state == Display.STATE_ON) KeepAwake.set(this, false)
         wasActive = active
-        if (active && !polling) {
-            polling = true
-            lastSeen = System.currentTimeMillis()
-            handler.post(poll)
-        }
-    }
-
-    private fun samsungHomeResumed(): Boolean {
-        val events = usage.queryEvents(lastSeen, System.currentTimeMillis())
-        val e = UsageEvents.Event()
-        var top: String? = null
-        while (events.hasNextEvent()) {
-            events.getNextEvent(e)
-            if (e.eventType == UsageEvents.Event.ACTIVITY_RESUMED) top = e.className
-            lastSeen = maxOf(lastSeen, e.timeStamp + 1)
-        }
-        if (top != null) Log.d(TAG, "resumed $top")
-        return top == SAMSUNG_COVER_HOME
     }
 
     private fun openLauncher(why: String) {

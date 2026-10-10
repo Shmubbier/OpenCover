@@ -38,7 +38,7 @@ screen. No Shizuku, root, or Accessibility service is required to launch apps.
 | Entry | Auto-opens on cover unlock and on fold |
 | Layout | Swipeable home pages; each page is one editable grid of apps + widgets; swipe up for the drawer |
 | Grid | Fixed 4×4 cells per page (~88 dp cells) |
-| Navigation | Samsung's own gestures. Back unchanged. Home is redirected to our launcher (see CoverWatcher) |
+| Navigation | Samsung's own gestures. Back unchanged. Home is redirected to our launcher (see CoverAccessibility) |
 | Storage | One JSON file via `org.json`, temp-file + rename |
 | Dependencies | Kotlin, Compose BOM, activity-compose, JUnit. Nothing else. |
 
@@ -59,12 +59,23 @@ launches never stack. Contains:
   API differs between SDK 34 and 35.
 - Starts `CoverActivity` on display 1 when the cover becomes active while unlocked, and on
   `ACTION_USER_PRESENT` while the cover is active.
-- **Home redirect:** while CLOSED and screen on, polls `UsageStatsManager.queryEvents` every
-  300 ms. If the most recent `ACTIVITY_RESUMED` is `SubHomeActivity` and redirect is not
-  paused, brings `CoverActivity` to front.
 - **Pause:** "Open Samsung widgets" sets a pause flag; it clears on screen off.
-- Stops polling when the screen is off or the device is OPENED.
-- Background activity starts rely on the `SYSTEM_ALERT_WINDOW` grant (BAL exemption).
+- Attaches the invisible 1×1 overlay (see Keep-awake) on display 1.
+
+### CoverAccessibility (accessibility service): added 2026-10-10
+Android 16 blocks background activity starts from an app that only holds
+`SYSTEM_ALERT_WINDOW`, even with a visible overlay window (logcat `BAL_BLOCK`,
+`callingUidHasNonAppVisibleWindow: true`). An app with a system-bound accessibility service
+is exempt, so:
+- **Home redirect:** listens only for `TYPE_WINDOW_STATE_CHANGED`. When the event is
+  `com.android.systemui` / `SubHomeActivity` on display 1 and redirect is not paused, it
+  starts `CoverActivity`. Instant; replaces the 300 ms UsageStats polling (deleted).
+- Its presence also exempts CoverWatcher's unlock/fold starts.
+- `canRetrieveWindowContent="false"`: it never reads screen contents.
+
+### NotificationAccess (notification listener): added 2026-10-10
+Empty `NotificationListenerService`, granted from the checklist now so sub-project 2
+(notifications + media) can use it. Being system-bound also keeps the process alive.
 
 ### AppLauncher
 `launch(component, user)`: starts the app's launch intent on display 1 with
@@ -120,14 +131,20 @@ Wraps `AppWidgetHost` / `AppWidgetManager`.
 - Uninstalled apps are also removed from home pages.
 
 ### Keep-awake
-Switch in settings. When on, adds a 1×1 px invisible `TYPE_APPLICATION_OVERLAY` window
-on display 1 with `FLAG_KEEP_SCREEN_ON`, so the cover stays on in any app. Removed when
-switched off or when the device is OPENED.
+A 1×1 px invisible `TYPE_APPLICATION_OVERLAY` window on display 1 is attached while
+CoverWatcher runs. The keep-awake switch adds `FLAG_KEEP_SCREEN_ON` to it, so the cover
+stays on in any app; the flag is cleared when switched off or when the device is OPENED.
 
 ## First-run checklist
-Requires: Usage access, Display over other apps. Each row opens the matching Settings
-screen on display 1, and the checklist shows instead of home until both are granted.
-The foreground-service notification permission is requested in the same list.
+Each row opens the matching Settings screen on display 1. Home shows only once the
+required rows are granted.
+- **Required:** Accessibility (OpenCover service), Display over other apps.
+- **Recommended:** ignore battery optimizations.
+- **Optional:** Usage access (drawer "Recent" sort, default layout), Notification access
+  (for sub-project 2), Notifications (watcher's status notification).
+- Sideloaded apps on Android 13+ must first get "Allow restricted settings" from App info
+  before Accessibility and Notification access can be switched on; the checklist row for
+  Accessibility also offers an "App info" button for that.
 
 ## Risks: verified first, before feature work
 
@@ -135,7 +152,7 @@ The foreground-service notification permission is requested in the same list.
 |---|---|---|---|
 | R1 | Widget bind dialog can be shown on display 1 | One-time `adb shell appwidget grantbind --package dev.opencover` | PASS 2026-10-10: Samsung "Allow access to widget content?" dialog shows on the cover; "Always allow" ticked |
 | R2 | UsageEvents report `SubHomeActivity` resumes promptly (<500 ms) | AccessibilityService listening only for `TYPE_WINDOW_STATE_CHANGED` | PASS 2026-10-10: SubHomeActivity resume seen and redirect issued in the same 300 ms poll |
-| R3 | `SYSTEM_ALERT_WINDOW` permits starting `CoverActivity` from the service on unlock | A MultiStar tile that launches the launcher manually | PASS 2026-10-10: `open launcher (unlock)` brought CoverActivity to front over Chrome |
+| R3 | `SYSTEM_ALERT_WINDOW` permits starting `CoverActivity` from the service on unlock | A MultiStar tile that launches the launcher manually | PARTIAL 2026-10-10: unlock starts passed, but starts during normal use (Home redirect) are `BAL_BLOCK`ed on Android 16 even with a visible overlay. Resolved with CoverAccessibility (user-approved), not the MultiStar tile |
 
 ## Testing
 - **Unit (JUnit):** GridEngine covers placement, overlap, bounds, move and resize

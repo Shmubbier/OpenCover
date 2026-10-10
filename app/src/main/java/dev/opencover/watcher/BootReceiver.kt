@@ -6,7 +6,8 @@ import android.content.Intent
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
+        // Also after an app update: updating kills the running watcher and nothing else restarts it.
+        if (intent.action == Intent.ACTION_BOOT_COMPLETED || intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) {
             context.startForegroundService(Intent(context, CoverWatcher::class.java))
         }
     }
