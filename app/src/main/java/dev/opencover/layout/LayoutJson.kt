@@ -8,6 +8,9 @@ object LayoutJson {
     fun encode(l: Layout): String = JSONObject()
         .put("version", 1)
         .put("pages", JSONArray(l.pages.map { p -> JSONObject().put("items", JSONArray(p.items.map(::encodeItem))) }))
+        .put("home", JSONObject().put("quick", JSONArray(l.home.quick.map { q ->
+            q?.let { JSONObject().put("package", it.pkg).put("activity", it.activity).put("user", it.user) } ?: JSONObject.NULL
+        })))
         .toString()
 
     private fun encodeItem(i: Item): JSONObject {
@@ -34,7 +37,17 @@ object LayoutJson {
             Page(items)
         }
         require(pages.isNotEmpty()) { "no pages" }
-        return Layout(pages)
+        return Layout(pages, decodeHome(root.optJSONObject("home")))
+    }
+
+    /** Missing or malformed: empty slots. Never fails the whole file. */
+    private fun decodeHome(o: JSONObject?): Home = try {
+        val arr = o?.getJSONArray("quick") ?: return Home()
+        Home(List(QUICK_SLOTS) { i ->
+            arr.optJSONObject(i)?.let { QuickApp(it.getString("package"), it.getString("activity"), it.getLong("user")) }
+        })
+    } catch (e: Exception) {
+        Home()
     }
 
     private fun decodeItem(o: JSONObject): Item {
