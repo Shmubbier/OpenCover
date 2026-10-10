@@ -39,7 +39,7 @@ screen. No Shizuku, root, or Accessibility service is required to launch apps.
 | Layout | Swipeable home pages; each page is one editable grid of apps + widgets; swipe up for the drawer |
 | Grid | Fixed 4×4 cells per page (~88 dp cells) |
 | Navigation | Samsung's own gestures. Back unchanged. Home is redirected to our launcher (see CoverWatcher) |
-| Storage | One JSON file via `org.json` + `AtomicFile` |
+| Storage | One JSON file via `org.json`, temp-file + rename |
 | Dependencies | Kotlin, Compose BOM, activity-compose, JUnit. Nothing else. |
 
 ## Components
@@ -54,8 +54,11 @@ launches never stack. Contains:
 - **First-run checklist**: shown instead of home until required permissions are granted.
 
 ### CoverWatcher (foreground service)
-- Starts `CoverActivity` on display 1 when the device is CLOSED (via `DeviceStateManager`
-  callback) and on `ACTION_USER_PRESENT` while CLOSED.
+- "Cover active" = display 1 is ON and display 0 is not ON, read from `DisplayManager`
+  (a `DisplayListener` reports changes). This avoids `DeviceStateManager`, whose callback
+  API differs between SDK 34 and 35.
+- Starts `CoverActivity` on display 1 when the cover becomes active while unlocked, and on
+  `ACTION_USER_PRESENT` while the cover is active.
 - **Home redirect:** while CLOSED and screen on, polls `UsageStatsManager.queryEvents` every
   300 ms. If the most recent `ACTIVITY_RESUMED` is `SubHomeActivity` and redirect is not
   paused, brings `CoverActivity` to front.
@@ -65,7 +68,9 @@ launches never stack. Contains:
 
 ### AppLauncher
 `launch(component, user)`: starts the app's launch intent on display 1 with
-`FLAG_ACTIVITY_NEW_TASK` (resumes an existing task rather than creating a new one).
+`LauncherApps.startMainActivity(component, user, null, options)` so apps in other
+profiles (Dual Messenger, work profile) launch as the right user, and an existing task
+is resumed rather than duplicated.
 Failure (`ActivityNotFoundException`, `SecurityException`) shows a toast; never crashes.
 
 ### GridEngine (pure Kotlin, no Android imports)
@@ -89,7 +94,11 @@ Wraps `AppWidgetHost` / `AppWidgetManager`.
   pager is horizontal-only so vertical widget scrolling is not intercepted.
 
 ### LayoutStore
-- File: `filesDir/layout.json`, written with `AtomicFile`.
+- File: `filesDir/layout.json`, written to `layout.json.tmp` then renamed over the original
+  (atomic on Android's filesystem, and plain JVM code so it is unit-testable without
+  Robolectric).
+- Pruning missing apps at load is skipped when the installed-app list comes back empty,
+  so a transient failure can never wipe the layout.
 - Schema:
   ```json
   { "version": 1,
