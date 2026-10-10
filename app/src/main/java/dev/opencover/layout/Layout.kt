@@ -33,7 +33,22 @@ data class WidgetItem(
 }
 
 data class Page(val items: List<Item>)
-data class Layout(val pages: List<Page>)
+data class QuickApp(val pkg: String, val activity: String, val user: Long) {
+    val key get() = appKey(pkg, activity, user)
+}
+
+const val QUICK_SLOTS = 4
+
+data class Home(val quick: List<QuickApp?> = List(QUICK_SLOTS) { null })
+
+data class Layout(val pages: List<Page>, val home: Home = Home())
+
+fun Layout.setQuick(slot: Int, app: QuickApp?): Layout =
+    if (slot !in 0 until QUICK_SLOTS) this
+    else copy(home = home.copy(quick = home.quick.toMutableList().also { it[slot] = app }))
+
+private fun Layout.clearQuick(drop: (QuickApp) -> Boolean) =
+    copy(home = home.copy(quick = home.quick.map { q -> q?.takeUnless(drop) }))
 
 fun appKey(pkg: String, activity: String, user: Long) = "$user/$pkg/$activity"
 fun newId() = UUID.randomUUID().toString()
@@ -100,29 +115,34 @@ fun Layout.retain(keep: (Item) -> Boolean): Pair<Layout, List<Int>> {
     return l to dropped.filterIsInstance<WidgetItem>().map { it.widgetId }
 }
 
-/** An app was uninstalled for [user]: drop its icons for that user and any widgets it provided. */
-fun Layout.removePackage(pkg: String, user: Long) = retain {
-    when (it) {
-        is AppItem -> !(it.pkg == pkg && it.user == user)
-        is WidgetItem -> !(it.providerPkg == pkg && it.user == user)
+/** An app was uninstalled for [user]: drop its icons, quick slots and widgets for that user. */
+fun Layout.removePackage(pkg: String, user: Long): Pair<Layout, List<Int>> {
+    val (l, freed) = retain {
+        when (it) {
+            is AppItem -> !(it.pkg == pkg && it.user == user)
+            is WidgetItem -> !(it.providerPkg == pkg && it.user == user)
+        }
     }
+    return l.clearQuick { it.pkg == pkg && it.user == user } to freed
 }
 
-/** Drops icons for apps no longer installed and widgets that no longer exist.
+/** Drops icons and quick slots for apps no longer installed, and widgets that no longer exist.
  *  Does nothing if [installedKeys] is empty: an empty app list means loading failed, not "no apps".
- *  Icons of a profile that isn't [userReady] (locked, paused, or its list came back empty) are kept. */
+ *  Items of a profile that isn't [userReady] (locked, paused, or its list came back empty) are kept. */
 fun Layout.pruneMissing(
     installedKeys: Set<String>,
     userReady: (Long) -> Boolean,
     widgetExists: (Int) -> Boolean,
-): Pair<Layout, List<Int>> =
-    if (installedKeys.isEmpty()) this to emptyList()
-    else retain {
+): Pair<Layout, List<Int>> {
+    if (installedKeys.isEmpty()) return this to emptyList()
+    val (l, freed) = retain {
         when (it) {
             is AppItem -> it.key in installedKeys || !userReady(it.user)
             is WidgetItem -> widgetExists(it.widgetId)
         }
     }
+    return l.clearQuick { it.key !in installedKeys && userReady(it.user) } to freed
+}
 
 /** First-run layout: one page with the 8 most recently used apps. */
 fun defaultLayout(apps: List<AppEntry>): Layout {

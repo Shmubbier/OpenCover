@@ -8,7 +8,11 @@ import android.content.res.Resources
 import android.net.Uri
 import android.os.Bundle
 import android.os.UserHandle
+import android.provider.MediaStore
 import android.provider.Settings
+import android.view.WindowInsets
+import android.view.WindowInsetsController
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
@@ -17,12 +21,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
 import dev.opencover.COVER_DISPLAY
 import dev.opencover.apps.AppEntry
 import dev.opencover.apps.AppLauncher
 import dev.opencover.apps.AppRepository
 import dev.opencover.grid.Cell
 import dev.opencover.grid.cellSpan
+import dev.opencover.home.Wallpaper
+import dev.opencover.layout.QuickApp
+import dev.opencover.layout.setQuick
 import dev.opencover.layout.AppItem
 import dev.opencover.layout.Item
 import dev.opencover.layout.Layout
@@ -36,9 +44,11 @@ import dev.opencover.layout.newId
 import dev.opencover.layout.pruneMissing
 import dev.opencover.layout.removeItem
 import dev.opencover.layout.removePackage
+import dev.opencover.watcher.BankingMode
 import dev.opencover.watcher.CoverWatcher
 import dev.opencover.watcher.KeepAwake
 import dev.opencover.watcher.NotificationAccess
+import dev.opencover.watcher.TopEdge
 import dev.opencover.widgets.WidgetHost
 
 class CoverActivity : ComponentActivity() {
@@ -51,6 +61,14 @@ class CoverActivity : ComponentActivity() {
     private var loaded = false
     private var resumeTick by mutableIntStateOf(0)
     private var showSetup by mutableStateOf(false)
+    private var wallpaper by mutableStateOf<ImageBitmap?>(null)
+    private var homeRequests by mutableIntStateOf(0)
+    private var quickSettingsRequests by mutableIntStateOf(0)
+
+    /** Called by the accessibility service after it closes Samsung's panel. */
+    fun requestQuickSettings() {
+        quickSettingsRequests++
+    }
 
     private val appsCallback = object : LauncherApps.Callback() {
         override fun onPackageRemoved(pkg: String, user: UserHandle) {
@@ -78,6 +96,7 @@ class CoverActivity : ComponentActivity() {
         }
         store = LayoutStore(filesDir)
         repo = AppRepository(this)
+        wallpaper = Wallpaper.load(this)
         widgets = WidgetHost(this) { id, info, page ->
             // Provider sizes are px at the main display's density; convert to dp, then to cells.
             val sys = Resources.getSystem().displayMetrics.density
@@ -93,7 +112,12 @@ class CoverActivity : ComponentActivity() {
         val actions = LauncherActions(
             repo = repo,
             widgets = widgets,
-            launch = { pkg, activity, user -> AppLauncher.launch(this, pkg, activity, user) },
+            launch = { pkg, activity, user ->
+                // Step aside before a banking app checks for accessibility services.
+                if (pkg in BankingMode.apps(this)) BankingMode.pause(this, pkg)
+                // Didn't open: we're still in OpenCover, so turn accessibility straight back on.
+                if (!AppLauncher.launch(this, pkg, activity, user)) BankingMode.resume(this)
+            },
             change = ::update,
             addApp = { e, page -> place(page, 1, 1, { AppItem(newId(), it, e.pkg, e.activity, e.user) }) },
             remove = ::remove,
@@ -104,12 +128,20 @@ class CoverActivity : ComponentActivity() {
             },
             setKeepAwake = { KeepAwake.set(this, it) },
             openSetup = { showSetup = true },
+            setQuick = { slot, e -> update(layout.setQuick(slot, e?.let { QuickApp(it.pkg, it.activity, it.user) })) },
+            pickWallpaper = ::pickWallpaper,
+            bankingApps = { BankingMode.apps(this) },
+            setBankingApps = { BankingMode.setApps(this, it) },
+            topEdge = { TopEdge.enabled(this) },
+            setTopEdge = { TopEdge.setEnabled(this, it) },
+            usageGranted = { Permissions.usage(this) },
+            grantUsage = { openSettings(Settings.ACTION_USAGE_ACCESS_SETTINGS, withPackage = true) },
         )
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 resumeTick // re-read permissions every time we come back from Settings
                 val required = Permissions.required(this)
-                if (required && !showSetup) LauncherScreen(layout, apps, actions, prompt)
+                if (required && !showSetup) Shell(layout, apps, actions, prompt, wallpaper, homeRequests, quickSettingsRequests)
                 else Checklist(
                     steps = setupSteps(),
                     onAppInfo = { openSettings(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, withPackage = true) },
@@ -135,6 +167,9 @@ class CoverActivity : ComponentActivity() {
                 ComponentName(this, NotificationAccess::class.java).flattenToString(),
             ))
         },
+        SetupStep("Banking apps auto-resume (optional)",
+            "Run once on a computer: adb shell pm grant dev.opencover android.permission.WRITE_SECURE_SETTINGS",
+            BankingMode.canResume(this)) {},
         SetupStep("Notifications (optional)", "Shows that OpenCover is running",
             Permissions.notifications(this)) { requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1) },
     )
@@ -155,8 +190,21 @@ class CoverActivity : ComponentActivity() {
         super.onStop()
     }
 
+    override fun onPause() {
+        current = null
+        super.onPause()
+    }
+
     override fun onResume() {
         super.onResume()
+        current = this
+        BankingMode.resume(this) // back in OpenCover, so any banking app was left
+        // Full screen: a top-edge swipe only peeks the status bar, so Samsung's quick panel
+        // doesn't fight our swipe-down quick settings.
+        window.insetsController?.apply {
+            hide(WindowInsets.Type.statusBars())
+            systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
         resumeTick++
         refreshApps()
         if (!loaded) loadLayout()
@@ -169,7 +217,29 @@ class CoverActivity : ComponentActivity() {
 
     @Deprecated("Widget flows need startActivityForResult with display options")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == REQ_WALLPAPER) {
+            val uri = data?.data
+            if (resultCode == RESULT_OK && uri != null) {
+                if (Wallpaper.save(this, uri)) wallpaper = Wallpaper.load(this)
+                else Toast.makeText(this, "Couldn't use that photo", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
         if (!widgets.onResult(requestCode, resultCode)) super.onActivityResult(requestCode, resultCode, data)
+    }
+
+    // Every launch through AppLauncher.start (Home gesture, unlock, fold) lands here: go to Home.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        homeRequests++
+    }
+
+    private fun pickWallpaper() {
+        try {
+            startActivityForResult(Intent(MediaStore.ACTION_PICK_IMAGES).setType("image/*"), REQ_WALLPAPER, AppLauncher.options())
+        } catch (e: Exception) {
+            Toast.makeText(this, "Couldn't open the photo picker", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun refreshApps() {
@@ -216,8 +286,13 @@ class CoverActivity : ComponentActivity() {
     }
 
     companion object {
+        /** The launcher while it's in front (resumed), else null. */
+        var current: CoverActivity? = null
+            private set
+
         // 748×720 px at 340 dpi ≈ 352×339 dp, split 4×4.
         private const val CELL_W_DP = 88
         private const val CELL_H_DP = 84
+        private const val REQ_WALLPAPER = 21
     }
 }
