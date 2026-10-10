@@ -45,7 +45,13 @@ object Banner {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             LayoutParams.TYPE_APPLICATION_OVERLAY, LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT,
         ).apply { gravity = Gravity.TOP }
-        wctx.getSystemService(WindowManager::class.java).addView(v, params)
+        // The system can refuse or drop the window (e.g. overlay permission revoked): never crash for a pop-up.
+        try {
+            wctx.getSystemService(WindowManager::class.java).addView(v, params)
+        } catch (e: Exception) {
+            queue.hide()
+            return
+        }
         view = v
         handler.removeCallbacks(autoHide)
         handler.postDelayed(autoHide, 5000)
@@ -62,7 +68,7 @@ object Banner {
     }
 
     private fun removeView() {
-        view?.let { it.context.getSystemService(WindowManager::class.java).removeView(it) }
+        view?.let { runCatching { it.context.getSystemService(WindowManager::class.java).removeView(it) } }
         view = null
     }
 

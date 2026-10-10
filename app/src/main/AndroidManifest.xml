@@ -42,6 +42,7 @@
         </activity>
         <activity
             android:name=".notify.ReplyActivity"
+            android:taskAffinity=""
             android:exported="false"
             android:excludeFromRecents="true"
             android:windowSoftInputMode="adjustResize" />

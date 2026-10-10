@@ -30,7 +30,9 @@ class NotificationAccess : NotificationListenerService() {
 
     private fun add(sbn: StatusBarNotification, ranking: RankingMap, banner: Boolean) {
         val r = Ranking()
-        val alerting = ranking.getRanking(sbn.key, r) && r.importance >= NotificationManager.IMPORTANCE_DEFAULT
+        // Respect Do Not Disturb: it suppresses peeking without lowering importance.
+        val alerting = ranking.getRanking(sbn.key, r) && r.importance >= NotificationManager.IMPORTANCE_DEFAULT &&
+            r.matchesInterruptionFilter() && r.suppressedVisualEffects and NotificationManager.Policy.SUPPRESSED_EFFECT_PEEK == 0
         val serial = getSystemService(UserManager::class.java).getSerialNumberForUser(sbn.user)
         val note = sbn.toNote(serial, alerting)
         if (NotificationStore.posted(this, sbn, note) && banner) Banner.show(this, note)

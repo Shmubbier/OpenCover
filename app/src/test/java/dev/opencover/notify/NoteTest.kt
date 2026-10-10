@@ -13,7 +13,7 @@ class NoteTest {
     @Test fun groupsByConversationThenApp() {
         val g = groupConversations(listOf(n("1", conv = "Ana", time = 1), n("2", conv = "Ben", time = 2), n("3", conv = "Ana", time = 3), n("4", pkg = "mail", time = 4)))
         assertEquals(listOf("mail", "chat", "chat"), g.map { it.pkg })
-        assertEquals(listOf("Ana", "Ben"), g.drop(1).map { it.title })
+        assertEquals(2, g.drop(1).size)
         assertEquals("3", g[1].latest.key)
         assertEquals(2, g[1].notes.size)
     }
@@ -44,6 +44,16 @@ class NoteTest {
     // Discord re-posts one alert-once notification per channel; a newer last message is still news.
     @Test fun newerChatMessagePopsEvenWhenAlertOnce() =
         assertTrue(post(listOf(n("1").copy(messageTime = 1)), n("1").copy(text = "x", messageTime = 2, alertOnce = true), "me").second)
+
+    // Chat apps add your own sent reply to the conversation; that isn't news.
+    @Test fun ownReplyDoesNotPop() =
+        assertFalse(post(listOf(n("1").copy(messageTime = 1)), n("1").copy(text = "me", messageTime = 2, fromMe = true), "me").second)
+
+    // Grouping uses the shortcut id; the card shows the person's name.
+    @Test fun cardTitleIsChatNameNotShortcutId() {
+        val g = groupConversations(listOf(n("1", conv = "shortcut-100023").copy(chatTitle = "Ana")))
+        assertEquals("Ana", g.single().title)
+    }
 
     @Test fun sameChatMessageStaysQuiet() =
         assertFalse(post(listOf(n("1").copy(messageTime = 2)), n("1").copy(messageTime = 2), "me").second)

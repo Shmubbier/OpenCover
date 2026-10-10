@@ -21,6 +21,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -59,7 +60,7 @@ fun NotificationsPage(notes: List<Note>) {
                 if (!open) {
                     Text(c.latest.text, color = Color.LightGray, fontSize = 13.sp, maxLines = 2)
                     if (c.notes.size > 1) Text("${c.notes.size} notifications", color = Color.Gray, fontSize = 11.sp)
-                } else c.notes.forEach { NoteRow(it) }
+                } else c.notes.forEach { key(it.key) { NoteRow(it) } } // swipe state follows the notification
             }
         }
     }

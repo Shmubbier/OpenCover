@@ -20,11 +20,15 @@ data class Note(
     val alertOnce: Boolean = false,
     /** Time of the latest chat message (MessagingStyle), if it is a chat. */
     val messageTime: Long? = null,
+    /** The latest chat message was sent by the user (their own reply). */
+    val fromMe: Boolean = false,
+    /** Name to show for a chat: conversation title, or the sender for 1:1 chats. */
+    val chatTitle: String? = null,
 ) {
     val groupKey get() = "$user/$pkg/${conversation.orEmpty()}"
 }
 
-/** [title] is the conversation title, or null to show the app name. */
+/** [title] is the chat's name, or null to show the app name. */
 data class Conversation(val key: String, val pkg: String, val title: String?, val notes: List<Note>) {
     val latest get() = notes.first()
 }
@@ -40,7 +44,7 @@ fun post(notes: List<Note>, n: Note, ownPkg: String): Pair<List<Note>, Boolean> 
     val old = notes.find { it.key == n.key }
     val rest = notes.filter { it.key != n.key }
     if (!shouldShow(n, ownPkg)) return rest to false
-    val newerMessage = old?.messageTime != null && n.messageTime != null && n.messageTime > old.messageTime
+    val newerMessage = old?.messageTime != null && n.messageTime != null && n.messageTime > old.messageTime && !n.fromMe
     val fresh = old == null || newerMessage || (n.messageTime == null && old.text != n.text && !n.alertOnce)
     return (rest + n) to (fresh && n.alerting)
 }
@@ -50,7 +54,7 @@ fun remove(notes: List<Note>, key: String) = notes.filter { it.key != key }
 /** Newest conversation first; notes inside newest first. */
 fun groupConversations(notes: List<Note>): List<Conversation> =
     notes.sortedByDescending { it.time }.groupBy { it.groupKey }
-        .map { (key, ns) -> Conversation(key, ns.first().pkg, ns.first().conversation, ns) }
+        .map { (key, ns) -> Conversation(key, ns.first().pkg, ns.first().chatTitle, ns) }
 
 /** The banner shows the newest note; notes arriving while it's up become "+N more". */
 class BannerQueue {

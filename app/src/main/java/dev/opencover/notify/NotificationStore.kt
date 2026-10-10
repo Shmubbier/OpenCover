@@ -3,6 +3,7 @@ package dev.opencover.notify
 import android.app.ActivityOptions
 import android.app.Notification
 import android.app.PendingIntent
+import android.app.Person
 import android.app.RemoteInput
 import android.content.Context
 import android.content.Intent
@@ -111,5 +112,10 @@ fun StatusBarNotification.toNote(serial: Long, alerting: Boolean): Note {
         alerting = alerting,
         alertOnce = n.flags and Notification.FLAG_ONLY_ALERT_ONCE != 0,
         messageTime = lastMessage?.getLong("time")?.takeIf { it > 0 },
+        // MessagingStyle stores the user's own messages with no sender.
+        fromMe = lastMessage != null && lastMessage.getCharSequence("sender") == null &&
+            lastMessage.getParcelable("sender_person", Person::class.java) == null,
+        chatTitle = if (lastMessage == null) null
+        else (x.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE) ?: x.getCharSequence(Notification.EXTRA_TITLE))?.toString(),
     )
 }
