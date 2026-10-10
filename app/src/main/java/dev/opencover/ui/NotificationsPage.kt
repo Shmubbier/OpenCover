@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.opencover.notify.Note
 import dev.opencover.notify.NotificationStore
+import dev.opencover.notify.ReplyActivity
 import dev.opencover.notify.groupConversations
 
 private val Card = Color(0xFF1E1E1E)
@@ -89,9 +90,10 @@ private fun NoteRow(n: Note) {
     }
 }
 
-/** Reply actions open the reply sheet (Task 4); others fire directly. */
+/** Reply actions open the reply sheet; others fire directly. */
 fun runAction(ctx: Context, n: Note, index: Int) {
-    if (!NotificationStore.act(ctx, n.key, index)) toast(ctx, "Couldn't do that")
+    if (n.actions.getOrNull(index)?.acceptsReply == true) ReplyActivity.open(ctx, n.key, index)
+    else if (!NotificationStore.act(ctx, n.key, index)) toast(ctx, "Couldn't do that")
 }
 
 fun appLabel(ctx: Context, pkg: String): String = try {

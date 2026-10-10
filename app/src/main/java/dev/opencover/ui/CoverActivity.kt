@@ -173,6 +173,8 @@ class CoverActivity : ComponentActivity() {
         SetupStep("Banking apps auto-resume (optional)",
             "Run once on a computer: adb shell pm grant dev.opencover android.permission.WRITE_SECURE_SETTINGS",
             BankingMode.canResume(this)) {},
+        SetupStep("Microphone (optional)", "Voice replies to notifications",
+            Permissions.mic(this)) { requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 2) },
         SetupStep("Notifications (optional)", "Shows that OpenCover is running",
             Permissions.notifications(this)) { requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1) },
     )
