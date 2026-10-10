@@ -1,10 +1,15 @@
 package dev.opencover.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.AlertDialog
@@ -24,6 +29,8 @@ import dev.opencover.apps.AppEntry
 import dev.opencover.apps.AppRepository
 import dev.opencover.layout.Item
 import dev.opencover.layout.Layout
+import dev.opencover.layout.addPage
+import dev.opencover.layout.removePage
 import dev.opencover.widgets.WidgetHost
 
 class LauncherActions(
@@ -34,6 +41,24 @@ class LauncherActions(
     val addApp: (AppEntry, page: Int) -> Unit,
     val remove: (Item) -> Unit,
 )
+
+@Composable
+fun EditBar(
+    onAddPage: () -> Unit,
+    onRemovePage: (() -> Unit)?,
+    onDone: () -> Unit,
+    extra: @Composable RowScope.() -> Unit = {},
+) {
+    Row(
+        Modifier.fillMaxWidth().background(Color(0xCC202020)),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+    ) {
+        extra()
+        TextButton(onClick = onAddPage) { Text("+ Page") }
+        TextButton(onClick = { onRemovePage?.invoke() }, enabled = onRemovePage != null) { Text("− Page") }
+        TextButton(onClick = onDone) { Text("Done") }
+    }
+}
 
 /** Shown when something doesn't fit on the current page. */
 class PageFullPrompt(val confirm: () -> Unit, val cancel: () -> Unit)
@@ -48,9 +73,18 @@ fun LauncherScreen(layout: Layout, apps: List<AppEntry>, a: LauncherActions, pro
     val pager = rememberPagerState { pageCount }
     val labels = remember(apps) { apps.associate { it.key to it.label } }
     var dragTotal by remember { mutableFloatStateOf(0f) }
+    BackHandler(enabled = editing) { editing = false }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         Column(Modifier.fillMaxSize()) {
+            if (editing) {
+                val removable = layout.removePage(pager.currentPage)
+                EditBar(
+                    onAddPage = { a.change(layout.addPage()) },
+                    onRemovePage = removable?.let { l -> { a.change(l) } },
+                    onDone = { editing = false },
+                )
+            }
             HorizontalPager(
                 state = pager,
                 modifier = Modifier.weight(1f).pointerInput(editing) {
