@@ -56,6 +56,15 @@ corner handle. Add apps by long-pressing them in the drawer. A full page offers 
 - Missing apps are not pruned if the app list is empty or the profile is locked.
 - Uninstalling one profile's copy only removes that profile's icons and widgets.
 
+## Banking mode
+
+Some banking apps (e.g. GCash) refuse to run while any third-party accessibility service is on.
+
+- You pick banking apps in Settings.
+- Opening one turns OpenCover's accessibility service off first. If the app is opened another way, the service sees it and turns itself off.
+- Leaving the app (Home, OpenCover, or another launchable app) turns it back on.
+- Turning it back on needs `WRITE_SECURE_SETTINGS`, granted once by the user: `adb shell pm grant dev.opencover android.permission.WRITE_SECURE_SETTINGS`. Without it, OpenCover still turns itself off but you turn it back on by hand.
+
 ## Out of scope
 
 Folders, grid size options, icon packs, themes, rotation, notifications, toggles, keyboard,
@@ -63,10 +72,11 @@ clock face, edge lighting, VoIP, AOD.
 
 ## Roadmap
 
-2. Notifications and media
+2. Navigation shell and Home (2a), notifications (2b), media (2c)
 3. Quick toggles
 4. Keyboard (T9 and QWERTY)
 5. Clock face and edge lighting
 6. VoIP caller ID
-7. Rotation
+7. Rotation: let apps that are stuck in one orientation rotate on the cover screen. Today some apps only flip when the phone is slightly opened, and snap back when closed.
 8. AOD and lock screen
+9. Cover screen while open: keep the cover screen on and usable when the phone is unfolded.
