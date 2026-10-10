@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -26,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -40,6 +43,7 @@ import dev.opencover.layout.Layout
 import dev.opencover.layout.WidgetItem
 import dev.opencover.layout.moveOrSwap
 import dev.opencover.layout.resizeItem
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.roundToInt
 
 @Composable
@@ -96,6 +100,29 @@ fun GridPage(
                             ) { change, delta ->
                                 change.consume()
                                 drag += delta
+                            }
+                        }
+                        // A widget's View swallows touches, so the gestures above never see them. Watch for a
+                        // long-press in the Initial pass instead, or a page full of widgets would lock you out
+                        // of edit mode.
+                        .pointerInput(item.id, editing) {
+                            if (!editing && item is WidgetItem) awaitEachGesture {
+                                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                                val released = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                                    while (true) {
+                                        val ch = awaitPointerEvent(PointerEventPass.Initial).changes
+                                            .firstOrNull { it.id == down.id } ?: break
+                                        val moved = (ch.position - down.position).getDistance() > viewConfiguration.touchSlop
+                                        if (!ch.pressed || moved) break
+                                    }
+                                }
+                                if (released == null) { // held still long enough
+                                    onLongPress()
+                                    do { // swallow the rest so the widget doesn't also register a click
+                                        val e = awaitPointerEvent(PointerEventPass.Initial)
+                                        e.changes.forEach { it.consume() }
+                                    } while (e.changes.any { it.pressed })
+                                }
                             }
                         }
                         .pointerInput(item.id, editing) {

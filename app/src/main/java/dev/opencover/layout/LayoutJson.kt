@@ -15,7 +15,7 @@ object LayoutJson {
             .put("x", i.cell.x).put("y", i.cell.y).put("w", i.cell.w).put("h", i.cell.h)
         return when (i) {
             is AppItem -> o.put("type", "app").put("package", i.pkg).put("activity", i.activity).put("user", i.user)
-            is WidgetItem -> o.put("type", "widget").put("widgetId", i.widgetId).put("provider", i.provider)
+            is WidgetItem -> o.put("type", "widget").put("widgetId", i.widgetId).put("provider", i.provider).put("user", i.user)
         }
     }
 
@@ -42,7 +42,7 @@ object LayoutJson {
         val id = o.getString("id")
         return when (val type = o.getString("type")) {
             "app" -> AppItem(id, c, o.getString("package"), o.getString("activity"), o.getLong("user"))
-            "widget" -> WidgetItem(id, c, o.getInt("widgetId"), o.getString("provider"))
+            "widget" -> WidgetItem(id, c, o.getInt("widgetId"), o.getString("provider"), o.optLong("user", 0))
             else -> throw IllegalArgumentException("unknown item type $type")
         }
     }

@@ -26,6 +26,8 @@ data class WidgetItem(
     override val cell: Cell,
     val widgetId: Int,
     val provider: String,
+    /** Serial number of the provider's profile; layouts saved before this field load as 0 (main user). */
+    val user: Long = 0,
 ) : Item {
     val providerPkg get() = provider.substringBefore('/')
 }
@@ -102,17 +104,22 @@ fun Layout.retain(keep: (Item) -> Boolean): Pair<Layout, List<Int>> {
 fun Layout.removePackage(pkg: String, user: Long) = retain {
     when (it) {
         is AppItem -> !(it.pkg == pkg && it.user == user)
-        is WidgetItem -> it.providerPkg != pkg
+        is WidgetItem -> !(it.providerPkg == pkg && it.user == user)
     }
 }
 
 /** Drops icons for apps no longer installed and widgets that no longer exist.
- *  Does nothing if [installedKeys] is empty: an empty app list means loading failed, not "no apps". */
-fun Layout.pruneMissing(installedKeys: Set<String>, widgetExists: (Int) -> Boolean): Pair<Layout, List<Int>> =
+ *  Does nothing if [installedKeys] is empty: an empty app list means loading failed, not "no apps".
+ *  Icons of a profile that isn't [userReady] (locked, paused, or its list came back empty) are kept. */
+fun Layout.pruneMissing(
+    installedKeys: Set<String>,
+    userReady: (Long) -> Boolean,
+    widgetExists: (Int) -> Boolean,
+): Pair<Layout, List<Int>> =
     if (installedKeys.isEmpty()) this to emptyList()
     else retain {
         when (it) {
-            is AppItem -> it.key in installedKeys
+            is AppItem -> it.key in installedKeys || !userReady(it.user)
             is WidgetItem -> widgetExists(it.widgetId)
         }
     }

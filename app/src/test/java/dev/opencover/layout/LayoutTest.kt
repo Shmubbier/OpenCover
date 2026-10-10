@@ -71,17 +71,36 @@ class LayoutTest {
         assertEquals(listOf("main"), l.pages[0].items.map { it.id })
     }
 
+    @Test fun removePackageKeepsOtherProfilesWidget() {
+        val two = Layout(listOf(Page(listOf(
+            WidgetItem("mine", Cell(0, 0, 2, 2), 1, "chat/.W", user = 0),
+            WidgetItem("dual", Cell(2, 0, 2, 2), 2, "chat/.W", user = 95),
+        ))))
+        val (l, freed) = two.removePackage("chat", user = 95)
+        assertEquals(listOf("mine"), l.pages[0].items.map { it.id })
+        assertEquals(listOf(2), freed)
+    }
+
     @Test fun pruneMissingDropsUninstalledAndDeadWidgets() {
         val keys = setOf(appKey("p.a", "p.a.Main", 0))
-        val (l, freed) = base.pruneMissing(keys) { false }
+        val (l, freed) = base.pruneMissing(keys, userReady = { true }) { false }
         assertEquals(listOf("a"), l.pages[0].items.map { it.id })
         assertEquals(listOf(7), freed)
     }
 
     @Test fun pruneMissingSkipsWhenNoAppsKnown() {
-        val (l, freed) = base.pruneMissing(emptySet()) { false }
+        val (l, freed) = base.pruneMissing(emptySet(), userReady = { true }) { false }
         assertEquals(base, l)
         assertTrue(freed.isEmpty())
+    }
+
+    @Test fun pruneMissingKeepsIconsOfProfilesNotReady() {
+        val work = Layout(listOf(Page(listOf(
+            app("main", Cell(0, 0, 1, 1), pkg = "gone", user = 0),
+            app("work", Cell(1, 0, 1, 1), pkg = "mail", user = 10),
+        ))))
+        val (l, _) = work.pruneMissing(setOf("x"), userReady = { it == 0L }) { true }
+        assertEquals(listOf("work"), l.pages[0].items.map { it.id })
     }
 
     @Test fun defaultLayoutTakesEightMostRecent() {

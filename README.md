@@ -19,8 +19,9 @@ A free, open-source (GPL-3.0) launcher for the Galaxy Z Flip 5 cover screen. No 
 ## Why Accessibility?
 On Android 16, only apps with a system-bound service such as an accessibility service may
 bring their screen back from the background, which is what returning to OpenCover on Home
-needs. The service receives window-change events only (`canRetrieveWindowContent="false"`):
-it never sees screen contents or what you type.
+needs. The service receives window-change events from Samsung's system UI only
+(`packageNames="com.android.systemui"`, `canRetrieveWindowContent="false"`): it never sees
+other apps, screen contents, or what you type.
 
 ## Status
 Sub-project 1 of 8. See `docs/superpowers/specs/` for the roadmap.

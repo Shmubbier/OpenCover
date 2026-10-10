@@ -122,8 +122,8 @@ fun LauncherScreen(layout: Layout, apps: List<AppEntry>, a: LauncherActions, pro
                 WidgetPicker(
                     providers = remember { a.widgets.providers() },
                     label = { p ->
-                        val app = pm.getApplicationLabel(pm.getApplicationInfo(p.provider.packageName, 0))
-                        "$app · ${p.loadLabel(pm)}"
+                        // From the provider's own info: a package lookup would miss work-profile-only apps.
+                        "${p.activityInfo.applicationInfo.loadLabel(pm)} · ${p.loadLabel(pm)}"
                     },
                     onPick = { overlay = Overlay.NONE; a.addWidget(it, pager.currentPage) },
                     onClose = { overlay = Overlay.NONE },

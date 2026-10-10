@@ -84,7 +84,8 @@ class CoverActivity : ComponentActivity() {
             val w = cellSpan(info.targetCellWidth, (info.minWidth / sys).toInt(), CELL_W_DP)
             val h = cellSpan(info.targetCellHeight, (info.minHeight / sys).toInt(), CELL_H_DP)
             val provider = info.provider.flattenToString()
-            place(page, w, h, { WidgetItem(newId(), it, id, provider) }, onCancel = { widgets.delete(id) })
+            val user = repo.serial(info.profile)
+            place(page, w, h, { WidgetItem(newId(), it, id, provider, user) }, onCancel = { widgets.delete(id) })
         }
         startForegroundService(Intent(this, CoverWatcher::class.java))
         repo.register(appsCallback)
@@ -177,7 +178,11 @@ class CoverActivity : ComponentActivity() {
 
     private fun loadLayout() {
         val (l, freed) = store.load { defaultLayout(apps) }
-            .pruneMissing(apps.map { it.key }.toSet(), widgets::exists)
+            .pruneMissing(
+                apps.map { it.key }.toSet(),
+                userReady = { serial -> repo.userReady(serial) && apps.any { it.user == serial } },
+                widgetExists = widgets::exists,
+            )
         freed.forEach(widgets::delete)
         update(l)
         loaded = true

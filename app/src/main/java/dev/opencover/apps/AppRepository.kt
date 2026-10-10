@@ -23,6 +23,12 @@ class AppRepository(private val ctx: Context) {
 
     fun serial(user: UserHandle) = users.getSerialNumberForUser(user)
 
+    /** True if icons for this profile may be pruned: it's gone, or it's unlocked and running. */
+    fun userReady(serial: Long): Boolean {
+        val handle = users.getUserForSerialNumber(serial) ?: return true
+        return users.isUserUnlocked(handle) && !users.isQuietModeEnabled(handle)
+    }
+
     fun load(): List<AppEntry> {
         val used = lastUsedByPackage()
         return launcherApps.profiles.flatMap { u ->
