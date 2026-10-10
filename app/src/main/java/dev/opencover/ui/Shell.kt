@@ -61,6 +61,8 @@ class LauncherActions(
     val openSetup: () -> Unit,
     val setQuick: (slot: Int, AppEntry?) -> Unit,
     val pickWallpaper: () -> Unit,
+    val bankingApps: () -> Set<String>,
+    val setBankingApps: (Set<String>) -> Unit,
 )
 
 @Composable
@@ -85,6 +87,7 @@ class PageFullPrompt(val confirm: () -> Unit, val cancel: () -> Unit)
 private sealed interface Overlay {
     data object Widgets : Overlay
     data object Settings : Overlay
+    data object Banking : Overlay
     data class PickSlot(val slot: Int) : Overlay
 }
 
@@ -149,10 +152,10 @@ fun Shell(
                 modifier = Modifier.weight(1f).pointerInput(editing) {
                     if (editing) return@pointerInput
                     var total = 0f
-                    // Pull a panel in from the edge; it follows the finger and snaps at 25%.
+                    // Pull a panel in: fully shown after PULL of the screen height, snaps open past 15%.
                     detectVerticalDragGestures(
                         onDragStart = { total = 0f },
-                        onDragEnd = { if (reveal.value > 0.25f) scope.launch { reveal.animateTo(1f) } else closePanel() },
+                        onDragEnd = { if (reveal.value > 0.15f) scope.launch { reveal.animateTo(1f) } else closePanel() },
                         onDragCancel = { closePanel() },
                     ) { change, dy ->
                         total += dy
@@ -160,7 +163,7 @@ fun Shell(
                             ?: return@detectVerticalDragGestures
                         change.consume()
                         val shown = if (p.edge == Edge.BOTTOM) -total else total
-                        scope.launch { reveal.snapTo((shown / heightPx).coerceIn(0f, 1f)) }
+                        scope.launch { reveal.snapTo((shown / (heightPx * PULL)).coerceIn(0f, 1f)) }
                     }
                 },
             ) { i ->
@@ -185,14 +188,14 @@ fun Shell(
                         var total = 0f
                         detectVerticalDragGestures(
                             onDragStart = { total = 0f },
-                            onDragEnd = { if (reveal.value < 0.75f) closePanel() else scope.launch { reveal.animateTo(1f) } },
+                            onDragEnd = { if (reveal.value < 0.85f) closePanel() else scope.launch { reveal.animateTo(1f) } },
                             onDragCancel = { scope.launch { reveal.animateTo(1f) } },
                         ) { change, dy ->
                             total += dy
                             val hiding = if (p.edge == Edge.BOTTOM) total else -total
                             if (hiding <= 0f) return@detectVerticalDragGestures
                             change.consume()
-                            scope.launch { reveal.snapTo((1f - hiding / heightPx).coerceIn(0f, 1f)) }
+                            scope.launch { reveal.snapTo((1f - hiding / (heightPx * PULL)).coerceIn(0f, 1f)) }
                         }
                     }
             ) {
@@ -227,6 +230,7 @@ fun Shell(
                 onSamsungWidgets = { overlay = null; editing = false; a.samsungWidgets() },
                 onSetup = { overlay = null; editing = false; a.openSetup() },
                 onWallpaper = { overlay = null; a.pickWallpaper() },
+                onBanking = { overlay = Overlay.Banking },
                 onClose = { overlay = null },
             )
             is Overlay.PickSlot -> AppDrawer(
@@ -237,6 +241,15 @@ fun Shell(
                 onClose = { overlay = null },
                 hint = "Tap an app for this shortcut",
             )
+            Overlay.Banking -> {
+                var selected by remember { mutableStateOf(a.bankingApps()) }
+                BankingPicker(
+                    apps = apps,
+                    selected = selected,
+                    onChange = { selected = it; a.setBankingApps(it) },
+                    onClose = { overlay = Overlay.Settings },
+                )
+            }
             null -> {}
         }
 
@@ -266,3 +279,6 @@ private fun Placeholder(title: String) {
         Text("Coming in a later update", color = Color.Gray, fontSize = 12.sp)
     }
 }
+
+/** Fraction of the screen height a finger travels to fully open or close a panel. */
+private const val PULL = 0.4f

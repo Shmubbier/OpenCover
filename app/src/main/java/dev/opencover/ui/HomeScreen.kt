@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -43,8 +46,11 @@ fun HomeScreen(home: Home, wallpaper: ImageBitmap?, a: LauncherActions, onEditSl
             Image(wallpaper, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         }
         Clock(Modifier.align(Alignment.TopStart).padding(20.dp))
-        // Bottom left: the camera cutout is bottom right.
-        Row(Modifier.align(Alignment.BottomStart).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Bottom left, lifted above the camera cutout (bottom right) so slots 3 and 4 aren't hidden.
+        Row(
+            Modifier.align(Alignment.BottomStart).windowInsetsPadding(WindowInsets.displayCutout).padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             home.quick.forEachIndexed { slot, q -> QuickSlot(q, a) { onEditSlot(slot) } }
         }
     }
