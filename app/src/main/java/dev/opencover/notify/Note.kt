@@ -16,6 +16,8 @@ data class Note(
     val media: Boolean = false,
     val summary: Boolean = false,
     val alerting: Boolean = true,
+    /** The app asked for silent updates (FLAG_ONLY_ALERT_ONCE). */
+    val alertOnce: Boolean = false,
 ) {
     val groupKey get() = "$user/$pkg/${conversation.orEmpty()}"
 }
@@ -27,11 +29,17 @@ data class Conversation(val key: String, val pkg: String, val title: String?, va
 
 fun shouldShow(n: Note, ownPkg: String) = !n.ongoing && !n.media && !n.summary && n.pkg != ownPkg
 
-/** New list after a post, and whether it should pop a banner (new and alerting only). */
+/**
+ * New list after a post, and whether it should pop a banner: a new alerting notification, or a
+ * re-post with new text (chat apps reuse one notification per conversation) unless the app asked
+ * for silent updates.
+ */
 fun post(notes: List<Note>, n: Note, ownPkg: String): Pair<List<Note>, Boolean> {
+    val old = notes.find { it.key == n.key }
     val rest = notes.filter { it.key != n.key }
     if (!shouldShow(n, ownPkg)) return rest to false
-    return (rest + n) to (rest.size == notes.size && n.alerting)
+    val fresh = old == null || (old.text != n.text && !n.alertOnce)
+    return (rest + n) to (fresh && n.alerting)
 }
 
 fun remove(notes: List<Note>, key: String) = notes.filter { it.key != key }

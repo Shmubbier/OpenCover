@@ -109,5 +109,6 @@ fun StatusBarNotification.toNote(serial: Long, alerting: Boolean): Note {
         media = x.getString(Notification.EXTRA_TEMPLATE) == Notification.MediaStyle::class.java.name,
         summary = n.flags and Notification.FLAG_GROUP_SUMMARY != 0,
         alerting = alerting,
+        alertOnce = n.flags and Notification.FLAG_ONLY_ALERT_ONCE != 0,
     )
 }

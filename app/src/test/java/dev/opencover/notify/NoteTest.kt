@@ -29,10 +29,19 @@ class NoteTest {
     @Test fun newAlertingPopsBanner() = assertTrue(post(emptyList(), n("1"), "me").second)
 
     @Test fun updateReplacesWithoutBanner() {
-        val (l, pop) = post(listOf(n("1")), n("1").copy(text = "edited"), "me")
-        assertEquals(listOf("edited"), l.map { it.text })
+        val (l, pop) = post(listOf(n("1")), n("1").copy(time = 2), "me")
+        assertEquals(1, l.size)
         assertFalse(pop)
     }
+
+    // Messenger re-posts the same notification key for each new message in a chat.
+    @Test fun repostWithNewTextPops() {
+        val (l, pop) = post(listOf(n("1")), n("1").copy(text = "new message"), "me")
+        assertEquals(listOf("new message"), l.map { it.text })
+        assertTrue(pop)
+    }
+
+    @Test fun alertOnceUpdateStaysQuiet() = assertFalse(post(listOf(n("1")), n("1").copy(text = "x", alertOnce = true), "me").second)
 
     @Test fun silentIsListedWithoutBanner() {
         val (l, pop) = post(emptyList(), n("1", alerting = false), "me")
