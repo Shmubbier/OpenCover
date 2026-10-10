@@ -73,10 +73,11 @@ clock face, edge lighting, VoIP, AOD.
 ## Roadmap
 
 2. Navigation shell and Home (2a), notifications (2b), media (2c)
-3. Quick toggles
+3. Quick toggles: swipe down on Home. Over other apps, a thin pull-down strip just below the status bar. OpenCover hides the status bar so Samsung's panel only peeks.
 4. Keyboard (T9 and QWERTY)
 5. Clock face and edge lighting
 6. VoIP caller ID
 7. Rotation: let apps that are stuck in one orientation rotate on the cover screen. Today some apps only flip when the phone is slightly opened, and snap back when closed.
 8. AOD and lock screen
 9. Cover screen while open: keep the cover screen on and usable when the phone is unfolded.
+10. Own navigation: avoid the Samsung widgets flash on Home. Options: an OpenCover gesture zone above Samsung's, or OpenCover as default Home app (spike first; Samsung may keep its own cover home).

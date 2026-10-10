@@ -10,6 +10,8 @@ import android.os.Bundle
 import android.os.UserHandle
 import android.provider.MediaStore
 import android.provider.Settings
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -179,6 +181,12 @@ class CoverActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         BankingMode.resume(this) // back in OpenCover, so any banking app was left
+        // Full screen: a top-edge swipe only peeks the status bar, so Samsung's quick panel
+        // doesn't fight our swipe-down quick settings.
+        window.insetsController?.apply {
+            hide(WindowInsets.Type.statusBars())
+            systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
         resumeTick++
         refreshApps()
         if (!loaded) loadLayout()
