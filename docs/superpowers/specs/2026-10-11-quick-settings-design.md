@@ -31,24 +31,24 @@ Prefer non-Shizuku paths so most tiles work after a reboot before Shizuku is bac
 
 | Tile | How | Needs |
 |---|---|---|
-| Wi-Fi | Shizuku `svc wifi enable/disable` | Shizuku |
-| Bluetooth | Shizuku `svc bluetooth enable/disable` | Shizuku |
-| Mobile data | Shizuku `svc data enable/disable` | Shizuku |
+| Wi-Fi | Shizuku `cmd wifi set-wifi-enabled` | Shizuku |
+| Bluetooth | Shizuku `cmd bluetooth_manager enable/disable` | Shizuku |
+| Mobile data | Shizuku `cmd phone data enable/disable` | Shizuku |
 | Airplane | Shizuku `cmd connectivity airplane-mode enable/disable` | Shizuku |
 | NFC | Shizuku `svc nfc enable/disable` | Shizuku |
 | Battery saver | Shizuku `cmd power set-mode 1/0` | Shizuku |
 | Dark mode | Shizuku `cmd uimode night yes/no` | Shizuku |
-| Hotspot | Shizuku command, if one works (spike first; drop the tile if not) | Shizuku |
 | Location | Secure setting `location_mode` | WRITE_SECURE_SETTINGS (granted) |
 | Flashlight | CameraManager torch | none |
 | Sound | AudioManager ringer: Ring, Vibrate, Mute | none |
 | DND | NotificationAccess `requestInterruptionFilter` | notification access (granted) |
-| Rotation | System setting `accelerometer_rotation` | Modify system settings |
+| Rotation | System setting `accelerometer_rotation` | WRITE_SECURE_SETTINGS (granted) |
 | Keep awake | Existing KeepAwake setting | none |
 
 - State comes from the system and updates live (receivers, callbacks, settings observers), so tiles match changes made in Samsung's panel.
 - A tile missing what it needs is grey. Tap shows a hint: "Start Shizuku" or "Grant in Setup".
-- Brightness: spike first. If the cover screen has its own brightness setting, the slider sets it. If not, the slider dims only OpenCover's window.
+- Brightness: the slider sets Samsung's cover setting `sub_screen_brightness`. If that has no live effect, it dims only OpenCover's window.
+- Hotspot: dropped, Android 16 has no shell command for it.
 
 ## Editing
 
@@ -61,7 +61,7 @@ Prefer non-Shizuku paths so most tiles work after a reboot before Shizuku is bac
 
 - SharedPreferences "quick", key "tiles": ordered tile ids.
 - Unknown ids are dropped on load. Tiles added in later versions start hidden.
-- Default order: Wi-Fi, Bluetooth, Flashlight, Rotation, Sound, DND, Battery saver, Location, Mobile data, Airplane, Hotspot, NFC, Dark mode, Keep awake.
+- Default order: Wi-Fi, Bluetooth, Flashlight, Rotation, Sound, DND, Battery saver, Location, Mobile data, Airplane, NFC, Dark mode, Keep awake.
 
 ## Components
 
@@ -69,11 +69,10 @@ Prefer non-Shizuku paths so most tiles work after a reboot before Shizuku is bac
 - `quick/Shizuku.kt`: running and permission state, run a command.
 - `quick/TileState.kt`: reads and observes live state; performs toggles.
 - `ui/QuickPanel.kt`: slider, battery, tile pages, edit mode.
-- Setup checklist: Shizuku (installed, running, allowed) and Modify system settings.
+- Setup checklist: Shizuku (installed, running, allowed).
 
 ## Setup (README)
 
-- `adb shell appops set dev.opencover WRITE_SETTINGS allow`
 - Install Shizuku, start it over adb, allow OpenCover.
 - Start on boot without a PC (one time): grant Shizuku WRITE_SECURE_SETTINGS and pair it with wireless debugging. Needs Wi-Fi at boot.
 
