@@ -42,6 +42,11 @@ class TilesTest {
         assertEquals(Ringer.RING, Ringer.MUTE.next(canMute = true))
     }
     @Test fun ringerSkipsMuteWithoutAccess() = assertEquals(Ringer.RING, Ringer.VIBRATE.next(canMute = false))
+    @Test fun noTilesForcesEditMode() {
+        assertTrue(inEditMode(editing = false, shown = 0)) // otherwise nothing is left to long-press
+        assertFalse(inEditMode(editing = false, shown = 3))
+        assertTrue(inEditMode(editing = true, shown = 3))
+    }
     @Test fun usableNeeds() {
         assertTrue(usable(Need.NONE, emptySet()))
         assertFalse(usable(Need.SHIZUKU, setOf(Need.SECURE_SETTINGS)))

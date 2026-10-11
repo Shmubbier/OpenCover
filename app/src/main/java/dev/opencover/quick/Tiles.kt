@@ -60,6 +60,9 @@ enum class Ringer {
     }
 }
 
+/** With no tiles left there is nothing to long-press, so stay in edit mode. */
+fun inEditMode(editing: Boolean, shown: Int) = editing || shown == 0
+
 fun usable(need: Need, has: Set<Need>) = need == Need.NONE || need in has
 
 object QuickPrefs {

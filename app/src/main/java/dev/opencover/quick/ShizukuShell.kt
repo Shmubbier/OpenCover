@@ -14,9 +14,16 @@ object ShizukuShell {
 
     fun running() = try { Shizuku.pingBinder() } catch (e: Exception) { false }
 
-    fun allowed() = running() && !Shizuku.isPreV11() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+    // Shizuku can die between calls; its API then throws, so every entry point catches.
+    fun allowed() = try {
+        running() && !Shizuku.isPreV11() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+    } catch (e: Exception) {
+        false
+    }
 
-    fun request() { if (running() && !allowed()) Shizuku.requestPermission(1) }
+    fun request() {
+        try { if (running() && !allowed()) Shizuku.requestPermission(1) } catch (e: Exception) {}
+    }
 
     private var listeners: Triple<Shizuku.OnBinderReceivedListener, Shizuku.OnBinderDeadListener, Shizuku.OnRequestPermissionResultListener>? = null
 

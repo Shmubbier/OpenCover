@@ -1,6 +1,7 @@
 package dev.opencover.ui
 
 import android.app.Activity
+import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -61,6 +62,7 @@ import dev.opencover.quick.Ringer
 import dev.opencover.quick.Tile
 import dev.opencover.quick.dropIndex
 import dev.opencover.quick.hiddenTiles
+import dev.opencover.quick.inEditMode
 import dev.opencover.quick.moved
 import dev.opencover.quick.pageCount
 import dev.opencover.quick.usable
@@ -80,10 +82,11 @@ fun QuickPanel() {
     }
     val v = QuickState.version // read so every change recomposes
     var tiles by remember { mutableStateOf(QuickPrefs.tiles(ctx)) }
-    var editing by remember { mutableStateOf(false) }
+    var editRequested by remember { mutableStateOf(false) }
+    val editing = inEditMode(editRequested, tiles.size)
     var hint by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(hint) { if (hint != null) { delay(2500); hint = null } }
-    BackHandler(enabled = editing) { editing = false }
+    BackHandler(enabled = editRequested) { editRequested = false } // with no tiles Back still closes the panel
     val scope = rememberCoroutineScope()
     fun save(t: List<Tile>) { tiles = t; QuickPrefs.setTiles(ctx, t) }
     val has = remember(v) { QuickState.granted(ctx) }
@@ -105,13 +108,17 @@ fun QuickPanel() {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (editing) {
                 Text("Edit tiles", color = Color.White, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                TextButton(onClick = { editing = false }) { Text("Done") }
+                TextButton(onClick = { editRequested = false }) { Text("Done") }
             } else {
                 Icon(Icons.Filled.BrightnessMedium, null, tint = Color.White, modifier = Modifier.size(22.dp))
                 // Real cover brightness needs Shizuku; without it the slider dims only OpenCover.
                 val cover = Need.SHIZUKU in has
                 var level by remember { mutableFloatStateOf(0.5f) }
-                LaunchedEffect(cover) { if (cover) withContext(Dispatchers.IO) { QuickState.brightness() }?.let { level = it } }
+                LaunchedEffect(cover) {
+                    if (!cover) return@LaunchedEffect
+                    (ctx as? Activity)?.window?.let { w -> w.attributes = w.attributes.apply { screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE } }
+                    withContext(Dispatchers.IO) { QuickState.brightness() }?.let { level = it }
+                }
                 Slider(
                     value = level, modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
                     onValueChange = {
@@ -161,7 +168,7 @@ fun QuickPanel() {
                                 enabled = usable(t.need, has),
                                 label = if (t == Tile.SOUND) remember(v) { QuickState.ringer(ctx) }.label() else t.label,
                                 icon = if (t == Tile.SOUND) remember(v) { QuickState.ringer(ctx) }.icon() else t.icon(),
-                                onTap = { tap(t) }, onLongPress = { editing = true },
+                                onTap = { tap(t) }, onLongPress = { editRequested = true },
                             )
                         }
                     }
