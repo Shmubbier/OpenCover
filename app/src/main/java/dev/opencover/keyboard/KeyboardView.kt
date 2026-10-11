@@ -130,62 +130,87 @@ class KeyboardView(ctx: Context, private val listener: Listener) : View(ctx) {
         }
     }
 
+    /** The finger being tracked; a second finger landing finishes the first one's tap. */
+    private var pointerId = -1
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                downX = e.x; downY = e.y
-                handled = false; swiping = false; spaceSteps = 0; repeats = 0; trail.clear()
-                if (showSuggestions && e.y >= previewH && e.y < keysTop) {
-                    stripDown = (e.x / (width / 3f)).toInt()
-                    handler.postDelayed(hold, 500)
-                    return true
-                }
-                stripDown = -1
-                pressed = keys.firstOrNull { it.second.contains(e.x, e.y) } ?: nearest(e.x, e.y)
-                performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                handler.postDelayed(hold, 400)
-                invalidate()
+            MotionEvent.ACTION_DOWN -> start(e, 0)
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                if (stripDown < 0 && !swiping && !handled) pressed?.first?.let(::tap) // two-thumb typing
+                stop()
+                start(e, e.actionIndex)
             }
             MotionEvent.ACTION_MOVE -> {
-                val k = pressed?.first ?: return true
-                val dx = e.x - downX
-                when {
-                    k.kind == KeyKind.SPACE -> {
-                        val steps = (dx / dp(12f)).toInt()
-                        if (steps != spaceSteps) {
-                            handler.removeCallbacks(hold)
-                            listener.onCursor(steps - spaceSteps)
-                            spaceSteps = steps
-                            handled = true
-                        }
-                    }
-                    swiping -> { trail += Pt(e.x, e.y); invalidate() }
-                    page === Layouts.letters && k.kind == KeyKind.CHAR && !handled &&
-                        hypot(dx, e.y - downY) > width / 10f * 0.6f -> {
-                        swiping = true
-                        handler.removeCallbacks(hold)
-                        trail += Pt(downX, downY)
-                        trail += Pt(e.x, e.y)
-                    }
-                }
+                val i = e.findPointerIndex(pointerId)
+                if (i >= 0) move(e.getX(i), e.getY(i))
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                handler.removeCallbacks(hold)
-                handler.removeCallbacks(repeat)
-                if (e.actionMasked == MotionEvent.ACTION_UP) when {
-                    stripDown >= 0 -> if (!handled && stripDown < suggestions.size) listener.onSuggestion(stripDown)
-                    swiping -> {
-                        listener.onSwipe(trail.toList(), letterCenters(), width / 10f, shift != Shift.OFF)
-                        if (shift == Shift.ONCE) shift = Shift.OFF
-                    }
-                    !handled -> pressed?.first?.let(::tap)
-                }
-                pressed = null; trail.clear(); swiping = false; stripDown = -1
-                invalidate()
-            }
+            MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_UP ->
+                if (e.getPointerId(e.actionIndex) == pointerId) { release(); stop() }
+            MotionEvent.ACTION_CANCEL -> stop()
         }
         return true
+    }
+
+    private fun start(e: MotionEvent, index: Int) {
+        val x = e.getX(index)
+        val y = e.getY(index)
+        pointerId = e.getPointerId(index)
+        downX = x; downY = y
+        handled = false; swiping = false; spaceSteps = 0; repeats = 0; trail.clear()
+        if (showSuggestions && y >= previewH && y < keysTop) {
+            stripDown = (x / (width / 3f)).toInt()
+            handler.postDelayed(hold, 500)
+            return
+        }
+        stripDown = -1
+        pressed = keys.firstOrNull { it.second.contains(x, y) } ?: nearest(x, y)
+        performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+        handler.postDelayed(hold, 400)
+        invalidate()
+    }
+
+    private fun move(x: Float, y: Float) {
+        val k = pressed?.first ?: return
+        val dx = x - downX
+        when {
+            k.kind == KeyKind.SPACE -> {
+                val steps = (dx / dp(12f)).toInt()
+                if (steps != spaceSteps) {
+                    handler.removeCallbacks(hold)
+                    listener.onCursor(steps - spaceSteps)
+                    spaceSteps = steps
+                    handled = true
+                }
+            }
+            swiping -> { trail += Pt(x, y); invalidate() }
+            page === Layouts.letters && k.kind == KeyKind.CHAR && !handled && hypot(dx, y - downY) > width / 10f * 0.6f -> {
+                swiping = true
+                handler.removeCallbacks(hold)
+                trail += Pt(downX, downY)
+                trail += Pt(x, y)
+            }
+        }
+    }
+
+    /** The tracked finger lifted: act on what it did. */
+    private fun release() {
+        when {
+            stripDown >= 0 -> if (!handled && stripDown < suggestions.size) listener.onSuggestion(stripDown)
+            swiping -> {
+                listener.onSwipe(trail.toList(), letterCenters(), width / 10f, shift != Shift.OFF)
+                if (shift == Shift.ONCE) shift = Shift.OFF
+            }
+            !handled -> pressed?.first?.let(::tap)
+        }
+    }
+
+    private fun stop() {
+        handler.removeCallbacks(hold)
+        handler.removeCallbacks(repeat)
+        pressed = null; trail.clear(); swiping = false; stripDown = -1; pointerId = -1
+        invalidate()
     }
 
     private fun onHold() {

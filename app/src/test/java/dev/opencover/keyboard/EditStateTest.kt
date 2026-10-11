@@ -18,6 +18,11 @@ class EditStateTest {
         assertEquals(at("abc", 3), at("abc", 1).moveCursor(9))
     }
     @Test fun moveCollapsesSelection() = assertEquals(at("hello", 0), EditState("hello", 1, 4).moveCursor(-1))
+    @Test fun swipedWordReplacedOnlyRightAfterIt() {
+        assertEquals(6, at("hi hello ").replaceCount("hello "))   // still right after the swipe
+        assertEquals(2, at("hello hi", 8).replaceCount("hello ")) // cursor moved on: just the current word
+        assertEquals(3, at("hi wor").replaceCount(null))
+    }
     @Test fun currentWord() {
         assertEquals("wor", at("hello wor").currentWord())
         assertEquals("", at("hello ").currentWord())

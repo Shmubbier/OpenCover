@@ -29,6 +29,10 @@ data class EditState(val text: String, val start: Int, val end: Int) {
     /** Collapses any selection toward [by]'s direction, then moves; clamped to the text. */
     fun moveCursor(by: Int) = at(text, ((if (by < 0) start else end) + by).coerceIn(0, text.length))
 
+    /** Characters a suggestion replaces: the swiped word if the cursor is still right after it, else the current word. */
+    fun replaceCount(swiped: String?) =
+        if (swiped != null && text.substring(0, start).endsWith(swiped)) swiped.length else currentWord().length
+
     /** Letters and apostrophes just before the cursor. */
     fun currentWord() = text.substring(0, start).takeLastWhile { it.isLetter() || it == '\'' }
 }

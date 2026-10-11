@@ -32,6 +32,15 @@ class OverlayKeyboard(private val service: AccessibilityService) : KeyboardView.
     private var lastSwipe: String? = null
     private val handler = Handler(Looper.getMainLooper())
     private val hideSoon = Runnable { hide() }
+    private val displays = service.getSystemService(DisplayManager::class.java)
+    /** Unfolding doesn't always restart input: hide as soon as the main screen turns on. */
+    private val unfold = object : DisplayManager.DisplayListener {
+        override fun onDisplayChanged(id: Int) {
+            if (id == Display.DEFAULT_DISPLAY && displays.getDisplay(id)?.state == Display.STATE_ON) hide()
+        }
+        override fun onDisplayAdded(id: Int) {}
+        override fun onDisplayRemoved(id: Int) {}
+    }
 
     private val ic get() = service.inputMethod?.currentInputConnection
 
@@ -91,14 +100,20 @@ class OverlayKeyboard(private val service: AccessibilityService) : KeyboardView.
             layoutInDisplayCutoutMode = LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
             fitInsetsTypes = 0 // flush with the bottom edge; the view's own gap clears the camera
         }
-        return runCatching { wctx.getSystemService(WindowManager::class.java).addView(v, params); v }.getOrNull()?.also { view = it }
+        return runCatching { wctx.getSystemService(WindowManager::class.java).addView(v, params); v }.getOrNull()?.also {
+            view = it
+            displays.registerDisplayListener(unfold, handler)
+        }
     }
 
     fun hide() {
         handler.removeCallbacks(hideSoon)
         editor = null
         lastSwipe = null
-        view?.let { v -> runCatching { v.context.getSystemService(WindowManager::class.java).removeView(v) } }
+        view?.let { v ->
+            runCatching { v.context.getSystemService(WindowManager::class.java).removeView(v) }
+            displays.unregisterDisplayListener(unfold)
+        }
         view = null
         if (samsungHidden) {
             service.softKeyboardController.showMode = AccessibilityService.SHOW_MODE_AUTO
@@ -132,7 +147,8 @@ class OverlayKeyboard(private val service: AccessibilityService) : KeyboardView.
 
     /** Deletes what [op] would remove before the cursor (or the selection). */
     private fun deleteBy(op: (EditState) -> EditState) {
-        val s = snap()?.s ?: return
+        // An editor that won't share its text still gets a one-character delete.
+        val s = snap()?.s ?: run { ic?.deleteSurroundingText(1, 0); return }
         if (s.start != s.end) commit("") else deleteBefore(s.start - op(s).start)
     }
 
@@ -142,7 +158,15 @@ class OverlayKeyboard(private val service: AccessibilityService) : KeyboardView.
 
     override fun onCursor(by: Int) {
         lastSwipe = null
-        val sn = snap() ?: return
+        val sn = snap()
+        if (sn == null || sn.offset < 0) { // position unknown: step with arrow keys
+            val key = if (by < 0) KeyEvent.KEYCODE_DPAD_LEFT else KeyEvent.KEYCODE_DPAD_RIGHT
+            repeat(kotlin.math.abs(by)) {
+                ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, key))
+                ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, key))
+            }
+            return
+        }
         val c = sn.s.moveCursor(by).start + sn.offset
         ic?.setSelection(c, c)
     }
@@ -166,7 +190,7 @@ class OverlayKeyboard(private val service: AccessibilityService) : KeyboardView.
         val w = view?.suggestions?.getOrNull(index) ?: return
         val swiped = lastSwipe
         lastSwipe = null
-        deleteBefore(swiped?.length ?: snap()?.s?.currentWord()?.length ?: 0)
+        deleteBefore(snap()?.s?.replaceCount(swiped) ?: 0)
         commit("$w ")
     }
 
