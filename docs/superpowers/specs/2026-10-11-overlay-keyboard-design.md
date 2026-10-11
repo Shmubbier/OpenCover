@@ -32,7 +32,7 @@ Spike (2026-10-11, on device): the accessibility service can hide Samsung's keyb
 ## Behavior
 
 - Appears when a text field gains input focus on the cover display: Samsung's keyboard is hidden, ours slides up. Hides when focus leaves; Samsung's keyboard show mode is restored.
-- Keys: tap types; long-press gives the alternate (q 1, e é, ...). Shift: once for one capital, twice for caps lock. "123": numbers and symbols, a second symbols page. Backspace repeats while held, speeding up to whole words. Drag on space moves the cursor. Paste on the symbols page and long-press comma. Enter: `ACTION_IME_ENTER`.
+- Keys: tap types; long-press gives the alternate (top row digits, other letters symbols). Shift: once for one capital, twice for caps lock. "123": numbers and symbols, a second symbols page. Backspace repeats while held, speeding up to whole words. Drag on space moves the cursor. Paste on the symbols page and long-press comma. Enter: `ACTION_IME_ENTER`.
 - Suggestions: 3 dictionary words for the current prefix, most common first. Tap replaces the word and adds a space. Off in password fields. Hidden via Settings or long-press on the strip.
 - Swipe typing: sliding across letters draws a trail. On release the best dictionary match (start key, end key, path shape, length, frequency) is typed with a space; the next two show as suggestions. Taps and swipes mix.
 - Light haptic tick on key press.
@@ -43,13 +43,13 @@ Spike (2026-10-11, on device): the accessibility service can hide Samsung's keyb
 - `keyboard/Dictionary.kt` (pure): load word list, ranked prefix matches.
 - `keyboard/Swipe.kt` (pure): trail and key positions to ranked words.
 - `keyboard/Layouts.kt`: QWERTY, numbers, symbols pages, long-press alternates.
-- `keyboard/KeyboardOverlay.kt`: Compose overlay window (accessibility overlay) on the cover display.
+- `keyboard/KeyboardView.kt`: one custom-drawn View (precise touch for trails, holds, long-presses), in an app overlay window on the cover display (same as the notification banner).
 - CoverAccessibility: focus watching on the cover, hiding and restoring Samsung's keyboard, applying edits (`ACTION_SET_TEXT`, `ACTION_SET_SELECTION`, `ACTION_PASTE`, `ACTION_IME_ENTER`).
 
 ## Settings and data
 
-- Settings > Keyboard: "Use OpenCover keyboard" (default on), "Show suggestions" (default on). Last page remembered.
-- `assets/words_en.txt`: top 50,000 English words with frequencies from AOSP LatinIME's word list (Apache 2.0). Credited in `NOTICE`.
+- Settings > Keyboard: "Use OpenCover keyboard" (default on), "Show suggestions" (default on). Remembering the layout comes with T9 (4b).
+- `assets/words_en.txt`: top 50,000 English (UK) words with frequencies from AOSP LatinIME's `en_GB_wordlist.combined` (Apache 2.0), without entries flagged offensive or non-word. Credited in `NOTICE`.
 
 ## Privacy
 
