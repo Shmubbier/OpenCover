@@ -74,7 +74,7 @@ clock face, edge lighting, VoIP, AOD.
 
 2. Navigation shell and Home (2a), notifications (2b), media (2c)
 3. Quick toggles: swipe down on Home. Over other apps, a thin pull-down strip just below the status bar. OpenCover hides the status bar so Samsung's panel only peeks.
-4. Keyboard (T9 and QWERTY)
+4. Keyboard: OpenCover overlay keyboard (Samsung forces its own keyboard app on the cover). 4a QWERTY, suggestions, swipe typing. 4b T9. 4c emoji and voice key.
 5. Clock face and edge lighting
 6. VoIP caller ID
 7. Rotation: let apps that are stuck in one orientation rotate on the cover screen. Today some apps only flip when the phone is slightly opened, and snap back when closed.
