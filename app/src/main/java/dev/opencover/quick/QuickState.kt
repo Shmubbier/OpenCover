@@ -77,8 +77,14 @@ object QuickState {
         if (ctx.getSystemService(NotificationManager::class.java).isNotificationPolicyAccessGranted) add(Need.NOTIFICATION_ACCESS)
     }
 
-    /** Null = this phone doesn't have it. */
-    fun isOn(ctx: Context, tile: Tile): Boolean? {
+    /** Null = this phone doesn't have it, or its state can't be read. */
+    fun isOn(ctx: Context, tile: Tile): Boolean? = try {
+        read(ctx, tile)
+    } catch (e: Exception) {
+        null
+    }
+
+    private fun read(ctx: Context, tile: Tile): Boolean? {
         val r = ctx.contentResolver
         return when (tile) {
             Tile.WIFI -> ctx.getSystemService(WifiManager::class.java).isWifiEnabled
@@ -107,7 +113,7 @@ object QuickState {
     fun toggle(ctx: Context, tile: Tile): String? {
         val has = granted(ctx)
         if (!usable(tile.need, has)) return when (tile.need) {
-            Need.SHIZUKU -> if (ShizukuShell.running()) "Allow OpenCover in Shizuku (Setup)" else "Start Shizuku"
+            Need.SHIZUKU -> if (ShizukuShell.running()) { ShizukuShell.request(); "Allow OpenCover in Shizuku" } else "Start Shizuku"
             else -> "Grant in Setup"
         }
         val on = isOn(ctx, tile) ?: return "Not on this phone"
@@ -150,11 +156,11 @@ object QuickState {
 
     fun battery(ctx: Context) = ctx.getSystemService(BatteryManager::class.java).getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
 
-    fun brightness(ctx: Context) = Settings.System.getInt(ctx.contentResolver, COVER_BRIGHTNESS, 128) / 255f
+    /** Cover brightness 0..1. Apps can't read Samsung's hidden key, so this goes through Shizuku. Blocking; null without Shizuku. */
+    fun brightness(): Float? =
+        ShizukuShell.output("settings", "get", "system", COVER_BRIGHTNESS)?.trim()?.toIntOrNull()?.let { it / 255f }
 
-    fun setBrightness(ctx: Context, f: Float) = try {
-        Settings.System.putInt(ctx.contentResolver, COVER_BRIGHTNESS, (1 + f.coerceIn(0f, 1f) * 254).toInt())
-    } catch (e: Exception) {
-        false
-    }
+    /** Blocking. False without Shizuku. */
+    fun setBrightness(f: Float) =
+        ShizukuShell.run("settings", "put", "system", COVER_BRIGHTNESS, (1 + f.coerceIn(0f, 1f) * 254).toInt().toString())
 }

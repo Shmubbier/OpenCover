@@ -48,6 +48,14 @@ object ShizukuShell {
             .apply { isAccessible = true }
     }
 
+    /** Blocking; call off the main thread. Null if Shizuku isn't ready or the command can't start. */
+    fun output(vararg cmd: String): String? = try {
+        if (!allowed()) null
+        else (newProcess.invoke(null, arrayOf(*cmd), null, null) as Process).let { p -> p.inputStream.bufferedReader().readText().also { p.waitFor() } }
+    } catch (e: Exception) {
+        null
+    }
+
     /** Blocking; call off the main thread. False if Shizuku isn't ready or the command fails. */
     fun run(vararg cmd: String): Boolean = try {
         allowed() && (newProcess.invoke(null, arrayOf(*cmd), null, null) as Process).waitFor() == 0

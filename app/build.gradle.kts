@@ -24,6 +24,7 @@ dependencies {
     implementation("androidx.media:media:1.7.1") // MediaControllerCompat: shuffle and repeat
     implementation("dev.rikka.shizuku:api:13.1.5")      // Shizuku: Wi-Fi, Bluetooth and other blocked toggles
     implementation("dev.rikka.shizuku:provider:13.1.5")
+    implementation("androidx.compose.material:material-icons-extended:1.7.8") // quick settings tile icons
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20260814")
 }
