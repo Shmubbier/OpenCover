@@ -7,6 +7,9 @@ import android.support.v4.media.session.PlaybackStateCompat
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -40,6 +43,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -81,7 +86,10 @@ import dev.opencover.media.nextPlayer
 import dev.opencover.media.seekTarget
 import dev.opencover.media.toCompat
 import dev.opencover.media.volumeFor
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import androidx.compose.foundation.Canvas as DrawCanvas
@@ -137,6 +145,10 @@ private fun PlayerView(p: Player, players: List<Player>, graded: Boolean, onPick
 
     var drag by remember { mutableStateOf(Offset.Zero) } // live finger travel while swiping
     var trackDir by remember { mutableIntStateOf(1) }      // 1 = next (slides in from the right), -1 = previous
+    // Sideways swipe, pager style: the song follows the finger, then carries on out as the new one comes in.
+    var leaving by remember { mutableStateOf<Player?>(null) } // the song being swiped away
+    var slideX by remember { mutableFloatStateOf(0f) }
+    var settling by remember { mutableStateOf<Job?>(null) }
     var upAction by remember { mutableStateOf<UpAction?>(null) } // graded mode: what release will do
 
     // The gesture handler below outlives recompositions: read the latest player, not the first one.
@@ -157,8 +169,28 @@ private fun PlayerView(p: Player, players: List<Player>, graded: Boolean, onPick
     }
     fun cycleRepeat() = cur.repeat?.let { MediaHub.controls(cur.id)?.setRepeatMode(it.next().toCompat()) }
 
+    /** Finish a sideways swipe: slide fully out and skip, or slide back. */
+    fun settle(x: Float, width: Float, swipe: Float) {
+        val from = leaving ?: return
+        val next = x <= -swipe && cur.canSkipNext
+        val prev = x >= swipe && cur.canSkipPrev
+        val spec = spring<Float>(stiffness = Spring.StiffnessMediumLow) // same feel as the Home pager
+        settling = scope.launch {
+            if (next || prev) {
+                trackDir = if (next) 1 else -1
+                MediaHub.controls(cur.id)?.let { if (next) it.skipToNext() else it.skipToPrevious() }
+                animate(slideX, if (next) -width else width, animationSpec = spec) { v, _ -> slideX = v }
+                // Hold the incoming slot until the app reports the new song.
+                withTimeoutOrNull(2000) { snapshotFlow { trackKey(cur) }.first { it != trackKey(from) } }
+            } else animate(slideX, 0f, animationSpec = spec) { v, _ -> slideX = v }
+            leaving = null
+            slideX = 0f
+        }
+    }
+
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val h = constraints.maxHeight.toFloat()
+        val w = constraints.maxWidth.toFloat()
         val swipe = with(LocalDensity.current) { 60.dp.toPx() }
         Box(
             Modifier.fillMaxSize().pointerInput(p.id, players.size, graded) {
@@ -180,17 +212,19 @@ private fun PlayerView(p: Player, players: List<Player>, graded: Boolean, onPick
                                 else -> -1
                             }
                             if (mode == -1) break
+                            if (mode == 1) { settling?.cancel(); leaving = cur }
                         }
                         if (mode > 0) {
                             c.consume()
-                            drag = total
+                            if (mode == 2) drag = total
+                            // Only follow the finger toward a skip the app allows.
+                            if (mode == 1) slideX = if (total.x < 0 && cur.canSkipNext || total.x > 0 && cur.canSkipPrev) total.x else 0f
                             if (mode == 2 && graded) upAction = gradedAction(-total.y / h, curNext != null, cur.shuffle != null, cur.repeat != null)
                         }
                     }
                     when {
                         tapped -> playPause()
-                        mode == 1 && total.x <= -swipe && cur.canSkipNext -> { trackDir = 1; MediaHub.controls(cur.id)?.skipToNext() }
-                        mode == 1 && total.x >= swipe && cur.canSkipPrev -> { trackDir = -1; MediaHub.controls(cur.id)?.skipToPrevious() }
+                        mode == 1 -> settle(total.x, w, swipe)
                         mode == 2 && graded -> when (upAction) {
                             UpAction.SWITCH -> curNext?.let { onPick(it.id) }
                             UpAction.SHUFFLE -> toggleShuffle()
@@ -204,25 +238,23 @@ private fun PlayerView(p: Player, players: List<Player>, graded: Boolean, onPick
                 }
             },
         ) {
-            // Art: nudges with sideways swipes; on swipe up (style A) the next app's art rises from below.
-            val lift = if (!graded && drag.y < 0 && next != null) drag.y else 0f
-            AnimatedContent(
-                p, contentKey = ::trackKey, transitionSpec = changeAnimation { trackDir }, label = "art",
-                modifier = Modifier.graphicsLayer { translationX = drag.x * 0.3f; translationY = lift },
-            ) { shown -> Art(players.find { it.id == shown.id } ?: shown) }
-            if (lift < 0f && next != null) Box(Modifier.graphicsLayer { translationY = h + lift }) { Art(next) }
-
-            // Song text, low in the lip left of the camera cutout; runs to just before the volume bar.
-            AnimatedContent(
-                p, contentKey = ::trackKey, transitionSpec = changeAnimation { trackDir }, label = "text",
-                modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 36.dp, end = 40.dp, bottom = 10.dp),
-            ) { shown ->
-                val q = players.find { it.id == shown.id } ?: shown
-                Column {
-                    Text(q.title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(q.artist, color = Color.LightGray, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (q.durationMs > 0) Text("${formatTime(livePosition(q, now))} / ${formatTime(q.durationMs)}", color = Color.LightGray, fontSize = 13.sp)
+            val l = leaving
+            if (l != null) {
+                // Mid-swipe: the old song and, beside it, the new one (black until the app sends it).
+                Box(Modifier.graphicsLayer { translationX = slideX }) { Page(l, now) }
+                val side = if (slideX < 0) 1 else -1
+                val incoming = p.takeIf { trackKey(it) != trackKey(l) }
+                Box(Modifier.fillMaxSize().graphicsLayer { translationX = slideX + side * w }.background(Color.Black)) {
+                    if (incoming != null) Page(incoming, now)
                 }
+            } else {
+                // On swipe up (style A) the next app's page rises from below.
+                val lift = if (!graded && drag.y < 0 && next != null) drag.y else 0f
+                AnimatedContent(
+                    p, contentKey = ::trackKey, transitionSpec = changeAnimation { trackDir }, label = "page",
+                    modifier = Modifier.graphicsLayer { translationY = lift },
+                ) { shown -> Page(players.find { it.id == shown.id } ?: shown, now) }
+                if (lift < 0f && next != null) Box(Modifier.graphicsLayer { translationY = h + lift }) { Page(next, now) }
             }
 
             // Play/pause feedback: a soft white pulse that grows and fades from the middle.
@@ -294,6 +326,19 @@ internal fun Art(player: Player) {
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (art != null) Image(art, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)))
+    }
+}
+
+/** Art with the song text low in the lip left of the camera cutout, up to just before the volume bar. */
+@Composable
+private fun Page(q: Player, now: Long) {
+    Box(Modifier.fillMaxSize()) {
+        Art(q)
+        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 36.dp, end = 40.dp, bottom = 10.dp)) {
+            Text(q.title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(q.artist, color = Color.LightGray, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (q.durationMs > 0) Text("${formatTime(livePosition(q, now))} / ${formatTime(q.durationMs)}", color = Color.LightGray, fontSize = 13.sp)
+        }
     }
 }
 
