@@ -54,7 +54,7 @@ Spike (2026-10-11, on device): the accessibility service can hide Samsung's keyb
 
 ## Privacy
 
-The accessibility service's scope widens from Samsung's system UI and banking apps to all apps, to see input focus. It reads only the focused text field, only to edit it, and stores nothing. Banking mode still turns the service off around banking apps. README and the setting say this.
+Implemented with the accessibility service's input method (Android 13+, `FLAG_INPUT_METHOD_EDITOR`): Android connects it to the focused field next to the real keyboard. The service's scope stays narrow (no events or screen content from other apps). It reads only the text around the cursor, for suggestions, and stores nothing. Banking mode still turns the service off around banking apps.
 
 ## Testing
 
