@@ -45,6 +45,7 @@ import dev.opencover.layout.newId
 import dev.opencover.layout.pruneMissing
 import dev.opencover.layout.removeItem
 import dev.opencover.layout.removePackage
+import dev.opencover.quick.ShizukuShell
 import dev.opencover.watcher.BankingMode
 import dev.opencover.watcher.CoverWatcher
 import dev.opencover.watcher.KeepAwake
@@ -173,6 +174,11 @@ class CoverActivity : ComponentActivity() {
         SetupStep("Banking apps auto-resume (optional)",
             "Run once on a computer: adb shell pm grant dev.opencover android.permission.WRITE_SECURE_SETTINGS",
             BankingMode.canResume(this)) {},
+        SetupStep("Shizuku (optional)",
+            if (!ShizukuShell.installed(this)) "Wi-Fi, Bluetooth, data and other tiles. Install Shizuku, see README"
+            else if (!ShizukuShell.running()) "Shizuku is installed but not running, see README"
+            else "Tap to allow OpenCover in Shizuku",
+            ShizukuShell.allowed()) { ShizukuShell.request() },
         SetupStep("Microphone (optional)", "Voice replies to notifications",
             Permissions.mic(this)) { requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 2) },
         SetupStep("Notifications (optional)", "Shows that OpenCover is running",
