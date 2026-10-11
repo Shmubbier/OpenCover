@@ -10,7 +10,9 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
@@ -130,6 +132,7 @@ private fun PlayerView(p: Player, players: List<Player>, graded: Boolean, onPick
     val next = nextPlayer(players, p.id)
 
     var drag by remember { mutableStateOf(Offset.Zero) } // live finger travel while swiping
+    var trackDir by remember { mutableIntStateOf(1) }      // 1 = next (slides in from the right), -1 = previous
     var upAction by remember { mutableStateOf<UpAction?>(null) } // graded mode: what release will do
 
     // The gesture handler below outlives recompositions: read the latest player, not the first one.
@@ -182,8 +185,8 @@ private fun PlayerView(p: Player, players: List<Player>, graded: Boolean, onPick
                     }
                     when {
                         tapped -> playPause()
-                        mode == 1 && total.x <= -swipe && cur.canSkipNext -> MediaHub.controls(cur.id)?.skipToNext()
-                        mode == 1 && total.x >= swipe && cur.canSkipPrev -> MediaHub.controls(cur.id)?.skipToPrevious()
+                        mode == 1 && total.x <= -swipe && cur.canSkipNext -> { trackDir = 1; MediaHub.controls(cur.id)?.skipToNext() }
+                        mode == 1 && total.x >= swipe && cur.canSkipPrev -> { trackDir = -1; MediaHub.controls(cur.id)?.skipToPrevious() }
                         mode == 2 && graded -> when (upAction) {
                             UpAction.SWITCH -> curNext?.let { onPick(it.id) }
                             UpAction.SHUFFLE -> toggleShuffle()
@@ -200,14 +203,14 @@ private fun PlayerView(p: Player, players: List<Player>, graded: Boolean, onPick
             // Art: nudges with sideways swipes; on swipe up (style A) the next app's art rises from below.
             val lift = if (!graded && drag.y < 0 && next != null) drag.y else 0f
             AnimatedContent(
-                p, contentKey = { it.id }, transitionSpec = riseFromBelow(), label = "art",
+                p, contentKey = ::trackKey, transitionSpec = changeAnimation { trackDir }, label = "art",
                 modifier = Modifier.graphicsLayer { translationX = drag.x * 0.3f; translationY = lift },
-            ) { shown -> Art(shown.id) }
-            if (lift < 0f && next != null) Box(Modifier.graphicsLayer { translationY = h + lift }) { Art(next.id) }
+            ) { shown -> Art(players.find { it.id == shown.id } ?: shown) }
+            if (lift < 0f && next != null) Box(Modifier.graphicsLayer { translationY = h + lift }) { Art(next) }
 
             // Song text, low in the lip left of the camera cutout; runs to just before the volume bar.
             AnimatedContent(
-                p, contentKey = { it.id }, transitionSpec = riseFromBelow(), label = "text",
+                p, contentKey = ::trackKey, transitionSpec = changeAnimation { trackDir }, label = "text",
                 modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 36.dp, end = 40.dp, bottom = 10.dp),
             ) { shown ->
                 val q = players.find { it.id == shown.id } ?: shown
@@ -281,19 +284,22 @@ private fun PlayerView(p: Player, players: List<Player>, graded: Boolean, onPick
 }
 
 @Composable
-private fun Art(id: String) {
-    // Keyed on the bitmap itself: apps often send the new title before the new artwork.
-    val bitmap = MediaHub.art(id)
-    val art = remember(bitmap) { bitmap?.asImageBitmap() }
+private fun Art(player: Player) {
+    // artKey changes when the artwork does (it often arrives after the new title).
+    val art = remember(player.id, player.artKey) { MediaHub.art(player.id)?.asImageBitmap() }
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (art != null) Image(art, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)))
     }
 }
 
-/** A new player's art rises from below the current one. */
-private fun riseFromBelow(): AnimatedContentTransitionScope<Player>.() -> ContentTransform = {
-    slideInVertically { it } togetherWith slideOutVertically { -it / 3 }
+/** Same player and same song = no animation; this key changes on either. */
+private fun trackKey(p: Player) = "${p.id}|${p.title}|${p.artist}"
+
+/** Another app's art rises from below; a new song in the same app slides in sideways. */
+private fun changeAnimation(dir: () -> Int): AnimatedContentTransitionScope<Player>.() -> ContentTransform = {
+    if (initialState.id != targetState.id) slideInVertically { it } togetherWith slideOutVertically { -it / 3 }
+    else slideInHorizontally { it * dir() } togetherWith slideOutHorizontally { -it * dir() }
 }
 
 /** Vertical slider flush to an edge. [fromTop] is the handle position, 0 = top. */
@@ -320,8 +326,9 @@ private fun VerticalBar(
     }
     BoxWithConstraints(
         modifier.fillMaxHeight().then(if (avoidCutout) Modifier.windowInsetsPadding(WindowInsets.displayCutout) else Modifier)
-            .width(28.dp).padding(vertical = 16.dp).pointerInput(enabled) {
-            if (!enabled) return@pointerInput
+            .width(28.dp).padding(vertical = 16.dp).graphicsLayer { alpha = if (enabled) 1f else 0.4f }.pointerInput(enabled) {
+            // Disabled (e.g. the app doesn't allow seeking): still swallow the drag, or it would close the panel.
+            if (!enabled) { detectVerticalDragGestures { change, _ -> change.consume() }; return@pointerInput }
             detectVerticalDragGestures(
                 onDragStart = { dragging = it.y / size.height },
                 onDragEnd = { dragging?.let(::commit); dragging = null },

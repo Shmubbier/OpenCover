@@ -31,6 +31,8 @@ data class Player(
     val canSeek: Boolean,
     val canSkipNext: Boolean,
     val canSkipPrev: Boolean,
+    /** Changes when the artwork changes (apps often send it after the title). */
+    val artKey: Int = 0,
 )
 
 /** Position now, advancing between app updates while playing. */

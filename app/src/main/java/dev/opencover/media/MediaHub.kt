@@ -109,6 +109,9 @@ private fun MediaControllerCompat.toPlayer(id: String): Player? {
         canSeek = has(PlaybackStateCompat.ACTION_SEEK_TO),
         canSkipNext = has(PlaybackStateCompat.ACTION_SKIP_TO_NEXT),
         canSkipPrev = has(PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS),
+        artKey = (m?.getBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART)
+            ?: m?.getBitmap(MediaMetadataCompat.METADATA_KEY_ART)
+            ?: m?.getBitmap(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON))?.let { System.identityHashCode(it) } ?: 0,
     )
 }
 
