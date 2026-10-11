@@ -6,6 +6,9 @@ import android.media.AudioManager
 import android.os.SystemClock
 import android.support.v4.media.session.PlaybackStateCompat
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.core.animateFloatAsState
@@ -114,7 +117,14 @@ private fun PlayerView(p: Player, players: List<Player>, onPick: (String) -> Uni
     var volume by remember { mutableIntStateOf(audio.getStreamVolume(AudioManager.STREAM_MUSIC)) }
     val position = livePosition(p, now)
 
-    Box(Modifier.fillMaxSize()) {
+    var controlsShown by remember { mutableStateOf(false) }
+    var lastTouch by remember { mutableLongStateOf(0L) }
+    fun touched() { lastTouch = SystemClock.elapsedRealtime() }
+    LaunchedEffect(controlsShown, lastTouch) {
+        if (controlsShown) { delay(4000); controlsShown = false }
+    }
+
+    Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { controlsShown = !controlsShown; touched() } }) {
         // Only the art and the song text slide when switching players; controls stay put.
         AnimatedContent(p, contentKey = { it.id }, transitionSpec = slideBetween(players), label = "art") { shown ->
             // Keyed on the bitmap itself: apps often send the new title before the new artwork.
@@ -143,41 +153,56 @@ private fun PlayerView(p: Player, players: List<Player>, onPick: (String) -> Uni
             audio.setStreamVolume(AudioManager.STREAM_MUSIC, volume, 0)
         }
 
-        // Top pill: switch between active players.
-        if (players.size > 1) Row(
-            Modifier.align(Alignment.TopCenter).padding(top = 10.dp)
-                .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50)).padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            players.forEach { other ->
-                val icon = remember(other.pkg) { appIcon(ctx, other.pkg) }
-                Box(
-                    Modifier.size(40.dp)
-                        .background(if (other.id == p.id) Color(0xFF7A1F1F) else Color.Transparent, RoundedCornerShape(50))
-                        .clickable { onPick(other.id) },
-                    contentAlignment = Alignment.Center,
-                ) { if (icon != null) Image(icon, contentDescription = other.pkg, modifier = Modifier.size(26.dp)) }
+        // Pill and playback buttons appear on tap and fade out after 4 s without a touch.
+        AnimatedVisibility(controlsShown && players.size > 1, Modifier.align(Alignment.TopCenter), enter = fadeIn(), exit = fadeOut()) {
+            Row(
+                Modifier.padding(top = 10.dp).background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50)).padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                players.forEach { other ->
+                    val icon = remember(other.pkg) { appIcon(ctx, other.pkg) }
+                    Box(
+                        Modifier.size(40.dp)
+                            .background(if (other.id == p.id) Color(0xFF7A1F1F) else Color.Transparent, RoundedCornerShape(50))
+                            .clickable { touched(); onPick(other.id) },
+                        contentAlignment = Alignment.Center,
+                    ) { if (icon != null) Image(icon, contentDescription = other.pkg, modifier = Modifier.size(26.dp)) }
+                }
             }
         }
 
-        // Center controls.
-        Row(
-            Modifier.align(Alignment.Center).fillMaxWidth().padding(horizontal = 48.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically,
-        ) {
-            p.shuffle?.let { on ->
-                IconButton(Glyph.SHUFFLE, if (on) Color.White else Color.Gray) {
-                    controls?.setShuffleMode(if (on) PlaybackStateCompat.SHUFFLE_MODE_NONE else PlaybackStateCompat.SHUFFLE_MODE_ALL)
+        // Five fixed slots so buttons never shift: shuffle, previous, play/pause, next, repeat.
+        // Previous, play/pause and next are always there (grey when the app doesn't allow them).
+        AnimatedVisibility(controlsShown, Modifier.align(Alignment.Center), enter = fadeIn(), exit = fadeOut()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                val slot = Modifier.weight(1f)
+                Box(slot, contentAlignment = Alignment.Center) {
+                    p.shuffle?.let { on ->
+                        IconButton(Glyph.SHUFFLE, if (on) Color.White else Color.Gray) {
+                            touched()
+                            controls?.setShuffleMode(if (on) PlaybackStateCompat.SHUFFLE_MODE_NONE else PlaybackStateCompat.SHUFFLE_MODE_ALL)
+                        }
+                    }
                 }
-            }
-            if (p.canSkipPrev) IconButton(Glyph.PREV, Color.White) { controls?.skipToPrevious() }
-            IconButton(if (p.playing) Glyph.PAUSE else Glyph.PLAY, Color.White, size = 64) {
-                if (p.playing) controls?.pause() else controls?.play()
-            }
-            if (p.canSkipNext) IconButton(Glyph.NEXT, Color.White) { controls?.skipToNext() }
-            p.repeat?.let { r ->
-                IconButton(if (r == Repeat.ONE) Glyph.REPEAT_ONE else Glyph.REPEAT, if (r == Repeat.OFF) Color.Gray else Color.White) {
-                    controls?.setRepeatMode(r.next().toCompat())
+                Box(slot, contentAlignment = Alignment.Center) {
+                    IconButton(Glyph.PREV, Color.White, enabled = p.canSkipPrev) { touched(); controls?.skipToPrevious() }
+                }
+                Box(slot, contentAlignment = Alignment.Center) {
+                    IconButton(if (p.playing) Glyph.PAUSE else Glyph.PLAY, Color.White, size = 64) {
+                        touched()
+                        if (p.playing) controls?.pause() else controls?.play()
+                    }
+                }
+                Box(slot, contentAlignment = Alignment.Center) {
+                    IconButton(Glyph.NEXT, Color.White, enabled = p.canSkipNext) { touched(); controls?.skipToNext() }
+                }
+                Box(slot, contentAlignment = Alignment.Center) {
+                    p.repeat?.let { r ->
+                        IconButton(if (r == Repeat.ONE) Glyph.REPEAT_ONE else Glyph.REPEAT, if (r == Repeat.OFF) Color.Gray else Color.White) {
+                            touched()
+                            controls?.setRepeatMode(r.next().toCompat())
+                        }
+                    }
                 }
             }
         }
@@ -260,8 +285,9 @@ private enum class Glyph { PLAY, PAUSE, PREV, NEXT, SHUFFLE, REPEAT, REPEAT_ONE 
 
 /** Simple drawn icons, so no icon library is needed. */
 @Composable
-private fun IconButton(glyph: Glyph, color: Color, size: Int = 44, onClick: () -> Unit) {
-    Box(Modifier.size(size.dp).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+private fun IconButton(glyph: Glyph, tint: Color, size: Int = 44, enabled: Boolean = true, onClick: () -> Unit) {
+    val color = if (enabled) tint else Color.Gray.copy(alpha = 0.6f)
+    Box(Modifier.size(size.dp).clickable(enabled = enabled, onClick = onClick), contentAlignment = Alignment.Center) {
         DrawCanvas(Modifier.size((size * 0.7f).dp)) {
             val s = this.size.width
             val stroke = Stroke(width = s * 0.08f, cap = StrokeCap.Round)
