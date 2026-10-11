@@ -24,7 +24,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.opencover.keyboard.KeyboardPrefs
 import dev.opencover.media.MediaPrefs
+import dev.opencover.watcher.CoverAccessibility
 
 @Composable
 fun SettingsPanel(
@@ -80,6 +82,25 @@ fun SettingsPanel(
                     color = Color.Gray, fontSize = 11.sp)
             }
             Switch(checked = graded, onCheckedChange = { graded = it; MediaPrefs.setGraded(ctx, it) })
+        }
+        Text("Keyboard", color = Color.Gray, fontSize = 13.sp)
+        var typing by remember { mutableStateOf(KeyboardPrefs.enabled(ctx)) }
+        var suggest by remember { mutableStateOf(KeyboardPrefs.suggestions(ctx)) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Use OpenCover keyboard", color = Color.White)
+                Text("Replaces Samsung's keyboard on the cover. Types into the focused field through the accessibility service; password fields keep Samsung's.",
+                    color = Color.Gray, fontSize = 11.sp)
+            }
+            Switch(checked = typing, onCheckedChange = {
+                typing = it
+                KeyboardPrefs.setEnabled(ctx, it)
+                CoverAccessibility.instance?.refreshScope()
+            })
+        }
+        if (typing) Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Show suggestions", color = Color.White, modifier = Modifier.weight(1f))
+            Switch(checked = suggest, onCheckedChange = { suggest = it; KeyboardPrefs.setSuggestions(ctx, it) })
         }
         Button(onClick = onSamsungWidgets) { Text("Open Samsung widgets") }
         Button(onClick = onSetup) { Text("Setup & permissions") }

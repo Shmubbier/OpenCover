@@ -9,6 +9,7 @@ A free, open-source (GPL-3.0) launcher for the Galaxy Z Flip 5 cover screen. No 
 - Notifications: swipe left from Home. Grouped by conversation, with actions, swipe to dismiss, and replies by text or voice. New ones pop up over any app.
 - Media player: swipe up from Home. Tap to play or pause, swipe left or right to skip, swipe up for the next playing app, swipe down to close. Left edge seeks, right edge sets volume. Settings > Media player has a graded swipe-up option and a classic layout with buttons.
 - Quick settings: swipe down from Home. Cover brightness, battery, and tiles for Wi-Fi, Bluetooth, flashlight, rotation, sound, Do Not Disturb, battery saver, location, mobile data, airplane, NFC, dark mode and keep awake. Long-press a tile to add, remove or move tiles.
+- Keyboard: OpenCover's own keyboard on the cover (Samsung only allows its own keyboard app there). QWERTY, word suggestions, swipe typing, cursor drag on the space bar. Password fields keep Samsung's keyboard. Turn it off in Settings > Keyboard.
 - Keep the cover screen awake in any app.
 - "Open Samsung widgets" in settings to reach Samsung's own cover widgets.
 
@@ -26,7 +27,10 @@ bring their screen back from the background, which is what returning to OpenCove
 needs.
 
 - By default the service only hears window changes from Samsung's system UI and the banking
-  apps you pick. It never reads screen content or what you type.
+  apps you pick. It never reads screen content.
+- OpenCover's keyboard uses the service's input method (Android 13+): Android connects it to the
+  text field you're typing in, so it can insert and delete text and show suggestions from the
+  words around the cursor. Nothing is stored or sent anywhere.
 - The experimental "Top-edge priority" setting (off by default) also reads the window list to
   catch Samsung's pull-down panel. While it's on, window-change events from every app arrive
   (they can include short text such as dialog titles; OpenCover doesn't read it). Android
