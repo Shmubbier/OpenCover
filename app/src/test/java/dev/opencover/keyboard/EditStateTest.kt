@@ -23,7 +23,4 @@ class EditStateTest {
         assertEquals("", at("hello ").currentWord())
         assertEquals("don't", at("I don't").currentWord())
     }
-    @Test fun replaceWordAddsSpace() = assertEquals(at("hello world "), at("hello wor").replaceWord("world"))
-    @Test fun replaceWordKeepsTextAfter() = assertEquals(EditState("hello world !", 12, 12), at("hello wor!", 9).replaceWord("world"))
-    @Test fun replaceBeforeSwapsSwipedWord() = assertEquals(at("hi there "), at("hi three ").replaceBefore(6, "there "))
 }

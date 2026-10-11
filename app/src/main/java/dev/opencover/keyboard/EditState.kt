@@ -31,16 +31,4 @@ data class EditState(val text: String, val start: Int, val end: Int) {
 
     /** Letters and apostrophes just before the cursor. */
     fun currentWord() = text.substring(0, start).takeLastWhile { it.isLetter() || it == '\'' }
-
-    /** Replaces the word being typed with [word] and a space. */
-    fun replaceWord(word: String): EditState {
-        val from = start - currentWord().length
-        return at(text.substring(0, from) + word + " " + text.substring(end), from + word.length + 1)
-    }
-
-    /** Replaces the [count] characters before the cursor with [s] (swapping a swiped word). */
-    fun replaceBefore(count: Int, s: String): EditState {
-        val from = (start - count).coerceAtLeast(0)
-        return at(text.substring(0, from) + s + text.substring(end), from + s.length)
-    }
 }

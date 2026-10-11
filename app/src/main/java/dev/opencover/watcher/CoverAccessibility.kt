@@ -2,6 +2,7 @@ package dev.opencover.watcher
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.accessibilityservice.InputMethod
 import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
@@ -10,9 +11,12 @@ import android.app.KeyguardManager
 import android.content.Intent
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import android.view.inputmethod.EditorInfo
 import dev.opencover.COVER_DISPLAY
 import dev.opencover.SAMSUNG_COVER_HOME
 import dev.opencover.apps.AppLauncher
+import dev.opencover.keyboard.KeyboardPrefs
+import dev.opencover.keyboard.OverlayKeyboard
 import dev.opencover.ui.CoverActivity
 
 /**
@@ -22,29 +26,38 @@ import dev.opencover.ui.CoverActivity
  * user's chosen banking apps are received; screen contents are never read.
  */
 class CoverAccessibility : AccessibilityService() {
+    private var keyboard: OverlayKeyboard? = null
+
     override fun onServiceConnected() {
         instance = this
         refreshScope()
     }
 
     override fun onDestroy() {
+        keyboard?.hide()
         instance = null
         super.onDestroy()
     }
 
     /**
      * Default: listen to Samsung's system UI plus the banking apps only.
-     * With top-edge priority on: also watch the window list (all apps) to catch Samsung's panel.
+     * Top-edge priority: also watch the window list (all apps) to catch Samsung's panel.
+     * OpenCover keyboard: the input-method flag; it needs no events or screen content.
      */
     fun refreshScope() {
         val topEdge = TopEdge.enabled(this)
+        val typing = KeyboardPrefs.enabled(this)
+        if (typing && keyboard == null) keyboard = OverlayKeyboard(this)
+        if (!typing) keyboard?.hide()
         serviceInfo = serviceInfo.apply {
             packageNames = if (topEdge) null
             else (setOf("com.android.systemui") + BankingMode.apps(this@CoverAccessibility)).toTypedArray()
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
                 (if (topEdge) AccessibilityEvent.TYPE_WINDOWS_CHANGED else 0)
-            flags = if (topEdge) flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
-            else flags and AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS.inv()
+            flags = (if (topEdge) flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+            else flags and AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS.inv()).let {
+                if (typing) it or AccessibilityServiceInfo.FLAG_INPUT_METHOD_EDITOR else it and AccessibilityServiceInfo.FLAG_INPUT_METHOD_EDITOR.inv()
+            }
         }
     }
 
@@ -101,6 +114,15 @@ class CoverAccessibility : AccessibilityService() {
     }
 
     override fun onInterrupt() {}
+
+    /** Android 13+ accessibility input method: OpenCover's keyboard types through it. */
+    override fun onCreateInputMethod(): InputMethod = object : InputMethod(this) {
+        override fun onStartInput(attribute: EditorInfo, restarting: Boolean) { keyboard?.startInput(attribute) }
+        override fun onFinishInput() { keyboard?.finishInput() }
+        override fun onUpdateSelection(oldSelStart: Int, oldSelEnd: Int, newSelStart: Int, newSelEnd: Int, candidatesStart: Int, candidatesEnd: Int) {
+            keyboard?.selectionChanged()
+        }
+    }
 
     companion object {
         private const val TAG = "CoverWatcher"
