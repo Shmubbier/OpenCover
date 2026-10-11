@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -162,7 +165,8 @@ private fun PlayerView(p: Player, players: List<Player>, onPick: (String) -> Uni
 
         // Bottom: title, artist, time, close.
         Row(
-            Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 36.dp, end = 36.dp, bottom = 12.dp),
+            Modifier.align(Alignment.BottomStart).fillMaxWidth().windowInsetsPadding(WindowInsets.displayCutout)
+                .padding(start = 36.dp, end = 36.dp, bottom = 12.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
             Column(Modifier.weight(1f)) {
@@ -191,7 +195,7 @@ private fun VerticalBar(
     var dragging by remember { mutableStateOf<Float?>(null) }
     val shown = (dragging ?: fromTop).coerceIn(0f, 1f)
     BoxWithConstraints(
-        modifier.fillMaxHeight().width(28.dp).padding(vertical = 16.dp).pointerInput(enabled) {
+        modifier.fillMaxHeight().windowInsetsPadding(WindowInsets.displayCutout).width(28.dp).padding(vertical = 16.dp).pointerInput(enabled) {
             if (!enabled) return@pointerInput
             detectVerticalDragGestures(
                 onDragStart = { dragging = it.y / size.height },
