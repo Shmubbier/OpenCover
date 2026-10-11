@@ -81,3 +81,4 @@ clock face, edge lighting, VoIP, AOD.
 8. AOD and lock screen
 9. Cover screen while open: keep the cover screen on and usable when the phone is unfolded.
 10. Own navigation: avoid the Samsung widgets flash on Home. Options: an OpenCover gesture zone above Samsung's, or OpenCover as default Home app (spike first; Samsung may keep its own cover home).
+11. Screen mirroring: show the main screen on the cover display with full touch, clicks and swipes, while folded. Spike first: the main display is off when folded, so this may need a virtual display apps launch into, plus input injected through Shizuku.
