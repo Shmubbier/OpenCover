@@ -9,14 +9,12 @@ import android.graphics.Path
 import android.graphics.RectF
 import android.os.Handler
 import android.os.Looper
-import android.text.TextPaint
-import android.text.TextUtils
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import kotlin.math.hypot
 
-/** The whole keyboard in one View: preview line, suggestion strip, keys and swipe trail. */
+/** The whole keyboard in one View: suggestion strip, keys and swipe trail. */
 @SuppressLint("ViewConstructor")
 class KeyboardView(ctx: Context, private val listener: Listener) : View(ctx) {
     interface Listener {
@@ -31,8 +29,6 @@ class KeyboardView(ctx: Context, private val listener: Listener) : View(ctx) {
         fun onHideSuggestions()
     }
 
-    var preview: CharSequence = ""
-        set(v) { field = v; invalidate() }
     var suggestions: List<String> = emptyList()
         set(v) { field = v; invalidate() }
     var showSuggestions = true
@@ -44,11 +40,10 @@ class KeyboardView(ctx: Context, private val listener: Listener) : View(ctx) {
 
     private val density = resources.displayMetrics.density
     private fun dp(v: Float) = v * density
-    private val previewH = dp(20f)
     private val stripH get() = if (showSuggestions) dp(24f) else 0f
     private val rowH = dp(34f)
     private val gap = dp(20f) // lifts the bottom row above the camera cutout
-    private val keysTop get() = previewH + stripH
+    private val keysTop get() = stripH
 
     private val bg = Paint().apply { color = Color.rgb(24, 24, 24) }
     private val keyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(58, 58, 58) }
@@ -56,7 +51,6 @@ class KeyboardView(ctx: Context, private val listener: Listener) : View(ctx) {
     private val downPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(96, 96, 96) }
     private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textAlign = Paint.Align.CENTER }
     private val suggest = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textAlign = Paint.Align.CENTER; textSize = dp(14f) }
-    private val small = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.LTGRAY; textSize = dp(13f) }
     private val trailPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.argb(160, 120, 170, 255); style = Paint.Style.STROKE; strokeWidth = dp(5f)
         strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
@@ -65,7 +59,7 @@ class KeyboardView(ctx: Context, private val listener: Listener) : View(ctx) {
     private var keys: List<Pair<Key, RectF>> = emptyList()
 
     override fun onMeasure(w: Int, h: Int) =
-        setMeasuredDimension(MeasureSpec.getSize(w), (previewH + stripH + rowH * page.size + gap).toInt())
+        setMeasuredDimension(MeasureSpec.getSize(w), (stripH + rowH * page.size + gap).toInt())
 
     override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) = layoutKeys()
 
@@ -81,12 +75,9 @@ class KeyboardView(ctx: Context, private val listener: Listener) : View(ctx) {
 
     override fun onDraw(c: Canvas) {
         c.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bg)
-        // The end of the text, so the cursor stays in view.
-        val shown = TextUtils.ellipsize(preview, small, width - dp(16f), TextUtils.TruncateAt.START)
-        c.drawText(shown, 0, shown.length, dp(8f), previewH - dp(5f), small)
         if (showSuggestions) {
             val cell = width / 3f
-            suggestions.take(3).forEachIndexed { i, s -> c.drawText(s, cell * i + cell / 2, previewH + stripH - dp(7f), suggest) }
+            suggestions.take(3).forEachIndexed { i, s -> c.drawText(s, cell * i + cell / 2, stripH - dp(7f), suggest) }
         }
         keys.forEach { (k, r) ->
             c.drawRoundRect(r, dp(6f), dp(6f), when {
@@ -159,7 +150,7 @@ class KeyboardView(ctx: Context, private val listener: Listener) : View(ctx) {
         pointerId = e.getPointerId(index)
         downX = x; downY = y
         handled = false; swiping = false; spaceSteps = 0; repeats = 0; trail.clear()
-        if (showSuggestions && y >= previewH && y < keysTop) {
+        if (showSuggestions && y < keysTop) {
             stripDown = (x / (width / 3f)).toInt()
             handler.postDelayed(hold, 500)
             return

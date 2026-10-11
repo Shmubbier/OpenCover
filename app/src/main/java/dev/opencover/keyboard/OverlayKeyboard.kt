@@ -135,7 +135,6 @@ class OverlayKeyboard(private val service: AccessibilityService) : KeyboardView.
     private fun refresh() {
         val v = view ?: return
         val s = snap()?.s ?: return
-        v.preview = s.text.substring(0, s.start) + "|" + s.text.substring(s.end)
         if (lastSwipe == null) v.suggestions = dict?.complete(s.currentWord()).orEmpty()
     }
 

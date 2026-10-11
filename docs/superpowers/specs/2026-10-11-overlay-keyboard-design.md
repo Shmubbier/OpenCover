@@ -16,7 +16,6 @@ Spike (2026-10-11, on device): the accessibility service can hide Samsung's keyb
 
 ```
 +------------------------------------------+
-| hello wor|                               |  preview, 20dp
 | [ world ]   [ work ]   [ worse ]         |  suggestions, 24dp (optional)
 | q  w  e  r  t  y  u  i  o  p             |
 |  a  s  d  f  g  h  j  k  l               |  4 key rows, 34dp
@@ -26,8 +25,7 @@ Spike (2026-10-11, on device): the accessibility service can hide Samsung's keyb
 +------------------------------------------+
 ```
 
-- Full width, docked at the bottom. About 200dp, 176dp with suggestions hidden.
-- Preview line: the field's text with the cursor, since the overlay can't resize the app and may cover the field.
+- Full width, docked at the bottom. About 180dp, 156dp with suggestions hidden. No preview line (removed at the user's request).
 - Password fields keep Samsung's keyboard: accessibility sees their text masked, so rewriting it would corrupt the password.
 
 ## Behavior
