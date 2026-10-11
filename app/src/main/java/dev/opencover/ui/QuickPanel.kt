@@ -100,6 +100,10 @@ fun QuickPanel() {
         } else QuickState.toggle(ctx, t)?.let { hint = it }
     }
 
+    val pages = pageCount(tiles.size, editing, hidden.size)
+    val pager = rememberPagerState { pages }
+    val onAddPage = editing && hidden.isNotEmpty() && pager.currentPage == pages - 1
+
     Column(
         Modifier.fillMaxSize().background(Color(0xF0101010)).windowInsetsPadding(WindowInsets.displayCutout)
             .padding(horizontal = 24.dp, vertical = 12.dp),
@@ -108,6 +112,7 @@ fun QuickPanel() {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (editing) {
                 Text("Edit tiles", color = Color.White, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                if (hidden.isNotEmpty() && !onAddPage) TextButton(onClick = { scope.launch { pager.animateScrollToPage(pages - 1) } }) { Text("+ Add") }
                 TextButton(onClick = { editRequested = false }) { Text("Done") }
             } else {
                 Icon(Icons.Filled.BrightnessMedium, null, tint = Color.White, modifier = Modifier.size(22.dp))
@@ -131,8 +136,6 @@ fun QuickPanel() {
             }
         }
 
-        val pages = pageCount(tiles.size, editing, hidden.size)
-        val pager = rememberPagerState { pages }
         HorizontalPager(pager, Modifier.weight(1f).fillMaxWidth()) { page ->
             val addPage = editing && hidden.isNotEmpty() && page == pages - 1
             val list = if (addPage) hidden.take(PAGE_SIZE) else tiles.drop(page * PAGE_SIZE).take(PAGE_SIZE)
@@ -175,8 +178,16 @@ fun QuickPanel() {
                 }
             }
         }
+        // Page dots; in edit mode the last one is the "+" page of hidden tiles.
+        if (pages > 1) Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            for (i in 0 until pages) {
+                val color = if (i == pager.currentPage) Color.White else Color.Gray
+                if (editing && hidden.isNotEmpty() && i == pages - 1) Text("+", color = color, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 4.dp))
+                else Box(Modifier.padding(horizontal = 4.dp).size(6.dp).background(color, CircleShape))
+            }
+        }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-            Text(hint ?: if (editing) "Tap - to remove, drag to move, + page to add" else "",
+            Text(hint ?: when { onAddPage -> "Tap a tile to add it"; editing -> "Tap a tile to remove it, hold and drag to move"; else -> "" },
                 color = Color.LightGray, fontSize = 12.sp)
         }
     }

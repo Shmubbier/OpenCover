@@ -13,12 +13,15 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.location.LocationManager
 import android.media.AudioManager
+import android.media.ToneGenerator
 import android.net.wifi.WifiManager
 import android.nfc.NfcAdapter
 import android.os.BatteryManager
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.os.VibrationEffect
+import android.os.VibratorManager
 import android.provider.Settings
 import android.telephony.TelephonyManager
 import androidx.compose.runtime.getValue
@@ -91,7 +94,7 @@ object QuickState {
             Tile.BLUETOOTH -> Settings.Global.getInt(r, Settings.Global.BLUETOOTH_ON, 0) != 0
             Tile.FLASHLIGHT -> if (flashId == null) null else torchOn
             Tile.ROTATION -> Settings.System.getInt(r, Settings.System.ACCELEROMETER_ROTATION, 0) != 0
-            Tile.SOUND -> ringer(ctx) == Ringer.RING
+            Tile.SOUND -> ringer(ctx) != Ringer.MUTE
             Tile.DND -> ctx.getSystemService(NotificationManager::class.java).currentInterruptionFilter > NotificationManager.INTERRUPTION_FILTER_ALL
             Tile.BATTERY_SAVER -> ctx.getSystemService(PowerManager::class.java).isPowerSaveMode
             Tile.LOCATION -> ctx.getSystemService(LocationManager::class.java).isLocationEnabled
@@ -100,6 +103,19 @@ object QuickState {
             Tile.NFC -> NfcAdapter.getDefaultAdapter(ctx)?.isEnabled
             Tile.DARK_MODE -> ctx.getSystemService(UiModeManager::class.java).nightMode == UiModeManager.MODE_NIGHT_YES
             Tile.KEEP_AWAKE -> KeepAwake.isOn
+        }
+    }
+
+    /** A short buzz for Vibrate, a short beep for Ring, nothing for Mute. */
+    private fun cue(ctx: Context, r: Ringer) {
+        when (r) {
+            Ringer.VIBRATE -> ctx.getSystemService(VibratorManager::class.java).defaultVibrator
+                .vibrate(VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE))
+            Ringer.RING -> ToneGenerator(AudioManager.STREAM_RING, 60).let { tone ->
+                tone.startTone(ToneGenerator.TONE_PROP_BEEP, 80)
+                handler.postDelayed({ tone.release() }, 300)
+            }
+            Ringer.MUTE -> {}
         }
     }
 
@@ -138,6 +154,7 @@ object QuickState {
                         Ringer.VIBRATE -> AudioManager.RINGER_MODE_VIBRATE
                         Ringer.MUTE -> AudioManager.RINGER_MODE_SILENT
                     }
+                    cue(ctx, next)
                     true
                 }
                 Tile.DND -> {
