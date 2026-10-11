@@ -229,7 +229,7 @@ fun Shell(
                         hint = "Long-press an app to add it to this page",
                     )
                     Panel.MEDIA -> MediaPanel() // close by swiping down or Back
-                    Panel.QUICK_SETTINGS -> Placeholder("Quick settings")
+                    Panel.QUICK_SETTINGS -> QuickPanel() // close by swiping up or Back
                 }
             }
         }
@@ -295,14 +295,6 @@ fun Shell(
                 dismissButton = { TextButton(onClick = p.cancel) { Text("Cancel") } },
             )
         }
-    }
-}
-
-@Composable
-private fun Placeholder(title: String) {
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(title, color = Color.White, fontSize = 20.sp)
-        Text("Coming in a later update", color = Color.Gray, fontSize = 12.sp)
     }
 }
 
