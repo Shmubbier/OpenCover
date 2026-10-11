@@ -47,6 +47,8 @@ class TilesTest {
         assertFalse(inEditMode(editing = false, shown = 3))
         assertTrue(inEditMode(editing = true, shown = 3))
     }
+    @Test fun laterTilesNeverUsable() =
+        assertFalse(usable(Need.LATER, Need.entries.toSet()))
     @Test fun usableNeeds() {
         assertTrue(usable(Need.NONE, emptySet()))
         assertFalse(usable(Need.SHIZUKU, setOf(Need.SECURE_SETTINGS)))

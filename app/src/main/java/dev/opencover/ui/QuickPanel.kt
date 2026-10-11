@@ -167,7 +167,7 @@ fun QuickPanel() {
                                 ) { TileButton(t, on = false, enabled = true, badge = "-", onTap = { save(tiles - t) }) }
                             }
                             else -> TileButton(
-                                t, on = remember(v) { QuickState.isOn(ctx, t) } == true,
+                                t, on = usable(t.need, has) && remember(v) { QuickState.isOn(ctx, t) } == true,
                                 enabled = usable(t.need, has),
                                 label = if (t == Tile.SOUND) remember(v) { QuickState.ringer(ctx) }.label() else t.label,
                                 icon = if (t == Tile.SOUND) remember(v) { QuickState.ringer(ctx) }.icon() else t.icon(),

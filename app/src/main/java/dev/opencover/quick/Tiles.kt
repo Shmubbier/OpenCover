@@ -3,15 +3,15 @@ package dev.opencover.quick
 import android.content.Context
 import kotlin.math.max
 
-/** What a tile needs before it can switch. */
-enum class Need { NONE, SHIZUKU, SECURE_SETTINGS, NOTIFICATION_ACCESS }
+/** What a tile needs before it can switch. LATER: not working yet, shown grey. */
+enum class Need { NONE, SHIZUKU, SECURE_SETTINGS, NOTIFICATION_ACCESS, LATER }
 
 /** Declaration order is the default order. Ids (names) are saved, so never rename one. */
 enum class Tile(val label: String, val need: Need) {
     WIFI("Wi-Fi", Need.SHIZUKU),
     BLUETOOTH("Bluetooth", Need.SHIZUKU),
     FLASHLIGHT("Flashlight", Need.NONE),
-    ROTATION("Rotate", Need.SECURE_SETTINGS),
+    ROTATION("Rotate", Need.LATER), // the cover ignores auto-rotate; roadmap item 7
     SOUND("Sound", Need.NONE),
     DND("Do not disturb", Need.NOTIFICATION_ACCESS),
     BATTERY_SAVER("Battery saver", Need.SHIZUKU),
@@ -63,7 +63,7 @@ enum class Ringer {
 /** With no tiles left there is nothing to long-press, so stay in edit mode. */
 fun inEditMode(editing: Boolean, shown: Int) = editing || shown == 0
 
-fun usable(need: Need, has: Set<Need>) = need == Need.NONE || need in has
+fun usable(need: Need, has: Set<Need>) = need == Need.NONE || need != Need.LATER && need in has
 
 object QuickPrefs {
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("quick", Context.MODE_PRIVATE)

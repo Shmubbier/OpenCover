@@ -111,9 +111,9 @@ object QuickState {
         when (r) {
             Ringer.VIBRATE -> ctx.getSystemService(VibratorManager::class.java).defaultVibrator
                 .vibrate(VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE))
-            Ringer.RING -> ToneGenerator(AudioManager.STREAM_RING, 60).let { tone ->
-                tone.startTone(ToneGenerator.TONE_PROP_BEEP, 80)
-                handler.postDelayed({ tone.release() }, 300)
+            Ringer.RING -> ToneGenerator(AudioManager.STREAM_RING, 90).let { tone ->
+                tone.startTone(ToneGenerator.TONE_PROP_BEEP, 160)
+                handler.postDelayed({ tone.release() }, 400)
             }
             Ringer.MUTE -> {}
         }
@@ -130,6 +130,7 @@ object QuickState {
         val has = granted(ctx)
         if (!usable(tile.need, has)) return when (tile.need) {
             Need.SHIZUKU -> if (ShizukuShell.running()) { ShizukuShell.request(); "Allow OpenCover in Shizuku" } else "Start Shizuku"
+            Need.LATER -> "Coming in a later update"
             else -> "Grant in Setup"
         }
         val on = isOn(ctx, tile) ?: return "Not on this phone"
