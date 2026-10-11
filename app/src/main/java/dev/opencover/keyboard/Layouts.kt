@@ -2,15 +2,25 @@ package dev.opencover.keyboard
 
 enum class KeyKind { CHAR, SHIFT, BACKSPACE, SPACE, ENTER, PASTE, LETTERS, SYMBOLS, MORE_SYMBOLS }
 
-/** [alt] is typed on long-press; [hold] is a long-press action instead (paste on comma). [width] in key widths. */
-data class Key(val label: String, val kind: KeyKind = KeyKind.CHAR, val alt: String? = null, val width: Float = 1f, val hold: KeyKind? = null)
+/**
+ * [popup] opens on long-press (its first entry is also the hint drawn on the key);
+ * [hold] is a long-press action instead (paste on comma). [width] in key widths.
+ */
+data class Key(val label: String, val kind: KeyKind = KeyKind.CHAR, val popup: List<String> = emptyList(), val width: Float = 1f, val hold: KeyKind? = null)
 
 /** Pages of rows; every row is at most 10 key widths and is centered. */
 object Layouts {
-    private fun row(chars: String, alts: String = "") = chars.mapIndexed { i, c -> Key(c.toString(), alt = alts.getOrNull(i)?.toString()) }
+    private val accents = mapOf(
+        'a' to "àáâäãåæ", 'c' to "ç", 'e' to "éèêëē", 'i' to "íìîï", 'n' to "ñ",
+        'o' to "óòôöõøœ", 's' to "ß", 'u' to "úùûü", 'y' to "ýÿ",
+    )
+    private fun row(chars: String, alts: String = "") = chars.mapIndexed { i, c ->
+        Key(c.toString(), popup = listOfNotNull(alts.getOrNull(i)?.toString()) + accents[c].orEmpty().map { it.toString() })
+    }
+    private val specials = listOf(",", "?", "!", "'", "\"", ":", ";", "-", "@", "#", "&", "(", ")", "/", "…", "_")
     private val backspace = Key("⌫", KeyKind.BACKSPACE, width = 1.5f)
     private fun bottom(left: Key) = listOf(
-        left, Key(",", hold = KeyKind.PASTE), Key("space", KeyKind.SPACE, width = 5f), Key("."), Key("↵", KeyKind.ENTER, width = 1.5f),
+        left, Key(",", hold = KeyKind.PASTE), Key("space", KeyKind.SPACE, width = 5f), Key(".", popup = specials), Key("↵", KeyKind.ENTER, width = 1.5f),
     )
 
     val letters = listOf(

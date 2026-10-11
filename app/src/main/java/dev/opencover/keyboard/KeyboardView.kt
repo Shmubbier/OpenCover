@@ -50,6 +50,9 @@ class KeyboardView(ctx: Context, private val listener: Listener) : View(ctx) {
     private val modPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(40, 40, 40) }
     private val downPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(96, 96, 96) }
     private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textAlign = Paint.Align.CENTER }
+    private val hint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.GRAY; textAlign = Paint.Align.CENTER; textSize = dp(9f) }
+    private val popupBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(80, 80, 80) }
+    private val popupSel = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(70, 130, 220) }
     private val suggest = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textAlign = Paint.Align.CENTER; textSize = dp(14f) }
     private val trailPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.argb(160, 120, 170, 255); style = Paint.Style.STROKE; strokeWidth = dp(5f)
@@ -85,9 +88,20 @@ class KeyboardView(ctx: Context, private val listener: Listener) : View(ctx) {
                 k.kind == KeyKind.CHAR -> keyPaint
                 else -> modPaint
             })
+            // The long-press alternate, small in the corner.
+            k.popup.firstOrNull()?.takeIf { k.label != "." }?.let { c.drawText(it, r.right - dp(6f), r.top + dp(11f), hint) }
             val text = labelOf(k)
             label.textSize = if (text.length > 3) dp(12f) else dp(17f)
             c.drawText(text, r.centerX(), r.centerY() + label.textSize / 3, label)
+        }
+        if (popupCells.isNotEmpty()) {
+            val all = RectF(popupCells.first()).apply { popupCells.forEach { union(it) } }
+            c.drawRoundRect(all, dp(8f), dp(8f), popupBg)
+            popupCells.forEachIndexed { i, r ->
+                if (i == popupIndex) c.drawRoundRect(r, dp(6f), dp(6f), popupSel)
+                label.textSize = dp(17f)
+                c.drawText(popupText(i), r.centerX(), r.centerY() + label.textSize / 3, label)
+            }
         }
         if (trail.size > 1) c.drawPath(Path().apply {
             moveTo(trail[0].x, trail[0].y)
@@ -163,6 +177,11 @@ class KeyboardView(ctx: Context, private val listener: Listener) : View(ctx) {
     }
 
     private fun move(x: Float, y: Float) {
+        if (popupCells.isNotEmpty()) {
+            val i = popupCells.indices.minByOrNull { hypot(popupCells[it].centerX() - x, popupCells[it].centerY() - y) } ?: 0
+            if (i != popupIndex) { popupIndex = i; invalidate() }
+            return
+        }
         val k = pressed?.first ?: return
         val dx = x - downX
         when {
@@ -187,6 +206,11 @@ class KeyboardView(ctx: Context, private val listener: Listener) : View(ctx) {
 
     /** The tracked finger lifted: act on what it did. */
     private fun release() {
+        if (popupKey != null) {
+            listener.onText(popupText(popupIndex))
+            if (shift == Shift.ONCE) shift = Shift.OFF
+            return
+        }
         when {
             stripDown >= 0 -> if (!handled && stripDown < suggestions.size) listener.onSuggestion(stripDown)
             swiping -> {
@@ -201,7 +225,41 @@ class KeyboardView(ctx: Context, private val listener: Listener) : View(ctx) {
         handler.removeCallbacks(hold)
         handler.removeCallbacks(repeat)
         pressed = null; trail.clear(); swiping = false; stripDown = -1; pointerId = -1
+        closePopup()
         invalidate()
+    }
+
+    /** Long-press popup: options of [popupKey] laid out in [popupCells]; [popupIndex] is highlighted. */
+    private var popupKey: Key? = null
+    private var popupCells: List<RectF> = emptyList()
+    private var popupIndex = 0
+
+    private fun popupText(i: Int): String {
+        val s = popupKey?.popup?.getOrNull(i) ?: return ""
+        return if (shift != Shift.OFF) s.uppercase() else s
+    }
+
+    /** Opens above [anchor], up to 8 per row, kept inside the view. */
+    private fun openPopup(k: Key, anchor: RectF) {
+        val cols = minOf(k.popup.size, 8)
+        val rows = (k.popup.size + cols - 1) / cols
+        val w = width / 10f
+        val h = rowH * 0.9f
+        val left = (anchor.centerX() - cols * w / 2).coerceIn(0f, width - cols * w)
+        val top = (anchor.top - rows * h).coerceAtLeast(0f)
+        popupKey = k
+        popupIndex = 0
+        popupCells = k.popup.indices.map { i ->
+            val x = left + (i % cols) * w
+            val y = top + (i / cols) * h
+            RectF(x + dp(2f), y + dp(2f), x + w - dp(2f), y + h - dp(2f))
+        }
+        invalidate()
+    }
+
+    private fun closePopup() {
+        popupKey = null
+        popupCells = emptyList()
     }
 
     private fun onHold() {
@@ -210,7 +268,7 @@ class KeyboardView(ctx: Context, private val listener: Listener) : View(ctx) {
         when {
             k.kind == KeyKind.BACKSPACE -> { handled = true; repeat.run() }
             k.hold == KeyKind.PASTE -> { handled = true; listener.onPaste() }
-            k.alt != null -> { handled = true; listener.onText(k.alt) }
+            k.popup.isNotEmpty() -> { handled = true; pressed?.second?.let { openPopup(k, it) } }
         }
     }
 
