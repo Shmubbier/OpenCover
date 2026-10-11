@@ -9,7 +9,7 @@ A free, open-source (GPL-3.0) launcher for the Galaxy Z Flip 5 cover screen. No 
 - Notifications: swipe left from Home. Grouped by conversation, with actions, swipe to dismiss, and replies by text or voice. New ones pop up over any app.
 - Media player: swipe up from Home. Tap to play or pause, swipe left or right to skip, swipe up for the next playing app, swipe down to close. Left edge seeks, right edge sets volume. Settings > Media player has a graded swipe-up option and a classic layout with buttons.
 - Quick settings: swipe down from Home. Cover brightness, battery, and tiles for Wi-Fi, Bluetooth, flashlight, rotation, sound, Do Not Disturb, battery saver, location, mobile data, airplane, NFC, dark mode and keep awake. Long-press a tile to add, remove or move tiles.
-- Keyboard: OpenCover's own keyboard on the cover (Samsung only allows its own keyboard app there). QWERTY, word suggestions, swipe typing, cursor drag on the space bar. Password fields keep Samsung's keyboard. Turn it off in Settings > Keyboard.
+- Keyboard (experimental, off by default): OpenCover's own keyboard on the cover (Samsung only allows its own keyboard app there). QWERTY, word suggestions, swipe typing, long-press popups. Turn it on in Settings > Experimental. Known issues: chat boxes don't move up for it, and it can stay open after swiping back.
 - Keep the cover screen awake in any app.
 - "Open Samsung widgets" in settings to reach Samsung's own cover widgets.
 
