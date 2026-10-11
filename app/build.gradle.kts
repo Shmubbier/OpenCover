@@ -21,6 +21,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.media:media:1.7.1") // MediaControllerCompat: shuffle and repeat
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20260814")
 }
