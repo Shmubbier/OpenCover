@@ -106,10 +106,14 @@ fun MediaPanel() {
         when {
             !hasAccess -> Text("Turn on Notification access in Setup", color = Color.Gray)
             p == null -> Text("Nothing playing", color = Color.Gray)
-            else -> PlayerView(p, players, graded = remember { MediaPrefs.graded(ctx) }, onPick = { id ->
-                chosen = id
-                MediaHub.controls(id)?.play() // switching apps plays the one now shown
-            })
+            else -> {
+                val onPick: (String) -> Unit = { id ->
+                    chosen = id
+                    MediaHub.controls(id)?.play() // switching apps plays the one now shown
+                }
+                if (remember { MediaPrefs.classic(ctx) }) ClassicPlayerView(p, players, onPick)
+                else PlayerView(p, players, graded = remember { MediaPrefs.graded(ctx) }, onPick = onPick)
+            }
         }
     }
 }
@@ -284,7 +288,7 @@ private fun PlayerView(p: Player, players: List<Player>, graded: Boolean, onPick
 }
 
 @Composable
-private fun Art(player: Player) {
+internal fun Art(player: Player) {
     // artKey changes when the artwork does (it often arrives after the new title).
     val art = remember(player.id, player.artKey) { MediaHub.art(player.id)?.asImageBitmap() }
     Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -294,7 +298,7 @@ private fun Art(player: Player) {
 }
 
 /** Same player and same song = no animation; this key changes on either. */
-private fun trackKey(p: Player) = "${p.id}|${p.title}|${p.artist}"
+internal fun trackKey(p: Player) = "${p.id}|${p.title}|${p.artist}"
 
 /** Another app's art rises from below; a new song in the same app slides in sideways. */
 private fun changeAnimation(dir: () -> Int): AnimatedContentTransitionScope<Player>.() -> ContentTransform = {
@@ -304,7 +308,7 @@ private fun changeAnimation(dir: () -> Int): AnimatedContentTransitionScope<Play
 
 /** Vertical slider flush to an edge. [fromTop] is the handle position, 0 = top. */
 @Composable
-private fun VerticalBar(
+internal fun VerticalBar(
     fromTop: Float,
     fillFromTop: Boolean,
     enabled: Boolean,
@@ -355,18 +359,31 @@ private fun VerticalBar(
     }
 }
 
-private enum class Glyph { SHUFFLE, REPEAT, REPEAT_ONE }
+internal enum class Glyph { PLAY, PAUSE, PREV, NEXT, SHUFFLE, REPEAT, REPEAT_ONE }
 
 /** Simple drawn icons, so no icon library is needed. */
 @Composable
-private fun IconButton(glyph: Glyph, color: Color, size: Int = 44, onClick: () -> Unit) {
-    Box(Modifier.size(size.dp).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+internal fun IconButton(glyph: Glyph, tint: Color, size: Int = 44, enabled: Boolean = true, onClick: () -> Unit) {
+    val color = if (enabled) tint else Color.Gray.copy(alpha = 0.6f)
+    Box(Modifier.size(size.dp).clickable(enabled = enabled, onClick = onClick), contentAlignment = Alignment.Center) {
         DrawCanvas(Modifier.size((size * 0.7f).dp)) {
             val s = this.size.width
             val stroke = Stroke(width = s * 0.08f, cap = StrokeCap.Round)
+            fun tri(vararg pts: Pair<Float, Float>) = drawPath(Path().apply {
+                moveTo(pts[0].first * s, pts[0].second * s)
+                pts.drop(1).forEach { lineTo(it.first * s, it.second * s) }
+                close()
+            }, color)
             fun line(x1: Float, y1: Float, x2: Float, y2: Float) =
                 drawLine(color, Offset(x1 * s, y1 * s), Offset(x2 * s, y2 * s), stroke.width, StrokeCap.Round)
             when (glyph) {
+                Glyph.PLAY -> tri(0.3f to 0.18f, 0.3f to 0.82f, 0.82f to 0.5f)
+                Glyph.PAUSE -> {
+                    drawRoundRect(color, Offset(0.24f * s, 0.16f * s), Size(0.16f * s, 0.68f * s), CornerRadius(0.06f * s))
+                    drawRoundRect(color, Offset(0.6f * s, 0.16f * s), Size(0.16f * s, 0.68f * s), CornerRadius(0.06f * s))
+                }
+                Glyph.NEXT -> { tri(0.22f to 0.2f, 0.22f to 0.8f, 0.66f to 0.5f); line(0.74f, 0.2f, 0.74f, 0.8f) }
+                Glyph.PREV -> { tri(0.78f to 0.2f, 0.78f to 0.8f, 0.34f to 0.5f); line(0.26f, 0.2f, 0.26f, 0.8f) }
                 Glyph.SHUFFLE -> {
                     line(0.15f, 0.3f, 0.8f, 0.72f); line(0.15f, 0.72f, 0.8f, 0.3f)
                     line(0.8f, 0.3f, 0.66f, 0.28f); line(0.8f, 0.3f, 0.76f, 0.43f)

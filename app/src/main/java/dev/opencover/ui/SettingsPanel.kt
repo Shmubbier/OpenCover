@@ -42,6 +42,7 @@ fun SettingsPanel(
 ) {
     BackHandler(onBack = onClose)
     val ctx = LocalContext.current
+    var classic by remember { mutableStateOf(MediaPrefs.classic(ctx)) }
     var graded by remember { mutableStateOf(MediaPrefs.graded(ctx)) }
     Column(
         Modifier.fillMaxSize().background(Color(0xF0101010)).verticalScroll(rememberScrollState()).padding(16.dp),
@@ -66,6 +67,13 @@ fun SettingsPanel(
         }
         Text("Media player", color = Color.Gray, fontSize = 13.sp)
         Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Classic layout", color = Color.White)
+                Text("Buttons and an app pill, shown on tap, instead of gestures.", color = Color.Gray, fontSize = 11.sp)
+            }
+            Switch(checked = classic, onCheckedChange = { classic = it; MediaPrefs.setClassic(ctx, it) })
+        }
+        if (!classic) Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Swipe up for shuffle and repeat", color = Color.White)
                 Text("Off: corner buttons. On: short swipe up switches app, further shuffles, all the way repeats.",

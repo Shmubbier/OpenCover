@@ -22,9 +22,14 @@ fun gradedAction(fraction: Float, canSwitch: Boolean, canShuffle: Boolean, canRe
     else -> null
 }
 
-/** Settings > Media player: corner buttons for shuffle/repeat (default) or the graded swipe up. */
+/**
+ * Settings > Media player. [classic]: buttons and app pill instead of gestures.
+ * [graded] (gesture layout only): graded swipe up instead of corner shuffle/repeat buttons.
+ */
 object MediaPrefs {
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("media", Context.MODE_PRIVATE)
+    fun classic(ctx: Context) = prefs(ctx).getBoolean("classic", false)
+    fun setClassic(ctx: Context, on: Boolean) = prefs(ctx).edit().putBoolean("classic", on).apply()
     fun graded(ctx: Context) = prefs(ctx).getBoolean("graded", false)
     fun setGraded(ctx: Context, on: Boolean) = prefs(ctx).edit().putBoolean("graded", on).apply()
 }
