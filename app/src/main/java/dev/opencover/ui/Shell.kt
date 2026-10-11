@@ -228,7 +228,7 @@ fun Shell(
                         onClose = { closePanel() },
                         hint = "Long-press an app to add it to this page",
                     )
-                    Panel.MEDIA -> Placeholder("Media player")
+                    Panel.MEDIA -> MediaPanel(onClose = { closePanel() })
                     Panel.QUICK_SETTINGS -> Placeholder("Quick settings")
                 }
             }
