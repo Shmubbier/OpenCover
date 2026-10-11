@@ -6,6 +6,10 @@ import android.media.AudioManager
 import android.os.SystemClock
 import android.support.v4.media.session.PlaybackStateCompat
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -89,16 +93,7 @@ fun MediaPanel() {
         when {
             !hasAccess -> Text("Turn on Notification access in Setup", color = Color.Gray)
             p == null -> Text("Nothing playing", color = Color.Gray)
-            else -> AnimatedContent(
-                targetState = p,
-                contentKey = { it.id },
-                transitionSpec = {
-                    // Slide in from the side the new player sits on in the pill.
-                    val dir = if (players.indexOfFirst { it.id == targetState.id } > players.indexOfFirst { it.id == initialState.id }) 1 else -1
-                    slideInHorizontally { it * dir } togetherWith slideOutHorizontally { -it * dir }
-                },
-                label = "player",
-            ) { shown -> PlayerView(players.find { it.id == shown.id } ?: shown, players, onPick = { chosen = it }) }
+            else -> PlayerView(p, players, onPick = { chosen = it })
         }
     }
 }
@@ -114,21 +109,28 @@ private fun PlayerView(p: Player, players: List<Player>, onPick: (String) -> Uni
             delay(500)
         }
     }
-    // Keyed on the bitmap itself: apps often send the new title before the new artwork.
-    val bitmap = MediaHub.art(p.id)
-    val art = remember(bitmap) { bitmap?.asImageBitmap() }
     val audio = remember { ctx.getSystemService(AudioManager::class.java) }
     val maxVol = remember { audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC) }
     var volume by remember { mutableIntStateOf(audio.getStreamVolume(AudioManager.STREAM_MUSIC)) }
     val position = livePosition(p, now)
 
     Box(Modifier.fillMaxSize()) {
-        if (art != null) Image(art, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)))
+        // Only the art and the song text slide when switching players; controls stay put.
+        AnimatedContent(p, contentKey = { it.id }, transitionSpec = slideBetween(players), label = "art") { shown ->
+            // Keyed on the bitmap itself: apps often send the new title before the new artwork.
+            val bitmap = MediaHub.art(shown.id)
+            val art = remember(bitmap) { bitmap?.asImageBitmap() }
+            Box(Modifier.fillMaxSize()) {
+                if (art != null) Image(art, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)))
+            }
+        }
 
         // Left edge: seek (top = start). One seek on release.
+        // Glides to the new player's position on a switch; tiny steps during playback.
+        val progress by animateFloatAsState(if (p.durationMs > 0) position.toFloat() / p.durationMs else 0f, tween(400), label = "progress")
         if (p.durationMs > 0) VerticalBar(
-            fromTop = position.toFloat() / p.durationMs, fillFromTop = true, enabled = p.canSeek, live = false,
+            fromTop = progress, fillFromTop = true, enabled = p.canSeek, live = false,
             modifier = Modifier.align(Alignment.CenterStart),
         ) { f -> seekTarget(f, p.durationMs)?.let { controls?.seekTo(it) } }
 
@@ -181,13 +183,25 @@ private fun PlayerView(p: Player, players: List<Player>, onPick: (String) -> Uni
         }
 
         // Bottom left: title and artist run to just before the volume bar; the time sits low in the
-        // lip left of the camera cutout.
-        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 36.dp, end = 40.dp, bottom = 10.dp)) {
-            Text(p.title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(p.artist, color = Color.LightGray, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (p.durationMs > 0) Text("${formatTime(position)} / ${formatTime(p.durationMs)}", color = Color.LightGray, fontSize = 13.sp)
+        // lip left of the camera cutout. Slides with the art on a player switch.
+        AnimatedContent(
+            p, contentKey = { it.id }, transitionSpec = slideBetween(players), label = "text",
+            modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 36.dp, end = 40.dp, bottom = 10.dp),
+        ) { shown ->
+            val q = players.find { it.id == shown.id } ?: shown
+            Column {
+                Text(q.title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(q.artist, color = Color.LightGray, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (q.durationMs > 0) Text("${formatTime(livePosition(q, now))} / ${formatTime(q.durationMs)}", color = Color.LightGray, fontSize = 13.sp)
+            }
         }
     }
+}
+
+/** Slide in from the side the new player sits on in the pill. */
+private fun slideBetween(players: List<Player>): AnimatedContentTransitionScope<Player>.() -> ContentTransform = {
+    val dir = if (players.indexOfFirst { it.id == targetState.id } > players.indexOfFirst { it.id == initialState.id }) 1 else -1
+    slideInHorizontally { it * dir } togetherWith slideOutHorizontally { -it * dir }
 }
 
 /** Vertical slider flush to an edge. [fromTop] is the handle position, 0 = top. */
