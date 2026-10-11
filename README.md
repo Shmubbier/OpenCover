@@ -8,6 +8,7 @@ A free, open-source (GPL-3.0) launcher for the Galaxy Z Flip 5 cover screen. No 
 - Opens automatically when you unlock the cover screen; Samsung's Home gesture returns to OpenCover.
 - Notifications: swipe left from Home. Grouped by conversation, with actions, swipe to dismiss, and replies by text or voice. New ones pop up over any app.
 - Media player: swipe up from Home. Tap to play or pause, swipe left or right to skip, swipe up for the next playing app, swipe down to close. Left edge seeks, right edge sets volume. Settings > Media player has a graded swipe-up option and a classic layout with buttons.
+- Quick settings: swipe down from Home. Cover brightness, battery, and tiles for Wi-Fi, Bluetooth, flashlight, rotation, sound, Do Not Disturb, battery saver, location, mobile data, airplane, NFC, dark mode and keep awake. Long-press a tile to add, remove or move tiles.
 - Keep the cover screen awake in any app.
 - "Open Samsung widgets" in settings to reach Samsung's own cover widgets.
 
@@ -32,6 +33,15 @@ needs.
   requires the screen-access capability to be declared up front, so the Accessibility consent
   screen mentions it either way.
 - OpenCover has no internet permission. Nothing leaves your phone.
+
+## Shizuku
+Wi-Fi, Bluetooth, mobile data, airplane, NFC, battery saver, dark mode and the cover brightness slider need [Shizuku](https://github.com/RikkaApps/Shizuku) (no root). Without it those tiles are grey and the slider only dims OpenCover.
+1. Install the Shizuku APK from its GitHub releases: `adb install shizuku.apk`
+2. Start it (again after every reboot):
+   `adb shell 'p=$(pm path moe.shizuku.privileged.api | cut -d: -f2); $(dirname $p)/lib/arm64/libshizuku.so'`
+3. Shizuku's permission dialog opens on the main screen, so allow OpenCover from the cover instead:
+   `adb shell am start --display 1 -n moe.shizuku.privileged.api/moe.shizuku.manager.MainActivity`,
+   then Authorized applications, turn on OpenCover.
 
 ## Banking apps
 Some banking apps refuse to run while any accessibility service is on. Pick them under
