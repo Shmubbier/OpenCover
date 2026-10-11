@@ -1,48 +1,41 @@
 package dev.opencover.ui
 
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.media.AudioManager
 import android.os.SystemClock
 import android.support.v4.media.session.PlaybackStateCompat
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -54,24 +47,30 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.opencover.media.MediaHub
+import dev.opencover.media.MediaPrefs
 import dev.opencover.media.Player
 import dev.opencover.media.Repeat
+import dev.opencover.media.UpAction
 import dev.opencover.media.defaultPlayer
 import dev.opencover.media.formatTime
+import dev.opencover.media.gradedAction
 import dev.opencover.media.livePosition
+import dev.opencover.media.nextPlayer
 import dev.opencover.media.seekTarget
 import dev.opencover.media.toCompat
 import dev.opencover.media.volumeFor
@@ -79,7 +78,10 @@ import kotlinx.coroutines.delay
 import kotlin.math.abs
 import androidx.compose.foundation.Canvas as DrawCanvas
 
-/** Swipe-up media player, laid out like YouTube Music's. */
+/**
+ * Swipe-up media player. Gestures: tap = play/pause, swipe left/right = next/previous,
+ * swipe up = next playing app (or, in graded mode, further for shuffle and repeat), swipe down = close.
+ */
 @Composable
 fun MediaPanel() {
     val ctx = LocalContext.current
@@ -96,13 +98,13 @@ fun MediaPanel() {
         when {
             !hasAccess -> Text("Turn on Notification access in Setup", color = Color.Gray)
             p == null -> Text("Nothing playing", color = Color.Gray)
-            else -> PlayerView(p, players, onPick = { chosen = it })
+            else -> PlayerView(p, players, graded = remember { MediaPrefs.graded(ctx) }, onPick = { chosen = it })
         }
     }
 }
 
 @Composable
-private fun PlayerView(p: Player, players: List<Player>, onPick: (String) -> Unit) {
+private fun PlayerView(p: Player, players: List<Player>, graded: Boolean, onPick: (String) -> Unit) {
     val ctx = LocalContext.current
     val controls = MediaHub.controls(p.id)
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
@@ -116,35 +118,114 @@ private fun PlayerView(p: Player, players: List<Player>, onPick: (String) -> Uni
     val maxVol = remember { audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC) }
     var volume by remember { mutableIntStateOf(audio.getStreamVolume(AudioManager.STREAM_MUSIC)) }
     val position = livePosition(p, now)
+    val next = nextPlayer(players, p.id)
 
-    var controlsShown by remember { mutableStateOf(false) }
-    var lastTouch by remember { mutableLongStateOf(0L) }
-    fun touched() { lastTouch = SystemClock.elapsedRealtime() }
-    LaunchedEffect(controlsShown, lastTouch) {
-        if (controlsShown) { delay(4000); controlsShown = false }
+    var drag by remember { mutableStateOf(Offset.Zero) } // live finger travel while swiping
+    var upAction by remember { mutableStateOf<UpAction?>(null) } // graded mode: what release will do
+
+    fun toggleShuffle() = p.shuffle?.let { on ->
+        controls?.setShuffleMode(if (on) PlaybackStateCompat.SHUFFLE_MODE_NONE else PlaybackStateCompat.SHUFFLE_MODE_ALL)
     }
+    fun cycleRepeat() = p.repeat?.let { controls?.setRepeatMode(it.next().toCompat()) }
 
-    Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { controlsShown = !controlsShown; touched() } }) {
-        // Only the art and the song text slide when switching players; controls stay put.
-        AnimatedContent(p, contentKey = { it.id }, transitionSpec = slideBetween(players), label = "art") { shown ->
-            // Keyed on the bitmap itself: apps often send the new title before the new artwork.
-            val bitmap = MediaHub.art(shown.id)
-            val art = remember(bitmap) { bitmap?.asImageBitmap() }
-            Box(Modifier.fillMaxSize()) {
-                if (art != null) Image(art, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)))
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val h = constraints.maxHeight.toFloat()
+        val swipe = with(LocalDensity.current) { 60.dp.toPx() }
+        Box(
+            Modifier.fillMaxSize().pointerInput(p.id, players.size, graded) {
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    var total = Offset.Zero
+                    var mode = 0 // 0 = tap so far, 1 = sideways, 2 = up, -1 = not ours (down closes the panel)
+                    var tapped = false
+                    while (true) {
+                        val e = awaitPointerEvent()
+                        val c = e.changes.firstOrNull { it.id == down.id } ?: break
+                        if (c.isConsumed) { mode = -1; break } // an edge bar took it
+                        if (!c.pressed) { tapped = mode == 0; break }
+                        total += c.positionChange()
+                        if (mode == 0 && total.getDistance() > viewConfiguration.touchSlop) {
+                            mode = when {
+                                abs(total.x) > abs(total.y) -> 1
+                                total.y < 0 -> 2
+                                else -> -1
+                            }
+                            if (mode == -1) break
+                        }
+                        if (mode > 0) {
+                            c.consume()
+                            drag = total
+                            if (mode == 2 && graded) upAction = gradedAction(-total.y / h, next != null, p.shuffle != null, p.repeat != null)
+                        }
+                    }
+                    when {
+                        tapped -> if (p.playing) controls?.pause() else controls?.play()
+                        mode == 1 && total.x <= -swipe && p.canSkipNext -> controls?.skipToNext()
+                        mode == 1 && total.x >= swipe && p.canSkipPrev -> controls?.skipToPrevious()
+                        mode == 2 && graded -> when (upAction) {
+                            UpAction.SWITCH -> next?.let { onPick(it.id) }
+                            UpAction.SHUFFLE -> toggleShuffle()
+                            UpAction.REPEAT -> cycleRepeat()
+                            null -> {}
+                        }
+                        mode == 2 && total.y <= -swipe -> next?.let { onPick(it.id) }
+                    }
+                    drag = Offset.Zero
+                    upAction = null
+                }
+            },
+        ) {
+            // Art: nudges with sideways swipes; on swipe up (style A) the next app's art rises from below.
+            val lift = if (!graded && drag.y < 0 && next != null) drag.y else 0f
+            AnimatedContent(
+                p, contentKey = { it.id }, transitionSpec = riseFromBelow(), label = "art",
+                modifier = Modifier.graphicsLayer { translationX = drag.x * 0.3f; translationY = lift },
+            ) { shown -> Art(shown.id) }
+            if (lift < 0f && next != null) Box(Modifier.graphicsLayer { translationY = h + lift }) { Art(next.id) }
+
+            // Song text, low in the lip left of the camera cutout; runs to just before the volume bar.
+            AnimatedContent(
+                p, contentKey = { it.id }, transitionSpec = riseFromBelow(), label = "text",
+                modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 36.dp, end = 40.dp, bottom = 10.dp),
+            ) { shown ->
+                val q = players.find { it.id == shown.id } ?: shown
+                Column {
+                    Text(q.title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(q.artist, color = Color.LightGray, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (q.durationMs > 0) Text("${formatTime(livePosition(q, now))} / ${formatTime(q.durationMs)}", color = Color.LightGray, fontSize = 13.sp)
+                }
+            }
+
+            // Graded mode: show what releasing will do.
+            upAction?.let { action ->
+                Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(Modifier.size(64.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape), contentAlignment = Alignment.Center) {
+                        when (action) {
+                            UpAction.SWITCH -> Text("App", color = Color.White, fontSize = 14.sp)
+                            UpAction.SHUFFLE -> IconButton(Glyph.SHUFFLE, Color.White) {}
+                            UpAction.REPEAT -> IconButton(Glyph.REPEAT, Color.White) {}
+                        }
+                    }
+                    Text(
+                        when (action) {
+                            UpAction.SWITCH -> "Next app"
+                            UpAction.SHUFFLE -> if (p.shuffle == true) "Shuffle off" else "Shuffle on"
+                            UpAction.REPEAT -> "Repeat ${p.repeat?.next()?.name?.lowercase().orEmpty()}"
+                        },
+                        color = Color.White, fontSize = 13.sp,
+                    )
+                }
             }
         }
 
-        // Left edge: seek (top = start). One seek on release.
-        // Glides to the new player's position on a switch; tiny steps during playback.
+        // Left edge: seek (top = start). Glides on a switch; one seek on release.
         val progress by animateFloatAsState(if (p.durationMs > 0) position.toFloat() / p.durationMs else 0f, tween(400), label = "progress")
         if (p.durationMs > 0) VerticalBar(
             fromTop = progress, fillFromTop = true, enabled = p.canSeek, live = false,
             modifier = Modifier.align(Alignment.CenterStart),
         ) { f -> seekTarget(f, p.durationMs)?.let { controls?.seekTo(it) } }
 
-        // Right edge: media volume (top = loudest).
+        // Right edge: media volume (top = loudest), clear of the camera cutout.
         VerticalBar(
             fromTop = 1f - volume.toFloat() / maxVol, fillFromTop = false, enabled = true, live = true,
             modifier = Modifier.align(Alignment.CenterEnd), avoidCutout = true,
@@ -153,80 +234,36 @@ private fun PlayerView(p: Player, players: List<Player>, onPick: (String) -> Uni
             audio.setStreamVolume(AudioManager.STREAM_MUSIC, volume, 0)
         }
 
-        // Pill and playback buttons appear on tap and fade out after 4 s without a touch.
-        AnimatedVisibility(controlsShown && players.size > 1, Modifier.align(Alignment.TopCenter), enter = fadeIn(), exit = fadeOut()) {
-            Row(
-                Modifier.padding(top = 10.dp).background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50)).padding(4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                players.forEach { other ->
-                    val icon = remember(other.pkg) { appIcon(ctx, other.pkg) }
-                    Box(
-                        Modifier.size(40.dp)
-                            .background(if (other.id == p.id) Color(0xFF7A1F1F) else Color.Transparent, RoundedCornerShape(50))
-                            .clickable { touched(); onPick(other.id) },
-                        contentAlignment = Alignment.Center,
-                    ) { if (icon != null) Image(icon, contentDescription = other.pkg, modifier = Modifier.size(26.dp)) }
+        // Style A: repeat top-left by the seek bar, shuffle top-right by the volume bar.
+        if (!graded) {
+            p.repeat?.let { r ->
+                Box(Modifier.align(Alignment.TopStart).padding(start = 30.dp, top = 6.dp)) {
+                    IconButton(if (r == Repeat.ONE) Glyph.REPEAT_ONE else Glyph.REPEAT, if (r == Repeat.OFF) Color.Gray else Color.White, size = 40) { cycleRepeat() }
                 }
             }
-        }
-
-        // Five fixed slots so buttons never shift: shuffle, previous, play/pause, next, repeat.
-        // Previous, play/pause and next are always there (grey when the app doesn't allow them).
-        AnimatedVisibility(controlsShown, Modifier.align(Alignment.Center), enter = fadeIn(), exit = fadeOut()) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-                val slot = Modifier.weight(1f)
-                Box(slot, contentAlignment = Alignment.Center) {
-                    p.shuffle?.let { on ->
-                        IconButton(Glyph.SHUFFLE, if (on) Color.White else Color.Gray) {
-                            touched()
-                            controls?.setShuffleMode(if (on) PlaybackStateCompat.SHUFFLE_MODE_NONE else PlaybackStateCompat.SHUFFLE_MODE_ALL)
-                        }
-                    }
+            p.shuffle?.let { on ->
+                Box(Modifier.align(Alignment.TopEnd).padding(end = 34.dp, top = 6.dp)) {
+                    IconButton(Glyph.SHUFFLE, if (on) Color.White else Color.Gray, size = 40) { toggleShuffle() }
                 }
-                Box(slot, contentAlignment = Alignment.Center) {
-                    IconButton(Glyph.PREV, Color.White, enabled = p.canSkipPrev) { touched(); controls?.skipToPrevious() }
-                }
-                Box(slot, contentAlignment = Alignment.Center) {
-                    IconButton(if (p.playing) Glyph.PAUSE else Glyph.PLAY, Color.White, size = 64) {
-                        touched()
-                        if (p.playing) controls?.pause() else controls?.play()
-                    }
-                }
-                Box(slot, contentAlignment = Alignment.Center) {
-                    IconButton(Glyph.NEXT, Color.White, enabled = p.canSkipNext) { touched(); controls?.skipToNext() }
-                }
-                Box(slot, contentAlignment = Alignment.Center) {
-                    p.repeat?.let { r ->
-                        IconButton(if (r == Repeat.ONE) Glyph.REPEAT_ONE else Glyph.REPEAT, if (r == Repeat.OFF) Color.Gray else Color.White) {
-                            touched()
-                            controls?.setRepeatMode(r.next().toCompat())
-                        }
-                    }
-                }
-            }
-        }
-
-        // Bottom left: title and artist run to just before the volume bar; the time sits low in the
-        // lip left of the camera cutout. Slides with the art on a player switch.
-        AnimatedContent(
-            p, contentKey = { it.id }, transitionSpec = slideBetween(players), label = "text",
-            modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 36.dp, end = 40.dp, bottom = 10.dp),
-        ) { shown ->
-            val q = players.find { it.id == shown.id } ?: shown
-            Column {
-                Text(q.title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(q.artist, color = Color.LightGray, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (q.durationMs > 0) Text("${formatTime(livePosition(q, now))} / ${formatTime(q.durationMs)}", color = Color.LightGray, fontSize = 13.sp)
             }
         }
     }
 }
 
-/** Slide in from the side the new player sits on in the pill. */
-private fun slideBetween(players: List<Player>): AnimatedContentTransitionScope<Player>.() -> ContentTransform = {
-    val dir = if (players.indexOfFirst { it.id == targetState.id } > players.indexOfFirst { it.id == initialState.id }) 1 else -1
-    slideInHorizontally { it * dir } togetherWith slideOutHorizontally { -it * dir }
+@Composable
+private fun Art(id: String) {
+    // Keyed on the bitmap itself: apps often send the new title before the new artwork.
+    val bitmap = MediaHub.art(id)
+    val art = remember(bitmap) { bitmap?.asImageBitmap() }
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        if (art != null) Image(art, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)))
+    }
+}
+
+/** A new player's art rises from below the current one. */
+private fun riseFromBelow(): AnimatedContentTransitionScope<Player>.() -> ContentTransform = {
+    slideInVertically { it } togetherWith slideOutVertically { -it / 3 }
 }
 
 /** Vertical slider flush to an edge. [fromTop] is the handle position, 0 = top. */
@@ -281,31 +318,18 @@ private fun VerticalBar(
     }
 }
 
-private enum class Glyph { PLAY, PAUSE, PREV, NEXT, SHUFFLE, REPEAT, REPEAT_ONE }
+private enum class Glyph { SHUFFLE, REPEAT, REPEAT_ONE }
 
 /** Simple drawn icons, so no icon library is needed. */
 @Composable
-private fun IconButton(glyph: Glyph, tint: Color, size: Int = 44, enabled: Boolean = true, onClick: () -> Unit) {
-    val color = if (enabled) tint else Color.Gray.copy(alpha = 0.6f)
-    Box(Modifier.size(size.dp).clickable(enabled = enabled, onClick = onClick), contentAlignment = Alignment.Center) {
+private fun IconButton(glyph: Glyph, color: Color, size: Int = 44, onClick: () -> Unit) {
+    Box(Modifier.size(size.dp).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
         DrawCanvas(Modifier.size((size * 0.7f).dp)) {
             val s = this.size.width
             val stroke = Stroke(width = s * 0.08f, cap = StrokeCap.Round)
-            fun tri(vararg pts: Pair<Float, Float>) = drawPath(Path().apply {
-                moveTo(pts[0].first * s, pts[0].second * s)
-                pts.drop(1).forEach { lineTo(it.first * s, it.second * s) }
-                close()
-            }, color)
             fun line(x1: Float, y1: Float, x2: Float, y2: Float) =
                 drawLine(color, Offset(x1 * s, y1 * s), Offset(x2 * s, y2 * s), stroke.width, StrokeCap.Round)
             when (glyph) {
-                Glyph.PLAY -> tri(0.3f to 0.18f, 0.3f to 0.82f, 0.82f to 0.5f)
-                Glyph.PAUSE -> {
-                    drawRoundRect(color, Offset(0.24f * s, 0.16f * s), Size(0.16f * s, 0.68f * s), CornerRadius(0.06f * s))
-                    drawRoundRect(color, Offset(0.6f * s, 0.16f * s), Size(0.16f * s, 0.68f * s), CornerRadius(0.06f * s))
-                }
-                Glyph.NEXT -> { tri(0.22f to 0.2f, 0.22f to 0.8f, 0.66f to 0.5f); line(0.74f, 0.2f, 0.74f, 0.8f) }
-                Glyph.PREV -> { tri(0.78f to 0.2f, 0.78f to 0.8f, 0.34f to 0.5f); line(0.26f, 0.2f, 0.26f, 0.8f) }
                 Glyph.SHUFFLE -> {
                     line(0.15f, 0.3f, 0.8f, 0.72f); line(0.15f, 0.72f, 0.8f, 0.3f)
                     line(0.8f, 0.3f, 0.66f, 0.28f); line(0.8f, 0.3f, 0.76f, 0.43f)
@@ -319,12 +343,4 @@ private fun IconButton(glyph: Glyph, tint: Color, size: Int = 44, enabled: Boole
             }
         }
     }
-}
-
-private fun appIcon(ctx: android.content.Context, pkg: String): ImageBitmap? = try {
-    val d = ctx.packageManager.getApplicationIcon(pkg)
-    val px = (26 * ctx.resources.displayMetrics.density).toInt()
-    Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888).also { d.setBounds(0, 0, px, px); d.draw(Canvas(it)) }.asImageBitmap()
-} catch (e: Exception) {
-    null
 }
