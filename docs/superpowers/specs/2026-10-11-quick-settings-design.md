@@ -41,7 +41,7 @@ Prefer non-Shizuku paths so most tiles work after a reboot before Shizuku is bac
 | Location | Secure setting `location_mode` | WRITE_SECURE_SETTINGS (granted) |
 | Flashlight | CameraManager torch | none |
 | Sound | AudioManager ringer: Ring, Vibrate, Mute | none |
-| DND | NotificationAccess `requestInterruptionFilter` | notification access (granted) |
+| DND | NotificationManager interruption filter | notification access (granted) |
 | Rotation | System setting `accelerometer_rotation` | WRITE_SECURE_SETTINGS (granted) |
 | Keep awake | Existing KeepAwake setting | none |
 
@@ -66,8 +66,8 @@ Prefer non-Shizuku paths so most tiles work after a reboot before Shizuku is bac
 ## Components
 
 - `quick/Tiles.kt`: tile ids, default order, pure list logic (add, remove, move, load), sound cycle, availability rule.
-- `quick/Shizuku.kt`: running and permission state, run a command.
-- `quick/TileState.kt`: reads and observes live state; performs toggles.
+- `quick/ShizukuShell.kt`: running and permission state, run a command.
+- `quick/QuickState.kt`: reads and observes live state; performs toggles.
 - `ui/QuickPanel.kt`: slider, battery, tile pages, edit mode.
 - Setup checklist: Shizuku (installed, running, allowed).
 
@@ -78,7 +78,7 @@ Prefer non-Shizuku paths so most tiles work after a reboot before Shizuku is bac
 
 ## Dependencies
 
-Shizuku API (`dev.rikka.shizuku:api` and `provider`).
+Shizuku API (`dev.rikka.shizuku:api` and `provider`). Material icons extended, for tile icons.
 
 ## Testing
 
