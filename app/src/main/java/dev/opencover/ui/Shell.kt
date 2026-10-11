@@ -43,6 +43,7 @@ import dev.opencover.layout.Item
 import dev.opencover.layout.Layout
 import dev.opencover.layout.addPage
 import dev.opencover.layout.removePage
+import dev.opencover.notify.NotificationStore
 import dev.opencover.watcher.KeepAwake
 import dev.opencover.widgets.WidgetHost
 import kotlinx.coroutines.launch
@@ -67,6 +68,8 @@ class LauncherActions(
     val setTopEdge: (Boolean) -> Unit,
     val usageGranted: () -> Boolean,
     val grantUsage: () -> Unit,
+    val popups: () -> Boolean,
+    val setPopups: (Boolean) -> Unit,
 )
 
 @Composable
@@ -116,6 +119,7 @@ fun Shell(
     val labels = remember(apps) { apps.associate { it.key to it.label } }
     var keepAwake by remember { mutableStateOf(KeepAwake.isOn) }
     var topEdge by remember { mutableStateOf(a.topEdge()) }
+    var popups by remember { mutableStateOf(a.popups()) }
 
     fun closePanel() {
         scope.launch { reveal.animateTo(0f); panel = null }
@@ -184,7 +188,7 @@ fun Shell(
                 },
             ) { i ->
                 when (i) {
-                    NOTIFICATIONS_PAGE -> Placeholder("Notifications")
+                    NOTIFICATIONS_PAGE -> NotificationsPage(NotificationStore.notes)
                     HOME_PAGE -> HomeScreen(layout.home, wallpaper, a) { slot ->
                         if (layout.home.quick[slot] == null) overlay = Overlay.PickSlot(slot) else slotMenu = slot
                     }
@@ -242,6 +246,8 @@ fun Shell(
             }
             Overlay.Settings -> SettingsPanel(
                 keepAwake = keepAwake,
+                popups = popups,
+                onPopups = { popups = it; a.setPopups(it) },
                 onKeepAwake = { keepAwake = it; a.setKeepAwake(it) },
                 onSamsungWidgets = { overlay = null; editing = false; a.samsungWidgets() },
                 onSetup = { overlay = null; editing = false; a.openSetup() },

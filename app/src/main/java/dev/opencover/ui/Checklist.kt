@@ -54,6 +54,9 @@ object Permissions {
     fun notifications(ctx: Context) =
         ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
+    fun mic(ctx: Context) =
+        ctx.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+
     fun required(ctx: Context) = accessibility(ctx) && overlay(ctx)
 }
 
