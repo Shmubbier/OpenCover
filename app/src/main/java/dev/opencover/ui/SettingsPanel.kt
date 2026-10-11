@@ -24,7 +24,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.opencover.keyboard.KeyboardPrefs
 import dev.opencover.media.MediaPrefs
+import dev.opencover.watcher.CoverAccessibility
 
 @Composable
 fun SettingsPanel(
@@ -42,6 +44,11 @@ fun SettingsPanel(
 ) {
     BackHandler(onBack = onClose)
     val ctx = LocalContext.current
+    var experimental by remember { mutableStateOf(false) }
+    if (experimental) {
+        ExperimentalPanel(topEdge, onTopEdge, onBack = { experimental = false })
+        return
+    }
     var classic by remember { mutableStateOf(MediaPrefs.classic(ctx)) }
     var graded by remember { mutableStateOf(MediaPrefs.graded(ctx)) }
     Column(
@@ -56,14 +63,6 @@ fun SettingsPanel(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Notification pop-ups", color = Color.White, modifier = Modifier.weight(1f))
             Switch(checked = popups, onCheckedChange = onPopups)
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Top-edge priority (experimental)", color = Color.White)
-                Text("Replaces Samsung's pull-down panel with ours. Its panel still flashes and blocks touches for ~2 s. Lets OpenCover read the window list.",
-                    color = Color.Gray, fontSize = 11.sp)
-            }
-            Switch(checked = topEdge, onCheckedChange = onTopEdge)
         }
         Text("Media player", color = Color.Gray, fontSize = 13.sp)
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -85,6 +84,47 @@ fun SettingsPanel(
         Button(onClick = onSetup) { Text("Setup & permissions") }
         Button(onClick = onWallpaper) { Text("Set wallpaper") }
         Button(onClick = onBanking) { Text("Banking apps") }
+        Button(onClick = { experimental = true }) { Text("Experimental") }
         TextButton(onClick = onClose) { Text("Close") }
+    }
+}
+
+/** Features that work but have known rough edges; all off by default. */
+@Composable
+private fun ExperimentalPanel(topEdge: Boolean, onTopEdge: (Boolean) -> Unit, onBack: () -> Unit) {
+    BackHandler(onBack = onBack)
+    val ctx = LocalContext.current
+    var typing by remember { mutableStateOf(KeyboardPrefs.enabled(ctx)) }
+    var suggest by remember { mutableStateOf(KeyboardPrefs.suggestions(ctx)) }
+    Column(
+        Modifier.fillMaxSize().background(Color(0xF0101010)).verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("Experimental", color = Color.White, fontSize = 20.sp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("OpenCover keyboard", color = Color.White)
+                Text("Replaces Samsung's keyboard on the cover. Known issues: chat boxes don't move up for it, and it can stay open after swiping back.",
+                    color = Color.Gray, fontSize = 11.sp)
+            }
+            Switch(checked = typing, onCheckedChange = {
+                typing = it
+                KeyboardPrefs.setEnabled(ctx, it)
+                CoverAccessibility.instance?.refreshScope()
+            })
+        }
+        if (typing) Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Show suggestions", color = Color.White, modifier = Modifier.weight(1f))
+            Switch(checked = suggest, onCheckedChange = { suggest = it; KeyboardPrefs.setSuggestions(ctx, it) })
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Top-edge priority", color = Color.White)
+                Text("Replaces Samsung's pull-down panel with ours. Its panel still flashes and blocks touches for ~2 s. Lets OpenCover read the window list.",
+                    color = Color.Gray, fontSize = 11.sp)
+            }
+            Switch(checked = topEdge, onCheckedChange = onTopEdge)
+        }
+        TextButton(onClick = onBack) { Text("Back") }
     }
 }
