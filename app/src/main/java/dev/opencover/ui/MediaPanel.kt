@@ -2,9 +2,11 @@ package dev.opencover.ui
 
 import android.media.AudioManager
 import android.os.SystemClock
+import android.view.HapticFeedbackConstants
 import android.support.v4.media.session.PlaybackStateCompat
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -40,6 +42,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +61,7 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -75,6 +80,7 @@ import dev.opencover.media.seekTarget
 import dev.opencover.media.toCompat
 import dev.opencover.media.volumeFor
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import androidx.compose.foundation.Canvas as DrawCanvas
 
@@ -98,7 +104,10 @@ fun MediaPanel() {
         when {
             !hasAccess -> Text("Turn on Notification access in Setup", color = Color.Gray)
             p == null -> Text("Nothing playing", color = Color.Gray)
-            else -> PlayerView(p, players, graded = remember { MediaPrefs.graded(ctx) }, onPick = { chosen = it })
+            else -> PlayerView(p, players, graded = remember { MediaPrefs.graded(ctx) }, onPick = { id ->
+                chosen = id
+                MediaHub.controls(id)?.play() // switching apps plays the one now shown
+            })
         }
     }
 }
@@ -123,10 +132,23 @@ private fun PlayerView(p: Player, players: List<Player>, graded: Boolean, onPick
     var drag by remember { mutableStateOf(Offset.Zero) } // live finger travel while swiping
     var upAction by remember { mutableStateOf<UpAction?>(null) } // graded mode: what release will do
 
-    fun toggleShuffle() = p.shuffle?.let { on ->
-        controls?.setShuffleMode(if (on) PlaybackStateCompat.SHUFFLE_MODE_NONE else PlaybackStateCompat.SHUFFLE_MODE_ALL)
+    // The gesture handler below outlives recompositions: read the latest player, not the first one.
+    val cur by rememberUpdatedState(p)
+    val curNext by rememberUpdatedState(next)
+    val view = LocalView.current
+    val pulse = remember { Animatable(1f) }
+    val scope = rememberCoroutineScope()
+    fun playPause() {
+        val c = MediaHub.controls(cur.id)
+        if (cur.playing) c?.pause() else c?.play()
+        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) // light tick
+        scope.launch { pulse.snapTo(0f); pulse.animateTo(1f, tween(450)) }
     }
-    fun cycleRepeat() = p.repeat?.let { controls?.setRepeatMode(it.next().toCompat()) }
+
+    fun toggleShuffle() = cur.shuffle?.let { on ->
+        MediaHub.controls(cur.id)?.setShuffleMode(if (on) PlaybackStateCompat.SHUFFLE_MODE_NONE else PlaybackStateCompat.SHUFFLE_MODE_ALL)
+    }
+    fun cycleRepeat() = cur.repeat?.let { MediaHub.controls(cur.id)?.setRepeatMode(it.next().toCompat()) }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val h = constraints.maxHeight.toFloat()
@@ -155,20 +177,20 @@ private fun PlayerView(p: Player, players: List<Player>, graded: Boolean, onPick
                         if (mode > 0) {
                             c.consume()
                             drag = total
-                            if (mode == 2 && graded) upAction = gradedAction(-total.y / h, next != null, p.shuffle != null, p.repeat != null)
+                            if (mode == 2 && graded) upAction = gradedAction(-total.y / h, curNext != null, cur.shuffle != null, cur.repeat != null)
                         }
                     }
                     when {
-                        tapped -> if (p.playing) controls?.pause() else controls?.play()
-                        mode == 1 && total.x <= -swipe && p.canSkipNext -> controls?.skipToNext()
-                        mode == 1 && total.x >= swipe && p.canSkipPrev -> controls?.skipToPrevious()
+                        tapped -> playPause()
+                        mode == 1 && total.x <= -swipe && cur.canSkipNext -> MediaHub.controls(cur.id)?.skipToNext()
+                        mode == 1 && total.x >= swipe && cur.canSkipPrev -> MediaHub.controls(cur.id)?.skipToPrevious()
                         mode == 2 && graded -> when (upAction) {
-                            UpAction.SWITCH -> next?.let { onPick(it.id) }
+                            UpAction.SWITCH -> curNext?.let { onPick(it.id) }
                             UpAction.SHUFFLE -> toggleShuffle()
                             UpAction.REPEAT -> cycleRepeat()
                             null -> {}
                         }
-                        mode == 2 && total.y <= -swipe -> next?.let { onPick(it.id) }
+                        mode == 2 && total.y <= -swipe -> curNext?.let { onPick(it.id) }
                     }
                     drag = Offset.Zero
                     upAction = null
@@ -195,6 +217,14 @@ private fun PlayerView(p: Player, players: List<Player>, graded: Boolean, onPick
                     if (q.durationMs > 0) Text("${formatTime(livePosition(q, now))} / ${formatTime(q.durationMs)}", color = Color.LightGray, fontSize = 13.sp)
                 }
             }
+
+            // Play/pause feedback: a soft white pulse that grows and fades from the middle.
+            if (pulse.value < 1f) Box(
+                Modifier.align(Alignment.Center).size(160.dp).graphicsLayer {
+                    val s = 0.4f + 0.8f * pulse.value
+                    scaleX = s; scaleY = s; alpha = (1f - pulse.value) * 0.45f
+                }.background(Color.White, CircleShape)
+            )
 
             // Graded mode: show what releasing will do.
             upAction?.let { action ->
