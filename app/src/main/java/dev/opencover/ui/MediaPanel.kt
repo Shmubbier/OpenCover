@@ -52,6 +52,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.opencover.media.MediaHub
@@ -68,7 +69,7 @@ import androidx.compose.foundation.Canvas as DrawCanvas
 
 /** Swipe-up media player, laid out like YouTube Music's. */
 @Composable
-fun MediaPanel(onClose: () -> Unit) {
+fun MediaPanel() {
     val ctx = LocalContext.current
     var hasAccess by remember { mutableStateOf(true) }
     DisposableEffect(Unit) {
@@ -83,13 +84,13 @@ fun MediaPanel(onClose: () -> Unit) {
         when {
             !hasAccess -> Text("Turn on Notification access in Setup", color = Color.Gray)
             p == null -> Text("Nothing playing", color = Color.Gray)
-            else -> PlayerView(p, players, onPick = { chosen = it }, onClose = onClose)
+            else -> PlayerView(p, players, onPick = { chosen = it })
         }
     }
 }
 
 @Composable
-private fun PlayerView(p: Player, players: List<Player>, onPick: (String) -> Unit, onClose: () -> Unit) {
+private fun PlayerView(p: Player, players: List<Player>, onPick: (String) -> Unit) {
     val ctx = LocalContext.current
     val controls = MediaHub.controls(p.id)
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
@@ -118,7 +119,7 @@ private fun PlayerView(p: Player, players: List<Player>, onPick: (String) -> Uni
         // Right edge: media volume (top = loudest).
         VerticalBar(
             fromTop = 1f - volume.toFloat() / maxVol, fillFromTop = false, enabled = true, live = true,
-            modifier = Modifier.align(Alignment.CenterEnd),
+            modifier = Modifier.align(Alignment.CenterEnd), avoidCutout = true,
         ) { f ->
             volume = volumeFor(f, maxVol)
             audio.setStreamVolume(AudioManager.STREAM_MUSIC, volume, 0)
@@ -163,21 +164,12 @@ private fun PlayerView(p: Player, players: List<Player>, onPick: (String) -> Uni
             }
         }
 
-        // Bottom: title, artist, time, close.
-        Row(
-            Modifier.align(Alignment.BottomStart).fillMaxWidth().windowInsetsPadding(WindowInsets.displayCutout)
-                .padding(start = 36.dp, end = 36.dp, bottom = 12.dp),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(p.title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Medium, maxLines = 1)
-                Text(p.artist, color = Color.LightGray, fontSize = 15.sp, maxLines = 1)
-            }
-            if (p.durationMs > 0) Text(
-                "${formatTime(position)} / ${formatTime(p.durationMs)}",
-                color = Color.LightGray, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 8.dp),
-            )
-            IconButton(Glyph.CLOSE, Color.White, size = 36, onClick = onClose)
+        // Bottom left: title, artist, time. Sits low in the lip left of the camera cutout, so it only
+        // spans the left half (the cutout starts at about 51% of the width).
+        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth(0.5f).padding(start = 36.dp, bottom = 10.dp)) {
+            Text(p.title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(p.artist, color = Color.LightGray, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (p.durationMs > 0) Text("${formatTime(position)} / ${formatTime(p.durationMs)}", color = Color.LightGray, fontSize = 13.sp)
         }
     }
 }
@@ -190,12 +182,14 @@ private fun VerticalBar(
     enabled: Boolean,
     live: Boolean,
     modifier: Modifier,
+    avoidCutout: Boolean = false,
     onChange: (Float) -> Unit,
 ) {
     var dragging by remember { mutableStateOf<Float?>(null) }
     val shown = (dragging ?: fromTop).coerceIn(0f, 1f)
     BoxWithConstraints(
-        modifier.fillMaxHeight().windowInsetsPadding(WindowInsets.displayCutout).width(28.dp).padding(vertical = 16.dp).pointerInput(enabled) {
+        modifier.fillMaxHeight().then(if (avoidCutout) Modifier.windowInsetsPadding(WindowInsets.displayCutout) else Modifier)
+            .width(28.dp).padding(vertical = 16.dp).pointerInput(enabled) {
             if (!enabled) return@pointerInput
             detectVerticalDragGestures(
                 onDragStart = { dragging = it.y / size.height },
@@ -223,7 +217,7 @@ private fun VerticalBar(
     }
 }
 
-private enum class Glyph { PLAY, PAUSE, PREV, NEXT, SHUFFLE, REPEAT, REPEAT_ONE, CLOSE }
+private enum class Glyph { PLAY, PAUSE, PREV, NEXT, SHUFFLE, REPEAT, REPEAT_ONE }
 
 /** Simple drawn icons, so no icon library is needed. */
 @Composable
@@ -256,13 +250,6 @@ private fun IconButton(glyph: Glyph, color: Color, size: Int = 44, onClick: () -
                     drawRoundRect(color, Offset(0.15f * s, 0.3f * s), Size(0.7f * s, 0.42f * s), CornerRadius(0.14f * s), style = stroke)
                     line(0.62f, 0.3f, 0.52f, 0.2f); line(0.62f, 0.3f, 0.52f, 0.4f)
                     if (glyph == Glyph.REPEAT_ONE) line(0.5f, 0.42f, 0.5f, 0.6f)
-                }
-                Glyph.CLOSE -> {
-                    // Collapse arrows, like YouTube Music's exit-fullscreen corner icon.
-                    line(0.2f, 0.4f, 0.4f, 0.4f); line(0.4f, 0.4f, 0.4f, 0.2f)
-                    line(0.6f, 0.2f, 0.6f, 0.4f); line(0.6f, 0.4f, 0.8f, 0.4f)
-                    line(0.2f, 0.6f, 0.4f, 0.6f); line(0.4f, 0.6f, 0.4f, 0.8f)
-                    line(0.6f, 0.8f, 0.6f, 0.6f); line(0.6f, 0.6f, 0.8f, 0.6f)
                 }
             }
         }
