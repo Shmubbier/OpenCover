@@ -54,6 +54,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import dev.opencover.home.*
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Instant
@@ -271,15 +274,20 @@ private fun Analog(now: LocalDateTime, modifier: Modifier) {
     }
 }
 
-/** Fetches weather while Home is showing (the screen is on), at most every 30 minutes. */
+/** Fetches weather only while OpenCover is on screen, at most every 30 minutes. */
 @Composable
 private fun WeatherUpdates() {
     val ctx = LocalContext.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     val on = HomeWidget.WEATHER !in HomePrefs.off
     LaunchedEffect(on) {
-        while (on) {
-            if (due(Weather.reading, System.currentTimeMillis())) withContext(Dispatchers.IO) { runCatching { Weather.fetch(ctx) } }
-            delay(5 * 60_000L)
+        if (!on) return@LaunchedEffect
+        // The activity is only stopped (not destroyed) when the screen turns off; pause with it.
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                if (due(Weather.reading, System.currentTimeMillis())) withContext(Dispatchers.IO) { runCatching { Weather.fetch(ctx) } }
+                delay(5 * 60_000L)
+            }
         }
     }
 }

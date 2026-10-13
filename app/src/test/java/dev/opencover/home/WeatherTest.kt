@@ -38,6 +38,10 @@ class WeatherTest {
         assertFalse(due(Reading(20.0, 0, 0), 30 * 60_000L - 1))
         assertTrue(due(Reading(20.0, 0, 0), 30 * 60_000L))
     }
+    @Test fun oldFixNeedsRefresh() {
+        assertTrue(fixUsable(3 * 3600_000L))
+        assertFalse(fixUsable(3 * 3600_000L + 1)) // could be another city by now
+    }
     @Test fun degreesRounded() {
         assertEquals("28°", degrees(28.4, fahrenheit = false))
         assertEquals("83°", degrees(28.4, fahrenheit = true))

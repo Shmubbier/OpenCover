@@ -1,6 +1,8 @@
 package dev.opencover.home
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -43,6 +45,10 @@ object HomePrefs {
         off = p.getString("off", null)?.let { s -> s.split(',').mapNotNull { id -> HomeWidget.entries.find { it.name == id } }.toSet() }
             ?: setOf(HomeWidget.WEATHER) // weather is opt-in
         fahrenheit = p.getBoolean("fahrenheit", false)
+        // Location revoked since: weather switches itself off rather than showing an old reading.
+        if (HomeWidget.WEATHER !in off &&
+            ctx.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
+        ) setShown(ctx, HomeWidget.WEATHER, false)
     }
 
     fun shown() = order.filter { it !in off }

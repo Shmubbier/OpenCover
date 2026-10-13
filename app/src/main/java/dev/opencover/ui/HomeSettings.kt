@@ -14,7 +14,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -71,7 +73,8 @@ fun HomeSettings(onBack: () -> Unit) {
                             .border(2.dp, if (s == HomePrefs.clock) Color(0xFF8AB4F8) else Color.DarkGray, RoundedCornerShape(10.dp))
                             .clickable { HomePrefs.setClock(ctx, s) },
                     ) {
-                        Box(Modifier.size(450.dp, 300.dp).graphicsLayer {
+                        // Full Home size, drawn at a third: requiredSize ignores the 150x100 box it sits in.
+                        Box(Modifier.wrapContentSize(Alignment.TopStart, unbounded = true).requiredSize(450.dp, 300.dp).graphicsLayer {
                             scaleX = 1 / 3f; scaleY = 1 / 3f
                             transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
                         }) { ClockFace(s, Modifier.padding(16.dp)) }
