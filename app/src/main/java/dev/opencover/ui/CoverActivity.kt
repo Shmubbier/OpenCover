@@ -22,6 +22,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
+import dev.opencover.home.HomePrefs
+import dev.opencover.home.Weather
 import dev.opencover.COVER_DISPLAY
 import dev.opencover.apps.AppEntry
 import dev.opencover.apps.AppLauncher
@@ -141,6 +143,7 @@ class CoverActivity : ComponentActivity() {
             popups = { NotificationStore.popupsEnabled(this) },
             setPopups = { NotificationStore.setPopups(this, it) },
         )
+        HomePrefs.load(this); Weather.load(this)
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 resumeTick // re-read permissions every time we come back from Settings
