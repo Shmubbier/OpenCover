@@ -45,6 +45,11 @@ fun SettingsPanel(
     BackHandler(onBack = onClose)
     val ctx = LocalContext.current
     var experimental by remember { mutableStateOf(false) }
+    var homeSettings by remember { mutableStateOf(false) }
+    if (homeSettings) {
+        HomeSettings(onBack = { homeSettings = false })
+        return
+    }
     if (experimental) {
         ExperimentalPanel(topEdge, onTopEdge, onBack = { experimental = false })
         return
@@ -80,6 +85,7 @@ fun SettingsPanel(
             }
             Switch(checked = graded, onCheckedChange = { graded = it; MediaPrefs.setGraded(ctx, it) })
         }
+        Button(onClick = { homeSettings = true }) { Text("Home") }
         Button(onClick = onSamsungWidgets) { Text("Open Samsung widgets") }
         Button(onClick = onSetup) { Text("Setup & permissions") }
         Button(onClick = onWallpaper) { Text("Set wallpaper") }
