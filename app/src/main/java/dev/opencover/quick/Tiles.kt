@@ -11,7 +11,7 @@ enum class Tile(val label: String, val need: Need) {
     WIFI("Wi-Fi", Need.SHIZUKU),
     BLUETOOTH("Bluetooth", Need.SHIZUKU),
     FLASHLIGHT("Flashlight", Need.NONE),
-    ROTATION("Rotate", Need.LATER), // the cover ignores auto-rotate; roadmap item 7
+    ROTATION("Rotate", Need.SHIZUKU), // an action: turns the last cover app a quarter turn
     SOUND("Sound", Need.NONE),
     DND("Do not disturb", Need.NOTIFICATION_ACCESS),
     BATTERY_SAVER("Battery saver", Need.SHIZUKU),

@@ -16,6 +16,8 @@ import dev.opencover.COVER_DISPLAY
 import dev.opencover.SAMSUNG_COVER_HOME
 import dev.opencover.apps.AppLauncher
 import dev.opencover.keyboard.KeyboardPrefs
+import dev.opencover.phone.PhonePrefs
+import dev.opencover.phone.RotationFeature
 import dev.opencover.keyboard.OverlayKeyboard
 import dev.opencover.ui.CoverActivity
 
@@ -31,6 +33,7 @@ class CoverAccessibility : AccessibilityService() {
     override fun onServiceConnected() {
         instance = this
         refreshScope()
+        if (PhonePrefs(this).rotationResetPending) RotationFeature.resetToDefault(this)
     }
 
     override fun onDestroy() {
@@ -50,7 +53,8 @@ class CoverAccessibility : AccessibilityService() {
         if (typing && keyboard == null) keyboard = OverlayKeyboard(this)
         if (!typing) keyboard?.hide()
         serviceInfo = serviceInfo.apply {
-            packageNames = if (topEdge) null
+            // A turned app needs its windows seen from every app; screen content is still never read.
+            packageNames = if (topEdge || PhonePrefs(this@CoverAccessibility).hasRotations) null
             else (setOf("com.android.systemui") + BankingMode.apps(this@CoverAccessibility)).toTypedArray()
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
                 (if (topEdge) AccessibilityEvent.TYPE_WINDOWS_CHANGED else 0)
@@ -100,6 +104,11 @@ class CoverAccessibility : AccessibilityService() {
         }
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString()
+        if (event.displayId == COVER_DISPLAY && pkg != null) when (pkg) {
+            packageName -> {} // OpenCover's overlays; CoverActivity uprights itself
+            "com.android.systemui" -> if (event.className?.toString() == SAMSUNG_COVER_HOME) RotationFeature.upright(this)
+            else -> RotationFeature.onWindow(this, pkg)
+        }
         if (pkg != null && pkg in BankingMode.apps(this)) {
             BankingMode.pause(this, pkg) // opened some other way than from OpenCover
             return

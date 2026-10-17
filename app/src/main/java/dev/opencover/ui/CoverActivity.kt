@@ -23,6 +23,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import dev.opencover.home.HomePrefs
+import dev.opencover.phone.RotationFeature
 import dev.opencover.home.Weather
 import dev.opencover.COVER_DISPLAY
 import dev.opencover.apps.AppEntry
@@ -211,6 +212,7 @@ class CoverActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (ShizukuShell.allowed()) RotationFeature.upright(this) // shell call runs on its own thread
         current = this
         BankingMode.resume(this) // back in OpenCover, so any banking app was left
         // Full screen: a top-edge swipe only peeks the status bar, so Samsung's quick panel
