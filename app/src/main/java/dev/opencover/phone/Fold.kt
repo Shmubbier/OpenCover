@@ -28,8 +28,11 @@ val FOLD_WATCH_SCRIPT: String =
         """case "${'$'}l" in *"Committing state"*"identifier=0"*|*"Committing state"*"identifier=3"*) cmd device_state state $HELD_STATE;; esac; done' """ +
         """$FOLD_WATCH_TAG >/dev/null 2>&1 &"""
 
-/** Also stops FreeFlip's watcher, which did the same job before this was ported. */
-const val FOLD_WATCH_STOP: String = "pkill -f $FOLD_WATCH_TAG; pkill -f freeflip-fold-watch"
+/**
+ * Stops the watcher, and FreeFlip's, which did the same job before this was ported. The bracket keeps each pattern
+ * from matching this command's own shell, which pkill -f would otherwise kill before the second pkill runs.
+ */
+const val FOLD_WATCH_STOP: String = "pkill -f '[o]pencover-fold-watch'; pkill -f '[f]reeflip-fold-watch'"
 
 /** Keeps the cover on when the phone is opened, by holding TENT through Shizuku (setting: keep cover on). */
 object Fold {
