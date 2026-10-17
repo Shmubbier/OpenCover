@@ -28,6 +28,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import dev.opencover.phone.RotationFeature
+import dev.opencover.apps.AppLauncher
+import dev.opencover.mirror.ConsentActivity
+import dev.opencover.mirror.MirrorService
 import dev.opencover.watcher.KeepAwake
 
 /** Live tile state while the panel is open. Anything that may change a tile bumps [version]. */
@@ -104,6 +107,7 @@ object QuickState {
             Tile.NFC -> NfcAdapter.getDefaultAdapter(ctx)?.isEnabled
             Tile.DARK_MODE -> ctx.getSystemService(UiModeManager::class.java).nightMode == UiModeManager.MODE_NIGHT_YES
             Tile.KEEP_AWAKE -> KeepAwake.isOn
+            Tile.MIRROR -> MirrorService.instance != null
         }
     }
 
@@ -166,6 +170,11 @@ object QuickState {
                     true
                 }
                 Tile.KEEP_AWAKE -> { KeepAwake.set(ctx, !on); true }
+                Tile.MIRROR -> {
+                    if (on) handler.post { MirrorService.instance?.stop() }
+                    else AppLauncher.start(ctx, Intent(ctx, ConsentActivity::class.java))
+                    true
+                }
             }
         } catch (e: Exception) {
             false

@@ -10,12 +10,13 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
 import android.os.PowerManager
+import dev.opencover.mirror.MirrorService
 import dev.opencover.quick.ShizukuShell
 
 /**
- * Watches Android's thermal status and the battery temperature. While the hotspot is on, warm means a warning; hot
- * also turns the hotspot off. Runs in CoverWatcher, so it keeps working while banking mode has turned the accessibility
- * service off. Main thread only.
+ * Watches Android's thermal status and the battery temperature. While the hotspot or mirroring is on, warm means a
+ * warning; hot also turns the hotspot off and ends mirroring. Runs in CoverWatcher, so it keeps working while
+ * banking mode or mirroring has turned the accessibility service off. Main thread only.
  */
 object HeatGuard {
     private const val CHANNEL = "heat"
@@ -69,11 +70,12 @@ object HeatGuard {
         val s = app ?: return
         val nm = s.getSystemService(NotificationManager::class.java)
         level = heatLevel(status, tenths, level)
-        val now = if (PhonePrefs(s).heatGuard) shown(level, hotspot) else Heat.OK
+        val now = if (PhonePrefs(s).heatGuard) shown(level, hotspot || MirrorService.instance != null) else Heat.OK
         val worse = now.ordinal > told.ordinal
         told = now
         if (now == Heat.OK) nm.cancel(NOTIFICATION_ID)
         if (!worse) return
+        if (now == Heat.CUT) MirrorService.instance?.stop()
         if (now == Heat.CUT && hotspot) Thread { ShizukuShell.run(*STOP_HOTSPOT.toTypedArray()) }.start()
         notify(s, nm, now)
     }
@@ -82,8 +84,8 @@ object HeatGuard {
         nm.createNotificationChannel(NotificationChannel(CHANNEL, "Heat guard", NotificationManager.IMPORTANCE_HIGH))
         val temp = "%.1f".format(tenths / 10.0)
         val text = when (now) {
-            Heat.CUT -> "Phone is hot ($temp °C). The hotspot was stopped. Let it cool."
-            else -> "Phone is warm ($temp °C). Consider turning off the hotspot."
+            Heat.CUT -> "Phone is hot ($temp °C). Mirroring and the hotspot were stopped. Let it cool."
+            else -> "Phone is warm ($temp °C). Consider stopping the hotspot or mirroring."
         }
         val open = PendingIntent.getActivity(
             s, 0, Intent("android.settings.TETHER_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE,

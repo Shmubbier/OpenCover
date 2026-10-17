@@ -21,6 +21,7 @@ enum class Tile(val label: String, val need: Need) {
     NFC("NFC", Need.SHIZUKU),
     DARK_MODE("Dark mode", Need.SHIZUKU),
     KEEP_AWAKE("Keep awake", Need.NONE),
+    MIRROR("Mirror", Need.SHIZUKU),
 }
 
 const val COLS = 4

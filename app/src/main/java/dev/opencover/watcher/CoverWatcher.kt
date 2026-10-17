@@ -21,6 +21,7 @@ import android.util.Log
 import android.view.Display
 import dev.opencover.COVER_DISPLAY
 import dev.opencover.apps.AppLauncher
+import dev.opencover.mirror.MirrorService
 import dev.opencover.phone.HeatGuard
 import dev.opencover.ui.CoverActivity
 
@@ -127,6 +128,7 @@ class CoverWatcher : Service() {
     }
 
     private fun openLauncher(why: String) {
+        if (MirrorService.instance != null) return // the forced unfolded state looks like a fold
         Log.i(TAG, "open launcher ($why)")
         AppLauncher.start(this, Intent(this, CoverActivity::class.java))
     }

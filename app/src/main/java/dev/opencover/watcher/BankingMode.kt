@@ -10,6 +10,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.Settings
+import dev.opencover.mirror.MirrorService
 
 /**
  * Turns OpenCover's accessibility service off while a chosen banking app is in front (some refuse
@@ -40,6 +41,7 @@ object BankingMode {
 
     fun resume(ctx: Context) {
         if (pausedFor(ctx) == null) return
+        if (MirrorService.instance != null) return // mirroring owns the switch; unlocking after it ends resumes
         prefs(ctx).edit().remove("paused").commit()
         if (canResume(ctx)) setService(ctx, on = true) else askToReEnable(ctx)
     }

@@ -1,0 +1,127 @@
+package dev.opencover.mirror
+
+import android.content.BroadcastReceiver
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Handler
+import android.os.Looper
+import android.os.PowerManager
+import android.provider.Settings
+import dev.opencover.watcher.CoverAccessibility
+import dev.opencover.watcher.withService
+import dev.opencover.phone.foldStateArgs
+import dev.opencover.phone.PhonePrefs
+import dev.opencover.phone.RotationFeature
+import dev.opencover.quick.ShizukuShell
+
+/**
+ * What the phone must look like while mirroring a folded phone:
+ *  - device state 4 (both displays render), otherwise the inner screen draws nothing;
+ *  - developer options and unknown sources off, because banking apps like GCash refuse to run with them on.
+ * Everything is put back when mirroring stops (see [resetState] for the lock that costs).
+ */
+object MirrorEnv {
+    private const val UNFOLDED_STATE = "4"
+    private const val SECURE_NON_MARKET = "install_non_market_apps"
+    private const val A11Y = "enabled_accessibility_services"
+    private const val HIDE = "settings put global development_settings_enabled 0; settings put secure $SECURE_NON_MARKET 0"
+
+    /** Blocking; call off the main thread. Returns the shell output, null if Shizuku isn't ready. */
+    fun enter(ctx: Context): String? {
+        val prefs = PhonePrefs(ctx)
+        prefs.resetPending = true // until leave() finishes the job; if we die mid-session, recover() resets
+        // A crashed earlier run may have left our zeros behind; its saved originals win.
+        if (prefs.restoreSettings == null) {
+            val r = ctx.contentResolver
+            prefs.restoreSettings = "${Settings.Global.getInt(r, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0)}," +
+                Settings.Secure.getInt(r, SECURE_NON_MARKET, 0)
+        }
+        return ShizukuShell.output("sh", "-c", "cmd device_state state $UNFOLDED_STATE; $HIDE; cmd device_state print-state")
+    }
+
+    /**
+     * Banking apps such as GCash refuse to run next to any accessibility service they don't know, OpenCover's included,
+     * so it is switched off for the session (touch goes through [MirrorInput] instead). Blocking; call off the main thread.
+     * Call only once the mirror view is up: launching it uses the service.
+     */
+    fun hideAccessibility(ctx: Context) {
+        val now = Settings.Secure.getString(ctx.contentResolver, A11Y)
+        val me = me(ctx)
+        if (me !in now.orEmpty().split(":")) return // wasn't on (banking mode may have it off)
+        PhonePrefs(ctx).restoreAccessibility = true
+        ShizukuShell.run("settings", "put", "secure", A11Y, withService(now, me, on = false))
+    }
+
+    private fun me(ctx: Context) = ComponentName(ctx, CoverAccessibility::class.java).flattenToString()
+
+    fun leave(ctx: Context) {
+        val app = ctx.applicationContext
+        PhonePrefs(app).resetPending = true
+        Thread { restoreSettings(app); restoreAccessibility(app) }.start()
+        resetState(app, wake = true)
+    }
+
+    /** Finish anything an earlier run left undone (process died, Shizuku was down). Call from Application.onCreate. */
+    fun recover(app: Context) {
+        val prefs = PhonePrefs(app)
+        if (prefs.restoreSettings != null || prefs.restoreAccessibility) {
+            Thread { restoreSettings(app); restoreAccessibility(app) }.start()
+        }
+        if (prefs.resetPending) resetWhenAsleep(app)
+    }
+
+    private fun restoreAccessibility(app: Context) {
+        val prefs = PhonePrefs(app)
+        val list = restoredAccessibility(Settings.Secure.getString(app.contentResolver, A11Y), me(app), prefs.restoreAccessibility) ?: return
+        if (ShizukuShell.run("sh", "-c", "settings put secure $A11Y '$list'; settings put secure accessibility_enabled 1")) {
+            prefs.restoreAccessibility = false
+        }
+    }
+
+    private fun restoreSettings(app: Context) {
+        val prefs = PhonePrefs(app)
+        val (dev, nm) = prefs.restoreSettings?.split(",")?.takeIf { it.size == 2 } ?: return
+        if (ShizukuShell.run("sh", "-c", "settings put global development_settings_enabled $dev; settings put secure $SECURE_NON_MARKET $nm")) {
+            prefs.restoreSettings = null
+        }
+    }
+
+    private fun resetWhenAsleep(app: Context) {
+        if (!app.getSystemService(PowerManager::class.java).isInteractive) { resetNow(app); return }
+        app.registerReceiver(object : BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) {
+                app.unregisterReceiver(this)
+                resetNow(app)
+            }
+        }, IntentFilter(Intent.ACTION_SCREEN_OFF), Context.RECEIVER_NOT_EXPORTED)
+    }
+
+    private fun resetNow(app: Context) {
+        val prefs = PhonePrefs(app)
+        if (!prefs.resetPending) return
+        // Screen off while mirroring ends the session (as in Z Cover Power); stop() comes back here with no session.
+        MirrorService.instance?.let { it.stop(); return }
+        resetState(app, wake = false)
+    }
+
+    /**
+     * Left forced, the cover stays black with no navigation, so the state goes back as soon as a session ends.
+     * Resetting while awake counts as a fold: the phone sleeps and locks. [wake] turns the screen back on afterwards,
+     * so the cover shows the lock screen ready for the PIN; it is off when the screen was already off.
+     */
+    private fun resetState(app: Context, wake: Boolean) {
+        val prefs = PhonePrefs(app)
+        Thread {
+            if (ShizukuShell.run(*foldStateArgs(prefs.keepCoverOn).toTypedArray())) {
+                prefs.resetPending = false
+                // The forced state leaves the cover rotated 180; put it back once things have settled.
+                prefs.rotationResetPending = true
+                Thread.sleep(1500)
+                if (wake) ShizukuShell.run("input", "keyevent", "KEYCODE_WAKEUP")
+                Handler(Looper.getMainLooper()).post { RotationFeature.resetToDefault(app) }
+            }
+        }.start()
+    }
+}

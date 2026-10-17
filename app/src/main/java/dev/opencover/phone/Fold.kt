@@ -1,6 +1,7 @@
 package dev.opencover.phone
 
 import android.content.Context
+import dev.opencover.mirror.MirrorService
 import dev.opencover.quick.ShizukuShell
 
 /** The device state that keeps the cover on and the inner screen off: TENT, which the phone's sensors never report. */
@@ -34,6 +35,7 @@ const val FOLD_WATCH_STOP: String = "pkill -f $FOLD_WATCH_TAG; pkill -f freeflip
 object Fold {
     /** Makes the device state match the saved setting; re-run whenever the accessibility service connects. */
     fun apply(ctx: Context) {
+        if (MirrorService.instance != null) return // mirroring needs the phone to look open; it restores the hold after
         val keep = PhonePrefs(ctx).keepCoverOn
         Thread {
             ShizukuShell.run("sh", "-c", FOLD_WATCH_STOP)
