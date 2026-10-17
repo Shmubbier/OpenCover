@@ -1,5 +1,7 @@
 OpenCover is licensed under GPL-3.0.
 
+Rotation, keep cover on, mirroring and the heat guard come from FreeFlip (same author, GPL-3.0).
+
 app/src/main/assets/words_en.txt is derived from the AOSP LatinIME word list
 dictionaries/en_GB_wordlist.combined.gz, Copyright The Android Open Source Project,
 licensed under the Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0).

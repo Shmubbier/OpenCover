@@ -77,9 +77,15 @@ clock face, edge lighting, VoIP, AOD.
 4. Keyboard: OpenCover overlay keyboard (Samsung forces its own keyboard app on the cover). 4a QWERTY, suggestions, swipe typing. 4b T9. 4c emoji and voice key.
 5. Home clock styles and widgets (battery, alarm, weather). Edge lighting moved to 12.
 6. VoIP caller ID
-7. Rotation: let apps that are stuck in one orientation rotate on the cover screen. Today some apps only flip when the phone is slightly opened, and snap back when closed.
+7. Rotation: done (FreeFlip port). Per-app manual rotation; this phone has no accelerometer.
 8. AOD and lock screen, including a now-playing chip (bottom left, like Samsung's cover)
-9. Cover screen while open: keep the cover screen on and usable when the phone is unfolded.
+9. Cover screen while open: done (FreeFlip port, keep cover on).
 10. Own navigation: avoid the Samsung widgets flash on Home. Options: an OpenCover gesture zone above Samsung's, or OpenCover as default Home app (spike first; Samsung may keep its own cover home).
-11. Screen mirroring: show the main screen on the cover display with full touch, clicks and swipes, while folded. Spike first: the main display is off when folded, so this may need a virtual display apps launch into, plus input injected through Shizuku.
+11. Screen mirroring: done (FreeFlip port).
 12. Edge lighting: glow on new notifications, also waking the screen (on AOD once 8 exists).
+
+Later:
+- Recents on the cover: open One UI's own recents on display 1, plus an OpenCover clear-all button.
+- Force apps onto the cover when they open on the inner screen, and dismiss Samsung's "open your phone" prompt.
+- Long-press a quick tile to open its settings page on the cover.
+- Unlock from the cover with the power-key fingerprint.

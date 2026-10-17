@@ -10,6 +10,9 @@ A free, open-source (GPL-3.0) launcher for the Galaxy Z Flip 5 cover screen. No 
 - Media player: swipe up from Home. Tap to play or pause, swipe left or right to skip, swipe up for the next playing app, swipe down to close. Left edge seeks, right edge sets volume. Settings > Media player has a graded swipe-up option and a classic layout with buttons.
 - Quick settings: swipe down from Home. Cover brightness, battery, and tiles for Wi-Fi, Bluetooth, flashlight, rotation, sound, Do Not Disturb, battery saver, location, mobile data, airplane, NFC, dark mode and keep awake. Long-press a tile to add, remove or move tiles.
 - Keyboard (experimental, off by default): OpenCover's own keyboard on the cover (Samsung only allows its own keyboard app there). QWERTY, word suggestions, swipe typing, long-press popups. Turn it on in Settings > Experimental. Known issues: chat boxes don't move up for it, and it can stay open after swiping back.
+- Rotate tile: turns the app you last had on the cover a quarter turn; it opens that way from then on. The cover never rotates by itself while folded.
+- Mirror tile: shows the inner screen on the cover with touch, for apps that need the phone open. Pick "Share entire screen" in Android's dialog. The phone locks when mirroring ends.
+- Settings > Phone: keep the cover on when the phone is opened, and a heat guard that warns at 42 °C and stops the hotspot and mirroring at 45 °C (only while one of them is on).
 - Keep the cover screen awake in any app.
 - "Open Samsung widgets" in settings to reach Samsung's own cover widgets.
 
@@ -36,11 +39,16 @@ needs.
   (they can include short text such as dialog titles; OpenCover doesn't read it). Android
   requires the screen-access capability to be declared up front, so the Accessibility consent
   screen mentions it either way.
+- Once an app has a saved rotation, window-change events from every app arrive, to know which
+  app is on the cover. Screen content is still never read.
+- Mirroring captures the inner screen only while the Mirror tile is on, and turns OpenCover's
+  accessibility service, developer options and unknown sources off for the session (banking
+  apps refuse to run with them on). Everything is restored when it ends. Nothing is stored.
 - Only the opt-in weather widget uses the internet: it sends rough coordinates (about 1 km) to
   Open-Meteo every 30 minutes at most, while the screen is on. Nothing else leaves your phone.
 
 ## Shizuku
-Wi-Fi, Bluetooth, mobile data, airplane, NFC, battery saver, dark mode and the cover brightness slider need [Shizuku](https://github.com/RikkaApps/Shizuku) (no root). Without it those tiles are grey and the slider only dims OpenCover.
+Wi-Fi, Bluetooth, mobile data, airplane, NFC, battery saver, dark mode, Rotate, Mirror, keep cover on, the heat guard's hotspot stop and the cover brightness slider need [Shizuku](https://github.com/RikkaApps/Shizuku) (no root). Without it those tiles are grey and the slider only dims OpenCover.
 1. Install the Shizuku APK from its GitHub releases: `adb install shizuku.apk`
 2. Start it (again after every reboot):
    `adb shell 'p=$(pm path moe.shizuku.privileged.api | cut -d: -f2); $(dirname $p)/lib/arm64/libshizuku.so'`
