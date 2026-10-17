@@ -21,6 +21,7 @@ import android.util.Log
 import android.view.Display
 import dev.opencover.COVER_DISPLAY
 import dev.opencover.apps.AppLauncher
+import dev.opencover.phone.HeatGuard
 import dev.opencover.ui.CoverActivity
 
 /**
@@ -98,6 +99,7 @@ class CoverWatcher : Service() {
             addAction(Intent.ACTION_SCREEN_OFF)
         })
         onCoverStateMaybeChanged()
+        HeatGuard.start(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int) = START_STICKY
@@ -105,6 +107,7 @@ class CoverWatcher : Service() {
 
     override fun onDestroy() {
         instance = null
+        HeatGuard.stop()
         handler.removeCallbacksAndMessages(null)
         displays.unregisterDisplayListener(displayListener)
         unregisterReceiver(receiver)

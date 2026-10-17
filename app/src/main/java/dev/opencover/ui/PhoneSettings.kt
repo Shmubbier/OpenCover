@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.opencover.phone.Fold
+import dev.opencover.phone.HeatGuard
 import dev.opencover.phone.PhonePrefs
 import dev.opencover.quick.ShizukuShell
 
@@ -34,6 +35,7 @@ fun PhoneSettings(onBack: () -> Unit) {
     val ctx = LocalContext.current
     val prefs = remember { PhonePrefs(ctx) }
     var keep by remember { mutableStateOf(prefs.keepCoverOn) }
+    var heat by remember { mutableStateOf(prefs.heatGuard) }
     Column(
         Modifier.fillMaxSize().background(Color(0xF0101010)).verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -44,6 +46,11 @@ fun PhoneSettings(onBack: () -> Unit) {
             if (ShizukuShell.allowed()) "Needs Shizuku. Stops the cover turning off when the phone opens." else "Start Shizuku to apply.",
             keep,
         ) { keep = it; prefs.keepCoverOn = it; Fold.apply(ctx) }
+        Setting(
+            "Heat guard",
+            "Only while the hotspot or mirroring is on. Warns at 42 °C, stops both at 45 °C.",
+            heat,
+        ) { heat = it; prefs.heatGuard = it; HeatGuard.evaluate() }
         TextButton(onClick = onBack) { Text("Back") }
     }
 }
