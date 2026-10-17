@@ -16,6 +16,7 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Granted once over adb by the user; lets banking mode turn accessibility back on. -->
@@ -35,6 +36,7 @@
     </queries>
 
     <application
+        android:name=".OpenCoverApp"
         android:label="OpenCover"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
         <activity
@@ -54,6 +56,24 @@
             android:exported="false"
             android:excludeFromRecents="true"
             android:windowSoftInputMode="adjustResize" />
+        <!-- Mirroring: consent dialog, the mirror view on the cover, and the capture service. -->
+        <activity
+            android:name=".mirror.ConsentActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity
+            android:name=".mirror.MirrorActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density">
+            <meta-data android:name="com.samsung.android.multiwindow.show_on_cover" android:value="true" />
+        </activity>
+        <service
+            android:name=".mirror.MirrorService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
         <service
             android:name=".watcher.CoverWatcher"
             android:exported="false"

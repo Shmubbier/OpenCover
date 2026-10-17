@@ -27,6 +27,10 @@ import android.telephony.TelephonyManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
+import dev.opencover.phone.RotationFeature
+import dev.opencover.apps.AppLauncher
+import dev.opencover.mirror.ConsentActivity
+import dev.opencover.mirror.MirrorService
 import dev.opencover.watcher.KeepAwake
 
 /** Live tile state while the panel is open. Anything that may change a tile bumps [version]. */
@@ -93,7 +97,7 @@ object QuickState {
             Tile.WIFI -> ctx.getSystemService(WifiManager::class.java).isWifiEnabled
             Tile.BLUETOOTH -> Settings.Global.getInt(r, Settings.Global.BLUETOOTH_ON, 0) != 0
             Tile.FLASHLIGHT -> if (flashId == null) null else torchOn
-            Tile.ROTATION -> Settings.System.getInt(r, Settings.System.ACCELEROMETER_ROTATION, 0) != 0
+            Tile.ROTATION -> false // an action, never "on"
             Tile.SOUND -> ringer(ctx) != Ringer.MUTE
             Tile.DND -> ctx.getSystemService(NotificationManager::class.java).currentInterruptionFilter > NotificationManager.INTERRUPTION_FILTER_ALL
             Tile.BATTERY_SAVER -> ctx.getSystemService(PowerManager::class.java).isPowerSaveMode
@@ -103,6 +107,7 @@ object QuickState {
             Tile.NFC -> NfcAdapter.getDefaultAdapter(ctx)?.isEnabled
             Tile.DARK_MODE -> ctx.getSystemService(UiModeManager::class.java).nightMode == UiModeManager.MODE_NIGHT_YES
             Tile.KEEP_AWAKE -> KeepAwake.isOn
+            Tile.MIRROR -> MirrorService.instance != null
         }
     }
 
@@ -133,6 +138,7 @@ object QuickState {
             Need.LATER -> "Coming in a later update"
             else -> "Grant in Setup"
         }
+        if (tile == Tile.ROTATION) return RotationFeature.flip(ctx)
         val on = isOn(ctx, tile) ?: return "Not on this phone"
         val r = ctx.contentResolver
         val ok = try {
@@ -145,7 +151,7 @@ object QuickState {
                 Tile.BATTERY_SAVER -> ShizukuShell.run("cmd", "power", "set-mode", if (on) "0" else "1")
                 Tile.DARK_MODE -> ShizukuShell.run("cmd", "uimode", "night", if (on) "no" else "yes")
                 Tile.FLASHLIGHT -> { ctx.getSystemService(CameraManager::class.java).setTorchMode(flashId!!, !on); true }
-                Tile.ROTATION -> Settings.System.putInt(r, Settings.System.ACCELEROMETER_ROTATION, if (on) 0 else 1)
+                Tile.ROTATION -> false // handled above
                 Tile.LOCATION -> Settings.Secure.putInt(r, Settings.Secure.LOCATION_MODE,
                     if (on) Settings.Secure.LOCATION_MODE_OFF else Settings.Secure.LOCATION_MODE_HIGH_ACCURACY)
                 Tile.SOUND -> {
@@ -164,6 +170,11 @@ object QuickState {
                     true
                 }
                 Tile.KEEP_AWAKE -> { KeepAwake.set(ctx, !on); true }
+                Tile.MIRROR -> {
+                    if (on) handler.post { MirrorService.instance?.stop() }
+                    else AppLauncher.start(ctx, Intent(ctx, ConsentActivity::class.java))
+                    true
+                }
             }
         } catch (e: Exception) {
             false

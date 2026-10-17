@@ -237,6 +237,7 @@ private fun Tile.icon(): ImageVector = when (this) {
     Tile.NFC -> Icons.Filled.Nfc
     Tile.DARK_MODE -> Icons.Filled.DarkMode
     Tile.KEEP_AWAKE -> Icons.Filled.Coffee
+    Tile.MIRROR -> Icons.Filled.ScreenShare
 }
 
 private fun Ringer.label() = when (this) { Ringer.RING -> "Ring"; Ringer.VIBRATE -> "Vibrate"; Ringer.MUTE -> "Mute" }

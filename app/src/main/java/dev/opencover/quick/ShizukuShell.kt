@@ -55,18 +55,19 @@ object ShizukuShell {
             .apply { isAccessible = true }
     }
 
-    /** Blocking; call off the main thread. Null if Shizuku isn't ready or the command can't start. */
-    fun output(vararg cmd: String): String? = try {
-        if (!allowed()) null
-        else (newProcess.invoke(null, arrayOf(*cmd), null, null) as Process).let { p -> p.inputStream.bufferedReader().readText().also { p.waitFor() } }
+    // ponytail: fixed 30 s ceiling for every command; make it a parameter if a slow command needs more.
+    private const val TIMEOUT_SECONDS = 30L
+
+    // Output drained and the wait bounded, so a chatty or stuck command can't hang the caller.
+    private fun exec(cmd: Array<out String>): Finished? = try {
+        if (!allowed()) null else await(newProcess.invoke(null, arrayOf(*cmd), null, null) as Process, TIMEOUT_SECONDS)
     } catch (e: Exception) {
         null
     }
 
-    /** Blocking; call off the main thread. False if Shizuku isn't ready or the command fails. */
-    fun run(vararg cmd: String): Boolean = try {
-        allowed() && (newProcess.invoke(null, arrayOf(*cmd), null, null) as Process).waitFor() == 0
-    } catch (e: Exception) {
-        false
-    }
+    /** Blocking; call off the main thread. Null if Shizuku isn't ready, the command can't start or it times out. */
+    fun output(vararg cmd: String): String? = exec(cmd)?.out
+
+    /** Blocking; call off the main thread. False if Shizuku isn't ready, the command fails or it times out. */
+    fun run(vararg cmd: String): Boolean = exec(cmd)?.exit == 0
 }

@@ -5,3 +5,8 @@ build/
 local.properties
 .idea/
 .superpowers/
+
+# Local hand-off notes (reverse-engineering pointers), not published
+FreeFlip_handoff/
+RE_handoff/
+IJP_handoff/
