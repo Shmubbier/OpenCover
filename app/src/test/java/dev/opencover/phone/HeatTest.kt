@@ -33,4 +33,12 @@ class HeatTest {
 
     // Turning the hotspot on while already hot must still notify: the shown level rises from OK.
     @Test fun activationWhileHotNotifies() = assertEquals(Heat.CUT, shown(Heat.CUT, active = true))
+
+    // A failed hotspot stop or a new mirror session while already hot must still be cut, not skipped.
+    @Test fun cutRepeatsWhileStillHot() = assertEquals(Step(cut = true, notify = false), heatStep(Heat.CUT, told = Heat.CUT))
+
+    @Test fun notifiesOnlyWhenWorse() {
+        assertEquals(Step(cut = false, notify = true), heatStep(Heat.WARN, told = Heat.OK))
+        assertEquals(Step(cut = false, notify = false), heatStep(Heat.WARN, told = Heat.CUT))
+    }
 }

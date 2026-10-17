@@ -65,19 +65,23 @@ object HeatGuard {
         app = null
     }
 
+    /** Too hot to start mirroring (the guard would end it at once). */
+    fun hot(): Boolean = app?.let { PhonePrefs(it).heatGuard && heatLevel(status, tenths, level) == Heat.CUT } == true
+
     /** Re-checks now; also called when the setting changes. */
     fun evaluate() {
         val s = app ?: return
         val nm = s.getSystemService(NotificationManager::class.java)
         level = heatLevel(status, tenths, level)
         val now = if (PhonePrefs(s).heatGuard) shown(level, hotspot || MirrorService.instance != null) else Heat.OK
-        val worse = now.ordinal > told.ordinal
+        val step = heatStep(now, told)
         told = now
         if (now == Heat.OK) nm.cancel(NOTIFICATION_ID)
-        if (!worse) return
-        if (now == Heat.CUT) MirrorService.instance?.stop()
-        if (now == Heat.CUT && hotspot) Thread { ShizukuShell.run(*STOP_HOTSPOT.toTypedArray()) }.start()
-        notify(s, nm, now)
+        if (step.cut) {
+            MirrorService.instance?.stop()
+            if (hotspot) Thread { ShizukuShell.run(*STOP_HOTSPOT.toTypedArray()) }.start()
+        }
+        if (step.notify) notify(s, nm, now)
     }
 
     private fun notify(s: Context, nm: NotificationManager, now: Heat) {

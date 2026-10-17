@@ -20,6 +20,7 @@ import dev.opencover.apps.AppLauncher
 import dev.opencover.phone.HeatGuard
 import android.view.Display
 import android.view.Surface
+import android.widget.Toast
 
 /**
  * Foreground service owning the MediaProjection and VirtualDisplay.
@@ -55,6 +56,12 @@ class MirrorService : Service() {
             .build()
         startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
 
+        if (HeatGuard.hot()) { // checked before anything changes: stopping mid-start would leave the phone forced open
+            Toast.makeText(this, "Phone is too hot to mirror. Let it cool.", Toast.LENGTH_LONG).show()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         val dm = getSystemService(DisplayManager::class.java)
         val main = dm.getDisplay(Display.DEFAULT_DISPLAY) ?: run { stopSelf(); return START_NOT_STICKY }
         readMetrics(main)
@@ -79,7 +86,8 @@ class MirrorService : Service() {
         dm.registerDisplayListener(listener, handler)
         // ponytail: 1.5 s fallback copied from Z Cover Power in case display 0 never reports a change.
         handler.postDelayed({ if (!listener.fired) { listener.fired = true; dm.unregisterDisplayListener(listener); ready.run() } }, 1500)
-        Thread { Log.d(TAG, "mirror env -> ${MirrorEnv.enter(applicationContext)?.trim() ?: "Shizuku unavailable"}") }.start()
+        val app = applicationContext
+        MirrorEnv.later { Log.d(TAG, "mirror env -> ${MirrorEnv.enter(app)?.trim() ?: "skipped"}") }
         return START_NOT_STICKY
     }
 
@@ -104,7 +112,7 @@ class MirrorService : Service() {
         // Launch only now: the device-state switch moves whatever is on the cover to display 0.
         AppLauncher.start(this, Intent(this, MirrorActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK))
         val app = applicationContext
-        Thread { MirrorEnv.hideAccessibility(app) }.start()
+        MirrorEnv.later { MirrorEnv.hideAccessibility(app) }
     }
 
     fun setSurface(s: Surface?) {

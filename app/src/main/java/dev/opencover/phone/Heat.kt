@@ -27,6 +27,11 @@ fun heatLevel(status: Int, tenths: Int, previous: Heat): Heat {
     return if (warn) Heat.WARN else Heat.OK
 }
 
+data class Step(val cut: Boolean, val notify: Boolean)
+
+/** What to do at [now] after telling the user [told]: cut on every check while hot (a stop may have failed), notify only when worse. */
+fun heatStep(now: Heat, told: Heat) = Step(cut = now == Heat.CUT, notify = now.ordinal > told.ordinal)
+
 /** What the user is told: only while the hotspot or mirroring is on, since the phone idles warm while charging. */
 fun shown(level: Heat, active: Boolean): Heat = if (active) level else Heat.OK
 

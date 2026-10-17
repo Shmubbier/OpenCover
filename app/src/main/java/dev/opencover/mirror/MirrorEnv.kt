@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
+import java.util.concurrent.Executors
 import dev.opencover.watcher.CoverAccessibility
 import dev.opencover.watcher.withService
 import dev.opencover.phone.foldStateArgs
@@ -23,6 +24,11 @@ import dev.opencover.quick.ShizukuShell
  * Everything is put back when mirroring stops (see [resetState] for the lock that costs).
  */
 object MirrorEnv {
+    // One thread, so a session's changes and their undoing always run in the order they were asked for.
+    private val worker = Executors.newSingleThreadExecutor { Thread(it, "mirror-env").apply { isDaemon = true } }
+
+    fun later(block: () -> Unit) = worker.execute(block)
+
     private const val UNFOLDED_STATE = "4"
     private const val SECURE_NON_MARKET = "install_non_market_apps"
     private const val A11Y = "enabled_accessibility_services"
@@ -30,6 +36,7 @@ object MirrorEnv {
 
     /** Blocking; call off the main thread. Returns the shell output, null if Shizuku isn't ready. */
     fun enter(ctx: Context): String? {
+        if (MirrorService.instance == null) return null // the session already ended
         val prefs = PhonePrefs(ctx)
         prefs.resetPending = true // until leave() finishes the job; if we die mid-session, recover() resets
         // A crashed earlier run may have left our zeros behind; its saved originals win.
@@ -47,6 +54,7 @@ object MirrorEnv {
      * Call only once the mirror view is up: launching it uses the service.
      */
     fun hideAccessibility(ctx: Context) {
+        if (MirrorService.instance == null) return // the session already ended; leave() has restored it
         val now = Settings.Secure.getString(ctx.contentResolver, A11Y)
         val me = me(ctx)
         if (me !in now.orEmpty().split(":")) return // wasn't on (banking mode may have it off)
@@ -59,7 +67,7 @@ object MirrorEnv {
     fun leave(ctx: Context) {
         val app = ctx.applicationContext
         PhonePrefs(app).resetPending = true
-        Thread { restoreSettings(app); restoreAccessibility(app) }.start()
+        later { restoreSettings(app); restoreAccessibility(app) }
         resetState(app, wake = true)
     }
 
@@ -67,7 +75,7 @@ object MirrorEnv {
     fun recover(app: Context) {
         val prefs = PhonePrefs(app)
         if (prefs.restoreSettings != null || prefs.restoreAccessibility) {
-            Thread { restoreSettings(app); restoreAccessibility(app) }.start()
+            later { restoreSettings(app); restoreAccessibility(app) }
         }
         if (prefs.resetPending) resetWhenAsleep(app)
     }
@@ -113,7 +121,7 @@ object MirrorEnv {
      */
     private fun resetState(app: Context, wake: Boolean) {
         val prefs = PhonePrefs(app)
-        Thread {
+        later {
             if (ShizukuShell.run(*foldStateArgs(prefs.keepCoverOn).toTypedArray())) {
                 prefs.resetPending = false
                 // The forced state leaves the cover rotated 180; put it back once things have settled.
@@ -122,6 +130,6 @@ object MirrorEnv {
                 if (wake) ShizukuShell.run("input", "keyevent", "KEYCODE_WAKEUP")
                 Handler(Looper.getMainLooper()).post { RotationFeature.resetToDefault(app) }
             }
-        }.start()
+        }
     }
 }
