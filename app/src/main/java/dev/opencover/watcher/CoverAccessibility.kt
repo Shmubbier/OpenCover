@@ -16,6 +16,7 @@ import dev.opencover.COVER_DISPLAY
 import dev.opencover.SAMSUNG_COVER_HOME
 import dev.opencover.apps.AppLauncher
 import dev.opencover.keyboard.KeyboardPrefs
+import dev.opencover.phone.Fold
 import dev.opencover.phone.PhonePrefs
 import dev.opencover.phone.RotationFeature
 import dev.opencover.keyboard.OverlayKeyboard
@@ -33,6 +34,8 @@ class CoverAccessibility : AccessibilityService() {
     override fun onServiceConnected() {
         instance = this
         refreshScope()
+        // The hold and its watcher do not survive a reboot. Only re-hold: a reset while awake locks the phone.
+        if (PhonePrefs(this).keepCoverOn) Fold.apply(this)
         if (PhonePrefs(this).rotationResetPending) RotationFeature.resetToDefault(this)
     }
 
