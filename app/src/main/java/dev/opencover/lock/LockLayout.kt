@@ -8,7 +8,7 @@ data class Spot(val x: Float, val y: Float, val on: Boolean)
 
 val DEFAULT_LAYOUT: Map<Module, Spot> = mapOf(
     Module.CLOCK to Spot(0.05f, 0.06f, true),
-    Module.DATE to Spot(0.05f, 0.30f, true),
+    Module.DATE to Spot(0.05f, 0.30f, false), // most clock styles already show the date
     Module.BATTERY to Spot(0.05f, 0.38f, true),
     Module.ICONS to Spot(0.05f, 0.46f, true),
     Module.NOW_PLAYING to Spot(0.03f, 0.82f, true),
