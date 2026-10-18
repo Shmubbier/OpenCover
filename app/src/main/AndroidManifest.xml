@@ -56,6 +56,18 @@
             android:exported="false"
             android:excludeFromRecents="true"
             android:windowSoftInputMode="adjustResize" />
+        <!-- Lock screen on the cover, over Samsung's keyguard. -->
+        <activity
+            android:name=".lock.LockActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:showWhenLocked="true"
+            android:taskAffinity=""
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density">
+            <meta-data android:name="com.samsung.android.multiwindow.show_on_cover" android:value="true" />
+        </activity>
         <!-- Mirroring: consent dialog, the mirror view on the cover, and the capture service. -->
         <activity
             android:name=".mirror.ConsentActivity"
