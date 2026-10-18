@@ -42,7 +42,7 @@ import dev.opencover.home.HomePrefs
 import dev.opencover.home.HomeWidget
 import dev.opencover.home.movedBy
 
-private val styleNames = mapOf(
+internal val styleNames = mapOf(
     ClockStyle.CURRENT to "Current", ClockStyle.BIG to "Big", ClockStyle.STACKED to "Stacked",
     ClockStyle.ANALOG to "Analog", ClockStyle.GLANCE to "At a Glance",
 )

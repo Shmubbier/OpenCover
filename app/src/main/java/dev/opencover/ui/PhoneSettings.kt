@@ -41,12 +41,12 @@ fun PhoneSettings(onBack: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Phone", color = Color.White, fontSize = 20.sp)
-        Setting(
+        SwitchRow(
             "Keep cover on when opened",
             if (ShizukuShell.allowed()) "Needs Shizuku. Stops the cover turning off when the phone opens." else "Start Shizuku to apply.",
             keep,
         ) { keep = it; prefs.keepCoverOn = it; Fold.apply(ctx) }
-        Setting(
+        SwitchRow(
             "Heat guard",
             "Only while the hotspot or mirroring is on. Warns at 42 °C, stops both at 45 °C.",
             heat,
@@ -56,7 +56,7 @@ fun PhoneSettings(onBack: () -> Unit) {
 }
 
 @Composable
-private fun Setting(title: String, note: String, on: Boolean, onChange: (Boolean) -> Unit) {
+internal fun SwitchRow(title: String, note: String, on: Boolean, onChange: (Boolean) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, color = Color.White)

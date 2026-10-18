@@ -21,7 +21,10 @@ import android.util.Log
 import android.view.Display
 import dev.opencover.COVER_DISPLAY
 import dev.opencover.apps.AppLauncher
+import dev.opencover.lock.LockScreen
+import dev.opencover.lock.openOnUnlock
 import dev.opencover.mirror.MirrorService
+import dev.opencover.notify.NotificationStore
 import dev.opencover.phone.HeatGuard
 import dev.opencover.ui.CoverActivity
 
@@ -47,9 +50,14 @@ class CoverWatcher : Service() {
             when (i.action) {
                 Intent.ACTION_USER_PRESENT -> {
                     BankingMode.resume(this@CoverWatcher) // backstop if usage access is missing
-                    if (coverActive()) openLauncher("unlock")
+                    // A notification tapped in peek opens on the cover; if it's gone, Home opens as usual.
+                    val pending = openOnUnlock(LockScreen.pendingOpen, coverActive() && MirrorService.instance == null)
+                    LockScreen.pendingOpen = null
+                    if (pending == null || !NotificationStore.open(this@CoverWatcher, pending)) {
+                        if (coverActive()) openLauncher("unlock", unlocked = true)
+                    }
                 }
-                Intent.ACTION_SCREEN_OFF -> paused = false
+                Intent.ACTION_SCREEN_OFF -> { paused = false; LockScreen.pendingOpen = null }
             }
             onCoverStateMaybeChanged()
         }
@@ -127,10 +135,11 @@ class CoverWatcher : Service() {
         wasActive = active
     }
 
-    private fun openLauncher(why: String) {
+    /** [unlocked]: straight from the lock screen; Home plays its own entrance instead of the system's app-open animation. */
+    private fun openLauncher(why: String, unlocked: Boolean = false) {
         if (MirrorService.instance != null) return // the forced unfolded state looks like a fold
         Log.i(TAG, "open launcher ($why)")
-        AppLauncher.start(this, Intent(this, CoverActivity::class.java))
+        AppLauncher.start(this, Intent(this, CoverActivity::class.java).putExtra(CoverActivity.EXTRA_UNLOCKED, unlocked), animate = !unlocked)
     }
 
     private fun notification(): Notification {

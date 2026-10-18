@@ -1,6 +1,7 @@
 package dev.opencover.ui
 
 import android.Manifest
+import android.app.KeyguardManager
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.LauncherApps
@@ -15,6 +16,14 @@ import android.view.WindowInsetsController
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import dev.opencover.lock.LockLayer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.getValue
@@ -22,7 +31,10 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import dev.opencover.home.HomePrefs
+import dev.opencover.lock.LockPrefs
+import dev.opencover.lock.aodReady
 import dev.opencover.phone.RotationFeature
 import dev.opencover.home.Weather
 import dev.opencover.COVER_DISPLAY
@@ -68,6 +80,20 @@ class CoverActivity : ComponentActivity() {
     private var showSetup by mutableStateOf(false)
     private var wallpaper by mutableStateOf<ImageBitmap?>(null)
     private var homeRequests by mutableIntStateOf(0)
+    /** Keyguard locked: only the lock layer is drawn (the activity shows over the keyguard while OpenCover's lock screen is on). */
+    private var locked by mutableStateOf(false)
+    // The locked-state listener is system-only; these broadcasts plus onResume cover every change.
+    private val lockEvents = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: android.content.Context, i: Intent) = refreshLocked()
+    }
+
+    fun refreshLocked() { locked = getSystemService(KeyguardManager::class.java).isKeyguardLocked }
+
+    /** Shows over the keyguard only while OpenCover's lock screen is switched on. */
+    fun applyLockScreen() = setShowWhenLocked(LockPrefs.lockScreen)
+
+    /** Bumped when Home comes up straight from the lock screen: plays [Entrance]. */
+    private var entrances by mutableIntStateOf(0)
     private var quickSettingsRequests by mutableIntStateOf(0)
 
     /** Called by the accessibility service after it closes Samsung's panel. */
@@ -93,6 +119,15 @@ class CoverActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (intent.getBooleanExtra(EXTRA_UNLOCKED, false)) entrances++
+        LockPrefs.load(this)
+        applyLockScreen()
+        refreshLocked()
+        registerReceiver(lockEvents, android.content.IntentFilter().apply {
+            addAction(Intent.ACTION_USER_PRESENT)
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+        }, RECEIVER_NOT_EXPORTED)
         // The main screen is broken: if we were opened anywhere else, move to the cover.
         if (display?.displayId != COVER_DISPLAY) {
             AppLauncher.start(this, Intent(this, CoverActivity::class.java))
@@ -144,26 +179,40 @@ class CoverActivity : ComponentActivity() {
             popups = { NotificationStore.popupsEnabled(this) },
             setPopups = { NotificationStore.setPopups(this, it) },
         )
-        HomePrefs.load(this); Weather.load(this)
+        HomePrefs.load(this)
+        LockPrefs.load(this); Weather.load(this)
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 resumeTick // re-read permissions every time we come back from Settings
                 val required = Permissions.required(this)
-                if (required && !showSetup) Shell(layout, apps, actions, prompt, wallpaper, homeRequests, quickSettingsRequests)
-                else Checklist(
-                    steps = setupSteps(),
-                    onAppInfo = { openSettings(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, withPackage = true) },
-                    onDone = if (required) ({ showSetup = false }) else null,
-                )
+                // Locked: nothing of Home is composed, only the lock layer; unlocking crossfades into Home.
+                Crossfade(locked, animationSpec = tween(260), label = "lock") { isLocked ->
+                    when {
+                        isLocked && LockPrefs.lockScreen -> LockLayer(this)
+                        isLocked -> Box(Modifier.fillMaxSize().background(Color.Black)) // not shown over the keyguard then
+                        required && !showSetup -> Entrance(entrances) { Shell(layout, apps, actions, prompt, wallpaper, homeRequests, quickSettingsRequests) }
+                        else -> Checklist(
+                            steps = setupSteps(),
+                            onAppInfo = { openSettings(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, withPackage = true) },
+                            onDone = if (required) ({ showSetup = false }) else null,
+                        )
+                    }
+                }
             }
         }
     }
 
-    private fun setupSteps() = listOf(
+    private fun setupSteps() = listOfNotNull(
         SetupStep("Accessibility (required)", "Brings OpenCover back when you swipe Home, and opens it on unlock",
             Permissions.accessibility(this)) { openSettings(Settings.ACTION_ACCESSIBILITY_SETTINGS) },
         SetupStep("Display over other apps (required)", "Keeps the cover screen awake when you ask",
             Permissions.overlay(this)) { openSettings(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, withPackage = true) },
+        if (!LockPrefs.aod) null else SetupStep("Samsung AOD set to Always (for OpenCover AOD)",
+            "Always On Display: Always, with tap to show off. OpenCover draws over it.", aodReady(this)) {
+            val tries = listOf("com.samsung.android.app.aodservice.settings.AODDisplayMode",
+                "com.samsung.android.app.aodservice.settings.AODSettingsMain", Settings.ACTION_DISPLAY_SETTINGS)
+            tries.firstOrNull { runCatching { AppLauncher.start(this, Intent(it)) }.isSuccess }
+        },
         SetupStep("Ignore battery optimization (recommended)", "Stops Android from putting OpenCover to sleep",
             Permissions.battery(this)) { openSettings(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, withPackage = true) },
         SetupStep("Usage access (optional)", "Sorts the app drawer by recently used",
@@ -212,6 +261,7 @@ class CoverActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        refreshLocked()
         if (ShizukuShell.allowed()) RotationFeature.upright(this) // shell call runs on its own thread
         current = this
         BankingMode.resume(this) // back in OpenCover, so any banking app was left
@@ -227,6 +277,7 @@ class CoverActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        runCatching { unregisterReceiver(lockEvents) }
         if (::repo.isInitialized) repo.unregister(appsCallback)
         super.onDestroy()
     }
@@ -247,6 +298,7 @@ class CoverActivity : ComponentActivity() {
     // Every launch through AppLauncher.start (Home gesture, unlock, fold) lands here: go to Home.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_UNLOCKED, false)) entrances++
         homeRequests++
     }
 
@@ -302,6 +354,7 @@ class CoverActivity : ComponentActivity() {
     }
 
     companion object {
+        const val EXTRA_UNLOCKED = "unlocked"
         /** The launcher while it's in front (resumed), else null. */
         var current: CoverActivity? = null
             private set
@@ -311,4 +364,20 @@ class CoverActivity : ComponentActivity() {
         private const val CELL_H_DP = 84
         private const val REQ_WALLPAPER = 21
     }
+}
+
+/** Home's own entrance after unlock (the system's app-open animation is off): a quick fade and settle. */
+@androidx.compose.runtime.Composable
+private fun Entrance(key: Int, content: @androidx.compose.runtime.Composable () -> Unit) {
+    val t = androidx.compose.runtime.remember { androidx.compose.animation.core.Animatable(1f) }
+    androidx.compose.runtime.LaunchedEffect(key) {
+        if (key == 0) return@LaunchedEffect
+        t.snapTo(0f)
+        t.animateTo(1f, androidx.compose.animation.core.tween(260, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+    }
+    androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.graphicsLayer {
+        alpha = t.value
+        scaleX = 0.96f + 0.04f * t.value
+        scaleY = scaleX
+    }) { content() }
 }

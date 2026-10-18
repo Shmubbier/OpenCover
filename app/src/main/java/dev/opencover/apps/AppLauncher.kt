@@ -15,9 +15,13 @@ object AppLauncher {
     fun options(): Bundle =
         ActivityOptions.makeBasic().setLaunchDisplayId(COVER_DISPLAY).toBundle()
 
-    /** Starts one of our own screens (or a Settings page) on the cover display. */
-    fun start(ctx: Context, intent: Intent) {
+    /**
+     * Starts one of our own screens (or a Settings page) on the cover display. [animate] false: no system transition
+     * (custom ones are ignored when we start from the background), the screen animates itself instead.
+     */
+    fun start(ctx: Context, intent: Intent, animate: Boolean = true) {
         // The accessibility service is exempt from the background-start block (the mirror view opens from a service).
+        if (!animate) intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
         (CoverAccessibility.instance ?: ctx).startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), options())
     }
 

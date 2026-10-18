@@ -114,7 +114,7 @@ private fun QuickSlot(q: QuickApp?, a: LauncherActions, onEdit: () -> Unit) {
 
 /** The current minute, ticking on the minute. */
 @Composable
-private fun rememberNow(): LocalDateTime {
+internal fun rememberNow(): LocalDateTime {
     var now by remember { mutableStateOf(LocalDateTime.now()) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -192,15 +192,15 @@ private fun ChipRow(chips: List<Chip>, center: Boolean = false) {
     }
 }
 
-/** The Home clock in [style], with its widgets. */
+/** The Home clock in [style], with its widgets unless [widgets] is false (the lock screen has its own modules). */
 @Composable
-fun ClockFace(style: ClockStyle, modifier: Modifier) {
+fun ClockFace(style: ClockStyle, modifier: Modifier, widgets: Boolean = true) {
     val ctx = LocalContext.current
     val now = rememberNow()
     val h24 = DateFormat.is24HourFormat(ctx)
     val time = now.format(DateTimeFormatter.ofPattern(if (h24) "HH:mm" else "h:mm"))
     val date = now.format(DateTimeFormatter.ofPattern("EEE, MMM d"))
-    val chips = rememberChips()
+    val chips = if (widgets) rememberChips() else emptyList()
     val all = chips.map { it.second }
     when (style) {
         ClockStyle.CURRENT -> Column(modifier) {

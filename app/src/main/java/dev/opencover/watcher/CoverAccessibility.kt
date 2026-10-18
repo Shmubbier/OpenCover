@@ -8,7 +8,10 @@ import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityWindowInfo
 import android.app.KeyguardManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.inputmethod.EditorInfo
@@ -16,6 +19,11 @@ import dev.opencover.COVER_DISPLAY
 import dev.opencover.SAMSUNG_COVER_HOME
 import dev.opencover.apps.AppLauncher
 import dev.opencover.keyboard.KeyboardPrefs
+import dev.opencover.lock.AodOverlay
+import dev.opencover.lock.LockScreen
+import dev.opencover.lock.LockPrefs
+import dev.opencover.lock.aodReady
+import dev.opencover.lock.dozing
 import dev.opencover.phone.Fold
 import dev.opencover.phone.PhonePrefs
 import dev.opencover.phone.RotationFeature
@@ -31,8 +39,31 @@ import dev.opencover.ui.CoverActivity
 class CoverAccessibility : AccessibilityService() {
     private var keyboard: OverlayKeyboard? = null
 
+    /** Doze start and stop: the AOD overlay comes and goes with them. */
+    private val dreams = object : BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) {
+            when (i.action) {
+                Intent.ACTION_DREAMING_STARTED -> if (LockPrefs.aod && aodReady(c)) AodOverlay.show(this@CoverAccessibility)
+                Intent.ACTION_DREAMING_STOPPED -> AodOverlay.hide()
+            }
+            // Woken (from doze or fully off): let the windows settle, then maybe replace Samsung's lock screen.
+            if (i.action != Intent.ACTION_DREAMING_STARTED) handler.postDelayed({ LockScreen.maybeShow(this@CoverAccessibility) }, 250)
+        }
+    }
+
     override fun onServiceConnected() {
         instance = this
+        LockPrefs.load(this)
+        registerReceiver(dreams, IntentFilter().apply {
+            addAction(Intent.ACTION_DREAMING_STARTED)
+            addAction(Intent.ACTION_DREAMING_STOPPED)
+            addAction(Intent.ACTION_SCREEN_ON)
+        }, RECEIVER_NOT_EXPORTED)
+        // Restarted while the phone sleeps (update, low memory): the doze began before we were listening.
+        val cover = getSystemService(android.hardware.display.DisplayManager::class.java).getDisplay(dev.opencover.COVER_DISPLAY)
+        if (LockPrefs.aod && aodReady(this) &&
+            dozing(getSystemService(android.os.PowerManager::class.java).isInteractive, cover?.state ?: android.view.Display.STATE_OFF)
+        ) AodOverlay.show(this)
         refreshScope()
         // The hold and its watcher do not survive a reboot. Only re-hold: a reset while awake locks the phone.
         if (PhonePrefs(this).keepCoverOn) Fold.apply(this)
@@ -40,6 +71,8 @@ class CoverAccessibility : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        runCatching { unregisterReceiver(dreams) }
+        AodOverlay.hide()
         keyboard?.hide()
         instance = null
         super.onDestroy()
@@ -61,7 +94,8 @@ class CoverAccessibility : AccessibilityService() {
             else (setOf("com.android.systemui") + BankingMode.apps(this@CoverAccessibility)).toTypedArray()
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
                 (if (topEdge) AccessibilityEvent.TYPE_WINDOWS_CHANGED else 0)
-            flags = (if (topEdge) flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+            // The window list: top-edge priority catches Samsung's panel; the lock screen checks nothing (a call, an alarm) is on top.
+            flags = (if (topEdge || LockPrefs.lockScreen) flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
             else flags and AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS.inv()).let {
                 if (typing) it or AccessibilityServiceInfo.FLAG_INPUT_METHOD_EDITOR else it and AccessibilityServiceInfo.FLAG_INPUT_METHOD_EDITOR.inv()
             }
@@ -120,7 +154,10 @@ class CoverAccessibility : AccessibilityService() {
         if (event.className?.toString() != SAMSUNG_COVER_HOME) return
         // Samsung's cover home also sits behind the lock screen; redirecting there fights the
         // PIN/face unlock UI (flicker). CoverWatcher opens the launcher on unlock instead.
-        if (getSystemService(KeyguardManager::class.java).isKeyguardLocked) return
+        if (getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
+            handler.postDelayed({ LockScreen.maybeShow(this) }, 250) // Home pressed on our lock screen
+            return
+        }
         Log.i(TAG, "open launcher (home)")
         AppLauncher.start(this, Intent(this, CoverActivity::class.java))
     }

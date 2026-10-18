@@ -122,5 +122,6 @@ fun StatusBarNotification.toNote(serial: Long, alerting: Boolean): Note {
             lastMessage.getParcelable("sender_person", Person::class.java) == null,
         chatTitle = if (lastMessage == null) null
         else (x.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE) ?: x.getCharSequence(Notification.EXTRA_TITLE))?.toString(),
+        lockVisibility = n.visibility,
     )
 }
