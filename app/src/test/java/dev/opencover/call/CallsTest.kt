@@ -37,4 +37,12 @@ class CallsTest {
         assertFalse(isMuted(m, "com.discord", "Sam", now = 2_000L))
         assertEquals(m, parseMuted(formatMuted(m)))
     }
+
+    // Samsung's phone app posts its call as "ongoing" with only Hang up, even while it rings: the ring state decides.
+    @Test fun ringingPhoneWinsOverOngoing() {
+        assertEquals(Phase.RINGING, livePhase(Phase.ONGOING, ringing = true))
+        assertEquals(Phase.ONGOING, livePhase(Phase.ONGOING, ringing = false))
+        assertEquals(Phase.RINGING, livePhase(Phase.RINGING, ringing = false))
+        assertNull(livePhase(null, ringing = true)) // not a call notification at all
+    }
 }

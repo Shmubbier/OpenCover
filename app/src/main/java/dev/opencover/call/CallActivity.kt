@@ -60,6 +60,8 @@ class CallActivity : ComponentActivity() {
         setContent {
             val call = CallStore.call
             LaunchedEffect(call == null) { if (call == null) finish() } // answered elsewhere, missed or ended
+            val ctx = LocalContext.current
+            LaunchedEffect(Unit) { while (true) { delay(1000); CallStore.refresh(ctx) } }
             BackHandler {} // a call screen isn't backed out of by accident
             Box(Modifier.fillMaxSize().background(Color(0xFF101114))) {
                 if (call != null) when (call.phase) {

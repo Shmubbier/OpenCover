@@ -12,6 +12,7 @@ import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
 import android.service.notification.StatusBarNotification
+import android.telecom.TelecomManager
 import android.view.Display
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,7 +43,12 @@ object CallStore {
         val n = sbn.notification
         val x = n.extras
         val titles = n.actions.orEmpty().map { it.title?.toString().orEmpty() }
-        val phase = callPhase(x.getInt(Notification.EXTRA_CALL_TYPE, 0), n.category, titles) ?: return
+        val ringing = ctx.getSystemService(AudioManager::class.java).mode == AudioManager.MODE_RINGTONE
+        val phase = livePhase(callPhase(x.getInt(Notification.EXTRA_CALL_TYPE, 0), n.category, titles), ringing)
+        if (n.category == Notification.CATEGORY_CALL || phase != null) android.util.Log.d(
+            "CallStore", "${sbn.packageName} category=${n.category} type=${x.getInt(Notification.EXTRA_CALL_TYPE, 0)} buttons=$titles -> $phase",
+        )
+        if (phase == null) return
         val person = x.getParcelable(Notification.EXTRA_CALL_PERSON, Person::class.java)
         val caller = person?.name?.toString() ?: x.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
         val now = System.currentTimeMillis()
@@ -52,7 +58,7 @@ object CallStore {
         }
         fun action(role: Role) = actionIndex(titles, role).takeIf { it >= 0 }?.let { n.actions[it].actionIntent }
         val avatar = (person?.icon ?: n.getLargeIcon())?.let { icon(ctx, it) }
-        val wasRinging = call?.let { it.key == sbn.key && it.phase == Phase.RINGING } == true
+        val before = call?.takeIf { it.key == sbn.key }?.phase
         call = Call(
             sbn.key, sbn.packageName, caller, avatar, phase,
             since = if (n.extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER)) n.`when` else sbn.postTime,
@@ -61,11 +67,23 @@ object CallStore {
             hangUp = x.getParcelable(Notification.EXTRA_HANG_UP_INTENT, PendingIntent::class.java) ?: action(Role.HANG_UP)
                 ?: action(Role.DECLINE),
         )
-        if (phase == Phase.RINGING && !wasRinging && coverInUse(ctx)) show(ctx)
+        // A new call, or one that just connected: the cover call screen, on top of the app's own if that opened first.
+        if (before != phase) { raises = 0; if (coverInUse(ctx)) show(ctx) }
     }
 
+    /** Calls' own screens open on top of ours (Messenger's pop-up, Samsung's call screen): bring ours back, a few times. */
+    private var raises = 0
+
+    fun otherWindow(ctx: Context, pkg: String) {
+        val c = call ?: return
+        if (pkg == ctx.packageName || raises >= 3) return
+        if (pkg == c.pkg || pkg in CALL_SCREENS) { raises++; show(ctx) }
+    }
+
+    private val CALL_SCREENS = setOf("com.samsung.android.incallui", "com.android.server.telecom", "com.android.dialer")
+
     fun removed(ctx: Context, key: String) {
-        if (call?.key == key) call = null
+        if (call?.key == key) { call = null; raises = 0 }
         if (ringMutedFor == key) unmuteRing(ctx)
     }
 
@@ -77,7 +95,8 @@ object CallStore {
     fun answer(ctx: Context, muted: Boolean) {
         val c = call ?: return
         if (c.key == "demo") { call = c.copy(phase = Phase.ONGOING, since = System.currentTimeMillis()); return }
-        send(c.answer)
+        // Samsung's phone app gives no Answer button: answer through Telecom (needs "Answer phone calls").
+        if (c.answer != null) send(c.answer) else runCatching { ctx.getSystemService(TelecomManager::class.java).acceptRingingCall() }
         // The app opens the microphone as it connects; mute just after.
         if (muted) handler.postDelayed({ setMicMuted(ctx, true) }, 1500)
     }
@@ -87,12 +106,20 @@ object CallStore {
         if (muteFor30) prefs(ctx).edit()
             .putString("muted", formatMuted(mutePerson(parseMuted(prefs(ctx).getString("muted", null)), c.pkg, c.caller, System.currentTimeMillis())))
             .apply()
-        if (c.key == "demo") call = null else send(c.decline)
+        if (c.key == "demo") call = null else send(c.decline ?: c.hangUp)
     }
 
     fun hangUp() {
         val c = call ?: return
         if (c.key == "demo") call = null else send(c.hangUp)
+    }
+
+    /** Called every second by the call screen: the phone stopped ringing (answered here or elsewhere) without the app saying so. */
+    fun refresh(ctx: Context) {
+        val c = call ?: return
+        if (c.phase == Phase.RINGING && c.key != "demo" &&
+            ctx.getSystemService(AudioManager::class.java).mode != AudioManager.MODE_RINGTONE
+        ) call = c.copy(phase = Phase.ONGOING, since = System.currentTimeMillis())
     }
 
     fun micMuted(ctx: Context) = ctx.getSystemService(AudioManager::class.java).isMicrophoneMute

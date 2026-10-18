@@ -25,6 +25,9 @@ fun callPhase(callType: Int, category: String?, actions: List<String>): Phase? =
     else -> null
 }
 
+/** A call notification's phase now: while the phone rings it is ringing, whatever the app's notification says. */
+fun livePhase(posted: Phase?, ringing: Boolean): Phase? = if (posted != null && ringing) Phase.RINGING else posted
+
 /** The notification button for [role], matched by its title, or -1. */
 fun actionIndex(titles: List<String>, role: Role): Int =
     titles.indexOfFirst { t -> role.words.any { t.trim().lowercase().startsWith(it) } }
