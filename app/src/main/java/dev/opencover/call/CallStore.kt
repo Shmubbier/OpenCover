@@ -1,5 +1,6 @@
 package dev.opencover.call
 
+import android.app.ActivityOptions
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Person
@@ -107,7 +108,7 @@ object CallStore {
         val c = call ?: return
         if (c.key == "demo") { call = c.copy(phase = Phase.ONGOING, since = System.currentTimeMillis()); return }
         // Samsung's phone app gives no Answer button: answer through Telecom (needs "Answer phone calls").
-        if (c.answer != null) send(c.answer) else runCatching { ctx.getSystemService(TelecomManager::class.java).acceptRingingCall() }
+        if (c.answer != null) send(ctx, c.answer) else runCatching { ctx.getSystemService(TelecomManager::class.java).acceptRingingCall() }
         // The app opens the microphone as it connects; mute just after.
         if (muted) handler.postDelayed({ setMicMuted(ctx, true) }, 1500)
     }
@@ -117,12 +118,12 @@ object CallStore {
         if (muteFor30) prefs(ctx).edit()
             .putString("muted", formatMuted(mutePerson(parseMuted(prefs(ctx).getString("muted", null)), c.pkg, c.caller, System.currentTimeMillis())))
             .apply()
-        if (c.key == "demo") call = null else send(c.decline ?: c.hangUp)
+        if (c.key == "demo") call = null else send(ctx, c.decline ?: c.hangUp)
     }
 
-    fun hangUp() {
+    fun hangUp(ctx: Context) {
         val c = call ?: return
-        if (c.key == "demo") call = null else send(c.hangUp)
+        if (c.key == "demo") call = null else send(ctx, c.hangUp)
     }
 
     /**
@@ -149,7 +150,16 @@ object CallStore {
     fun micMuted(ctx: Context) = ctx.getSystemService(AudioManager::class.java).isMicrophoneMute
     fun setMicMuted(ctx: Context, on: Boolean) { runCatching { ctx.getSystemService(AudioManager::class.java).isMicrophoneMute = on } }
 
-    private fun send(pi: PendingIntent?) { runCatching { pi?.send() } }
+    /**
+     * Sends an app's call button. Answer usually opens the app's call screen: Android only lets that start when the
+     * sender is in front and says so, so it carries our permission (the call screen is in front) and the cover display.
+     */
+    private fun send(ctx: Context, pi: PendingIntent?) {
+        pi ?: return
+        val opts = ActivityOptions.makeBasic().setLaunchDisplayId(COVER_DISPLAY)
+            .setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS)
+        runCatching { pi.send(ctx, 0, null, null, null, null, opts.toBundle()) }.onFailure { runCatching { pi.send() } }
+    }
 
     private fun icon(ctx: Context, icon: Icon): Bitmap? = runCatching { icon.loadDrawable(ctx)?.toBitmap(160, 160) }.getOrNull()
 

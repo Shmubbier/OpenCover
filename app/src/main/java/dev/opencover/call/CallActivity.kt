@@ -143,7 +143,7 @@ private fun InCall(call: Call) {
         Row(horizontalArrangement = Arrangement.spacedBy(64.dp)) {
             Round(if (muted) Icons.Filled.MicOff else Icons.Filled.Mic, if (muted) Color(0xFF8AB4F8) else Color(0xFF2A2C33),
                 if (muted) "Unmute" else "Mute") { muted = !muted; CallStore.setMicMuted(ctx, muted) }
-            Round(Icons.Filled.CallEnd, Red, "Hang up") { CallStore.hangUp() }
+            Round(Icons.Filled.CallEnd, Red, "Hang up") { CallStore.hangUp(ctx) }
         }
     }
 }
