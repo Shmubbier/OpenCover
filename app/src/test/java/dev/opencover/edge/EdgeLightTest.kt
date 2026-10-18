@@ -7,10 +7,13 @@ import org.junit.Test
 class EdgeLightTest {
     private fun action(
         enabled: Boolean = true, wake: Boolean = true, coverOn: Boolean = true,
-        innerOn: Boolean = false, inCall: Boolean = false, canWake: Boolean = true,
-    ) = edgeAction(enabled, wake, coverOn, innerOn, inCall, canWake)
+        innerOn: Boolean = false, inCall: Boolean = false, canWake: Boolean = true, unlocked: Boolean = false,
+    ) = edgeAction(enabled, wake, coverOn, innerOn, inCall, canWake, unlocked)
 
-    @Test fun glowsWhenTheCoverIsOn() = assertEquals(Edge.GLOW, action())
+    @Test fun glowsOnTheLockScreen() = assertEquals(Edge.GLOW, action())
+
+    // In use (cover on and unlocked): the banner is enough, no glow.
+    @Test fun quietWhileInUse() = assertEquals(Edge.NONE, action(unlocked = true))
 
     // Screen off or on the AOD: wake, glow, sleep again (needs Shizuku to wake and sleep the cover).
     @Test fun wakesWhenTheCoverIsOff() {

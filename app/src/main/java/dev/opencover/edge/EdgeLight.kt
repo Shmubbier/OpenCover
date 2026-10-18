@@ -29,10 +29,15 @@ import kotlin.math.sin
 
 enum class Edge { NONE, GLOW, WAKE_GLOW_SLEEP }
 
-/** What a new notification does: glow on the lit cover, or wake it, glow and sleep again; nothing while open or in a call. */
-fun edgeAction(enabled: Boolean, wake: Boolean, coverOn: Boolean, innerOn: Boolean, inCall: Boolean, canWake: Boolean): Edge = when {
+/**
+ * What a new notification does: glow on the lock screen, or wake the cover, glow and sleep again; nothing while the
+ * phone is in use (cover on and unlocked), open, or in a call.
+ */
+fun edgeAction(
+    enabled: Boolean, wake: Boolean, coverOn: Boolean, innerOn: Boolean, inCall: Boolean, canWake: Boolean, unlocked: Boolean,
+): Edge = when {
     !enabled || innerOn || inCall -> Edge.NONE
-    coverOn -> Edge.GLOW
+    coverOn -> if (unlocked) Edge.NONE else Edge.GLOW
     wake && canWake -> Edge.WAKE_GLOW_SLEEP
     else -> Edge.NONE
 }
@@ -89,6 +94,7 @@ object EdgeLight {
             innerOn = displays.getDisplay(Display.DEFAULT_DISPLAY)?.state == Display.STATE_ON,
             inCall = audio == AudioManager.MODE_RINGTONE || audio == AudioManager.MODE_IN_CALL || audio == AudioManager.MODE_IN_COMMUNICATION,
             canWake = ShizukuShell.allowed(),
+            unlocked = !ctx.getSystemService(KeyguardManager::class.java).isKeyguardLocked,
         )
         val color = glowColor(pkg, EdgePrefs.perApp(ctx), EdgePrefs.custom(ctx)) { appColor(ctx, pkg) }
         when (action) {
