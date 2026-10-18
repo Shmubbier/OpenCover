@@ -76,7 +76,7 @@ clock face, edge lighting, VoIP, AOD.
 3. Quick toggles: swipe down on Home. Over other apps, a thin pull-down strip just below the status bar. OpenCover hides the status bar so Samsung's panel only peeks.
 4. Keyboard: OpenCover overlay keyboard (Samsung forces its own keyboard app on the cover). 4a QWERTY, suggestions, swipe typing. 4b T9. 4c emoji and voice key.
 5. Home clock styles and widgets (battery, alarm, weather). Edge lighting moved to 12.
-6. VoIP caller ID (on hold). Decided: one cover call screen for every app; Answer, Decline, Answer muted (mic off), Decline and mute that person for 30 min; a small in-call screen (caller, timer, Mute, Hang up) on the cover. Today phone and Discord calls don't reach the cover; Messenger does.
+6. VoIP caller ID (done). Decided: one cover call screen for every app; Answer, Decline, Answer muted (mic off), Decline and mute that person for 30 min; a small in-call screen (caller, timer, Mute, Hang up) on the cover. Today phone and Discord calls don't reach the cover; Messenger does.
 7. Rotation: done (FreeFlip port). Per-app manual rotation; this phone has no accelerometer.
 8. AOD and lock screen: done.
 9. Cover screen while open: done (FreeFlip port, keep cover on).
