@@ -29,6 +29,9 @@ data class Call(
     val answer: PendingIntent?, val decline: PendingIntent?, val hangUp: PendingIntent?,
     /** What the app's notification says, before the phone's ring state is applied. */
     val posted: Phase = phase,
+    val video: Boolean = false,
+    /** The app's own Mute button, if its call notification has one. */
+    val mute: PendingIntent? = null,
 )
 
 /**
@@ -38,6 +41,13 @@ data class Call(
 object CallStore {
     var call by mutableStateOf<Call?>(null)
         private set
+    /**
+     * The app of an answered internet call: its own call screen takes over and ours steps aside until a new call rings.
+     * By app, not notification: Messenger posts the connected call under a new notification.
+     */
+    var handedOff by mutableStateOf<String?>(null)
+        private set
+    private var muteOnConnect: String? = null // "Answer muted": the app whose Mute to press once the call is up
     private val handler = Handler(Looper.getMainLooper())
     private var ringMutedFor: String? = null // the silenced call's key
 
@@ -71,7 +81,13 @@ object CallStore {
             decline = x.getParcelable(Notification.EXTRA_DECLINE_INTENT, PendingIntent::class.java) ?: action(Role.DECLINE),
             hangUp = x.getParcelable(Notification.EXTRA_HANG_UP_INTENT, PendingIntent::class.java) ?: action(Role.HANG_UP)
                 ?: action(Role.DECLINE),
+            video = x.getBoolean("android.callIsVideo"),
+            mute = action(Role.MUTE),
         )
+        val muteButton = call?.mute
+        if (phase == Phase.ONGOING && muteOnConnect == sbn.packageName && muteButton != null) { muteOnConnect = null; send(ctx, muteButton) }
+        if (phase == Phase.RINGING) handedOff = null // a new call rings: ours again
+        if (handedOff == sbn.packageName) return
         // A new call, or one that just connected: the cover call screen, on top of the app's own if that opened first.
         if (before != phase) { raises = 0; if (coverInUse(ctx)) show(ctx) }
     }
@@ -81,7 +97,7 @@ object CallStore {
 
     fun otherWindow(ctx: Context, pkg: String) {
         val c = call ?: return
-        if (pkg == ctx.packageName || raises >= 10) return
+        if (pkg == ctx.packageName || raises >= 10 || handedOff == c.pkg) return
         if (pkg != c.pkg && pkg !in CALL_SCREENS) return
         // Apps re-open their own call screen several times in a row (Messenger: five in a second); come back once they stop.
         handler.removeCallbacks(raise)
@@ -107,10 +123,15 @@ object CallStore {
     fun answer(ctx: Context, muted: Boolean) {
         val c = call ?: return
         if (c.key == "demo") { call = c.copy(phase = Phase.ONGOING, since = System.currentTimeMillis()); return }
+        if (handsOverOnAnswer(c.pkg)) handedOff = c.pkg
         // Samsung's phone app gives no Answer button: answer through Telecom (needs "Answer phone calls").
         if (c.answer != null) send(ctx, c.answer) else runCatching { ctx.getSystemService(TelecomManager::class.java).acceptRingingCall() }
-        // The app opens the microphone as it connects; mute just after.
-        if (muted) handler.postDelayed({ setMicMuted(ctx, true) }, 1500)
+        // Internet call apps keep their own microphone: press their Mute once the call is up, else mute the phone's.
+        if (muted) {
+            muteOnConnect = c.pkg
+            handler.postDelayed({ if (muteOnConnect == c.pkg) { muteOnConnect = null; setMicMuted(ctx, true) } }, 4000)
+            if (!handsOverOnAnswer(c.pkg)) handler.postDelayed({ setMicMuted(ctx, true) }, 1500)
+        }
     }
 
     fun decline(ctx: Context, muteFor30: Boolean) {

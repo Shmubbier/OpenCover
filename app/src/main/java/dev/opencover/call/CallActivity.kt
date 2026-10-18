@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -59,7 +60,9 @@ class CallActivity : ComponentActivity() {
         setTurnScreenOn(true)
         setContent {
             val call = CallStore.call
-            LaunchedEffect(call == null) { if (call == null) finish() } // answered elsewhere, missed or ended
+            // Answered elsewhere, missed or ended; or answered here and handed over to the app's own call screen.
+            val gone = call == null || CallStore.handedOff == call.pkg
+            LaunchedEffect(gone) { if (gone) finish() }
             val ctx = LocalContext.current
             LaunchedEffect(Unit) { while (true) { delay(1000); CallStore.refresh(ctx) } }
             BackHandler {} // a call screen isn't backed out of by accident
@@ -116,11 +119,11 @@ private fun Ringing(call: Call) {
     val ctx = LocalContext.current
     Column(Modifier.fillMaxSize().padding(top = 16.dp, bottom = 40.dp), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween) {
-        Caller(call, "Incoming call")
+        Caller(call, if (call.video) "Incoming video call" else "Incoming call")
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(64.dp)) {
                 Round(Icons.Filled.CallEnd, Red, "Decline") { CallStore.decline(ctx, muteFor30 = false) }
-                Round(Icons.Filled.Call, Green, "Answer") { CallStore.answer(ctx, muted = false) }
+                Round(if (call.video) Icons.Filled.Videocam else Icons.Filled.Call, Green, "Answer") { CallStore.answer(ctx, muted = false) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Small("Decline, mute 30 min") { CallStore.decline(ctx, muteFor30 = true) }

@@ -6,7 +6,13 @@ enum class Role(vararg val words: String) {
     ANSWER("answer", "accept", "pick up"),
     DECLINE("decline", "reject", "dismiss", "ignore"),
     HANG_UP("hang up", "end call", "end", "leave", "disconnect"),
+    MUTE("mute"), // not "unmute": that one means it is already muted
 }
+
+private val PHONE_APPS = setOf("com.samsung.android.incallui", "com.android.dialer", "com.samsung.android.dialer", "com.android.server.telecom")
+
+/** Internet calls continue in the app's own call screen once answered; phone calls keep the cover call screen. */
+fun handsOverOnAnswer(pkg: String): Boolean = pkg !in PHONE_APPS
 
 private const val CALL_TYPE_INCOMING = 1 // Notification.CallStyle
 private const val CALL_TYPE_ONGOING = 2

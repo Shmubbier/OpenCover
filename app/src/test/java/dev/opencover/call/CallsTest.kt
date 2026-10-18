@@ -45,4 +45,16 @@ class CallsTest {
         assertEquals(Phase.RINGING, livePhase(Phase.RINGING, ringing = false))
         assertNull(livePhase(null, ringing = true)) // not a call notification at all
     }
+
+    // "Answer muted" presses the app's own Mute once the call is up (its microphone isn't the phone's to mute).
+    @Test fun muteButtonByName() {
+        assertEquals(1, actionIndex(listOf("End call", "Mute"), Role.MUTE))
+        assertEquals(-1, actionIndex(listOf("Unmute", "End call"), Role.MUTE)) // already muted
+    }
+
+    // Internet calls hand over to the app's own call screen once answered; phone calls keep the cover call screen.
+    @Test fun handOverAfterAnswerExceptPhone() {
+        assertTrue(handsOverOnAnswer("com.facebook.orca"))
+        assertFalse(handsOverOnAnswer("com.samsung.android.incallui"))
+    }
 }
