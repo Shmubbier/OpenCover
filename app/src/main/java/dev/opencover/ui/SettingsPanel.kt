@@ -26,7 +26,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.opencover.keyboard.KeyboardPrefs
 import dev.opencover.media.MediaPrefs
-import dev.opencover.edge.EdgePrefs
 import dev.opencover.nav.NavPrefs
 import dev.opencover.nav.NavStyle
 import androidx.compose.material3.FilterChip
@@ -52,6 +51,11 @@ fun SettingsPanel(
     var homeSettings by remember { mutableStateOf(false) }
     var phoneSettings by remember { mutableStateOf(false) }
     var lockSettings by remember { mutableStateOf(false) }
+    var edgeSettings by remember { mutableStateOf(false) }
+    if (edgeSettings) {
+        EdgeSettings(onBack = { edgeSettings = false })
+        return
+    }
     if (lockSettings) {
         LockSettings(onBack = { lockSettings = false })
         return
@@ -95,24 +99,6 @@ fun SettingsPanel(
                 CoverAccessibility.instance?.apply { refreshScope(); updateNavBar() }
             })
         }
-        var edge by remember { mutableStateOf(EdgePrefs.enabled(ctx)) }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Edge lighting", color = Color.White)
-                Text("The edges glow in the app's colour for new notifications.", color = Color.Gray, fontSize = 11.sp)
-            }
-            Switch(checked = edge, onCheckedChange = { edge = it; EdgePrefs.setEnabled(ctx, it) })
-        }
-        if (edge) {
-            var wake by remember { mutableStateOf(EdgePrefs.wake(ctx)) }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Wake the screen", color = Color.White)
-                    Text("With the screen off or on the AOD: wake, glow, sleep again. Needs Shizuku.", color = Color.Gray, fontSize = 11.sp)
-                }
-                Switch(checked = wake, onCheckedChange = { wake = it; EdgePrefs.setWake(ctx, it) })
-            }
-        }
         if (nav) {
             var style by remember { mutableStateOf(NavPrefs.style(ctx)) }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -147,6 +133,7 @@ fun SettingsPanel(
         Button(onClick = { homeSettings = true }) { Text("Home") }
         Button(onClick = { phoneSettings = true }) { Text("Phone") }
         Button(onClick = { lockSettings = true }) { Text("Lock screen") }
+        Button(onClick = { edgeSettings = true }) { Text("Edge lighting") }
         Button(onClick = onSamsungWidgets) { Text("Open Samsung widgets") }
         Button(onClick = onSetup) { Text("Setup & permissions") }
         Button(onClick = onWallpaper) { Text("Set wallpaper") }

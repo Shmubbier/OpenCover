@@ -59,6 +59,11 @@ object EdgePrefs {
     fun setEnabled(ctx: Context, on: Boolean) = prefs(ctx).edit().putBoolean("enabled", on).apply()
     fun wake(ctx: Context) = prefs(ctx).getBoolean("wake", true)
     fun setWake(ctx: Context, on: Boolean) = prefs(ctx).edit().putBoolean("wake", on).apply()
+    /** One glow colour for every app, or null for each app's own icon colour. */
+    fun custom(ctx: Context): Int? = prefs(ctx).getString("custom", null)?.let(::parseHex)
+    fun setCustom(ctx: Context, c: Int?) = prefs(ctx).edit().putString("custom", c?.let(::formatHex)).apply()
+    fun perApp(ctx: Context): Map<String, Int> = parsePerApp(prefs(ctx).getString("per_app", null))
+    fun setPerApp(ctx: Context, m: Map<String, Int>) = prefs(ctx).edit().putString("per_app", formatPerApp(m)).apply()
 }
 
 /**
@@ -85,7 +90,7 @@ object EdgeLight {
             inCall = audio == AudioManager.MODE_RINGTONE || audio == AudioManager.MODE_IN_CALL || audio == AudioManager.MODE_IN_COMMUNICATION,
             canWake = ShizukuShell.allowed(),
         )
-        val color = appColor(ctx, pkg)
+        val color = glowColor(pkg, EdgePrefs.perApp(ctx), EdgePrefs.custom(ctx)) { appColor(ctx, pkg) }
         when (action) {
             Edge.NONE -> {}
             Edge.GLOW -> glow(service, color, sleepAfter = false)
@@ -95,7 +100,10 @@ object EdgeLight {
         }
     }
 
-    private fun appColor(ctx: Context, pkg: String): Int = runCatching {
+    /** Settings: shows a glow in [color] on the cover now. */
+    fun preview(color: Int) { CoverAccessibility.instance?.let { glow(it, color, sleepAfter = false) } }
+
+    fun appColor(ctx: Context, pkg: String): Int = runCatching {
         val bmp = ctx.packageManager.getApplicationIcon(pkg).toBitmap(24, 24)
         val avg = IntArray(24 * 24).also { bmp.getPixels(it, 0, 24, 0, 0, 24, 24) }.let { averageColor(it, BLUE) }
         // An average drifts towards grey: keep the hue, make it vivid and bright.
