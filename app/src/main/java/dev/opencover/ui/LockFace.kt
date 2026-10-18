@@ -60,7 +60,7 @@ import dev.opencover.lock.LockPrefs
 import dev.opencover.lock.Module
 import dev.opencover.lock.Privacy
 import dev.opencover.lock.Spot
-import dev.opencover.lock.clamp
+import dev.opencover.lock.dropped
 import dev.opencover.lock.iconApps
 import dev.opencover.lock.privacy
 import dev.opencover.media.MediaHub
@@ -107,7 +107,8 @@ fun LockFace(
                 detectDragGestures(
                     onDragEnd = {
                         val s = sizes[module] ?: IntSize.Zero
-                        onMove(module, clamp(spot.copy(x = x / wPx, y = y / hPx), s.width / wPx, s.height / hPx))
+                        // From the live drag, not x/y: those were captured when the gesture started.
+                        onMove(module, dropped(spot, drag.x, drag.y, wPx, hPx, s.width / wPx, s.height / hPx))
                         drag = androidx.compose.ui.geometry.Offset.Zero
                     },
                 ) { change, amount -> change.consume(); drag += amount }

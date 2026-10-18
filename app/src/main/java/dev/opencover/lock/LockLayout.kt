@@ -41,3 +41,7 @@ fun clamp(s: Spot, w: Float, h: Float): Spot {
     if (x + w > CUT_X && y + h > CUT_Y) y = (CUT_Y - h).coerceAtLeast(0f)
     return s.copy(x = x, y = y)
 }
+
+/** Where a module at [s] lands after a drag of [dx],[dy] px on a [wPx]x[hPx] cover; [w],[h] are its size as fractions. */
+fun dropped(s: Spot, dx: Float, dy: Float, wPx: Float, hPx: Float, w: Float, h: Float): Spot =
+    clamp(s.copy(x = s.x + dx / wPx, y = s.y + dy / hPx), w, h)

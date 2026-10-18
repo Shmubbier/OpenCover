@@ -30,4 +30,11 @@ class LockLayoutTest {
     }
 
     @Test fun leftOfCutoutMayGoLow() = assertEquals(0.9f, clamp(Spot(0.05f, 0.9f, true), 0.3f, 0.1f).y, 1e-4f)
+
+    // A drag of 374 px right and 72 px down on the 748x720 cover moves the module by half the width and a tenth of the height.
+    @Test fun dropMovesByTheDrag() {
+        val s = dropped(Spot(0.1f, 0.1f, true), dx = 374f, dy = 72f, wPx = 748f, hPx = 720f, w = 0.1f, h = 0.1f)
+        assertEquals(0.6f, s.x, 1e-4f)
+        assertEquals(0.2f, s.y, 1e-4f)
+    }
 }
