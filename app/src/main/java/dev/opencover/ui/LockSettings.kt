@@ -53,7 +53,7 @@ fun LockSettings(onBack: () -> Unit) {
             if (aodReady(ctx)) "Shown while the phone sleeps." else "Needs Samsung's Always On Display set to Always, tap to show off. See Setup.",
             LockPrefs.aod) { LockPrefs.setAod(ctx, it) }
         SwitchRow("OpenCover lock screen", "Swipe up for Samsung's PIN. Samsung's quick panel still pulls down.",
-            LockPrefs.lockScreen) { LockPrefs.setLockScreen(ctx, it); CoverAccessibility.instance?.refreshScope() }
+            LockPrefs.lockScreen) { LockPrefs.setLockScreen(ctx, it); CoverAccessibility.instance?.refreshScope(); CoverActivity.current?.applyLockScreen() }
         Text("Clock style", color = Color.Gray, fontSize = 13.sp)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ClockStyle.entries.forEach { s ->

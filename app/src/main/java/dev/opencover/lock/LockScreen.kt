@@ -47,6 +47,7 @@ import dev.opencover.notify.NotificationStore
 import dev.opencover.notify.shouldShow
 import dev.opencover.ui.LockFace
 import dev.opencover.ui.lockPrivacy
+import dev.opencover.ui.CoverActivity
 import dev.opencover.watcher.CoverAccessibility
 
 /** Show OpenCover's lock screen only when enabled, locked, the cover is on, and nothing but the keyguard is on top. */
@@ -60,96 +61,73 @@ fun topPackage(rootPkg: String?, title: String?, systemUiLabel: String): String?
 /** The notification tapped in peek to open after unlock: only when unlocking on the cover. */
 fun openOnUnlock(pending: String?, coverActive: Boolean): String? = pending?.takeIf { coverActive }
 
-/** OpenCover's lock screen on the cover: shown over Samsung's keyguard; swipe up hands off to Samsung's PIN. */
-class LockActivity : ComponentActivity() {
-    private val unlocked = object : BroadcastReceiver() {
-        override fun onReceive(c: Context, i: Intent) = finish()
+/**
+ * OpenCover's lock screen: a layer of the launcher (CoverActivity shows over Samsung's keyguard), so unlocking just
+ * fades the layer away into Home with no app switch. Swipe up hands off to Samsung's PIN.
+ */
+@androidx.compose.runtime.Composable
+fun LockLayer(activity: android.app.Activity) {
+    var peek by remember { mutableStateOf(false) }
+    var dragged by remember { mutableStateOf(0f) }
+    fun unlock() {
+        activity.getSystemService(KeyguardManager::class.java).requestDismissKeyguard(activity, object : KeyguardManager.KeyguardDismissCallback() {
+            override fun onDismissSucceeded() { (activity as? CoverActivity)?.refreshLocked() }
+            override fun onDismissCancelled() { LockScreen.pendingOpen = null }
+            override fun onDismissError() { LockScreen.pendingOpen = null }
+        })
     }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setShowWhenLocked(true)
-        overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
-        registerReceiver(unlocked, IntentFilter(Intent.ACTION_USER_PRESENT), RECEIVER_NOT_EXPORTED)
-        setContent {
-            var peek by remember { mutableStateOf(false) }
-            var dragged = 0f
-            BackHandler { peek = false }
-            Box(
-                Modifier.fillMaxSize().pointerInput(Unit) {
-                    detectVerticalDragGestures(
-                        onDragStart = { dragged = 0f },
-                        onDragEnd = { if (dragged < -150f) unlock() },
-                    ) { _, dy -> dragged += dy }
-                },
-            ) {
-                LockFace(LockPrefs.layout, dim = false, locked = true, onPeek = { peek = true })
-                if (peek) Peek(onOpen = { key -> pendingOpen = key; unlock() }, onClose = { peek = false })
-            }
-        }
-        // No navigation bar on the lock screen; a swipe from the bottom edge still shows it for a moment.
-        window.insetsController?.apply {
+    BackHandler { peek = false } // nothing behind the lock screen to go back to
+    // No navigation bar while locked; a swipe from the bottom edge still shows it for a moment.
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        activity.window.insetsController?.apply {
             hide(WindowInsets.Type.navigationBars())
             systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
+        onDispose { activity.window.insetsController?.show(WindowInsets.Type.navigationBars()) }
     }
-
-    // Unlocked meanwhile (fingerprint during the wake): nothing to cover.
-    override fun onResume() {
-        super.onResume()
-        if (!getSystemService(KeyguardManager::class.java).isKeyguardLocked) finish()
+    Box(
+        Modifier.fillMaxSize().pointerInput(Unit) {
+            detectVerticalDragGestures(
+                onDragStart = { dragged = 0f },
+                onDragEnd = { if (dragged < -150f) unlock() },
+            ) { _, dy -> dragged += dy }
+        },
+    ) {
+        LockFace(LockPrefs.layout, dim = false, locked = true, onPeek = { peek = true })
+        if (peek) Peek(onOpen = { key -> LockScreen.pendingOpen = key; unlock() }, onClose = { peek = false })
     }
+}
 
-    override fun onDestroy() {
-        runCatching { unregisterReceiver(unlocked) }
-        super.onDestroy()
-    }
+object LockScreen {
+    /** A notification tapped in peek, opened on the cover once the user has unlocked. */
+    @Volatile var pendingOpen: String? = null
 
-    private fun unlock() {
-        getSystemService(KeyguardManager::class.java).requestDismissKeyguard(this, object : KeyguardManager.KeyguardDismissCallback() {
-            override fun onDismissSucceeded() = finish()
-            override fun onDismissCancelled() = gaveUp()
-            override fun onDismissError() = gaveUp()
-        })
-    }
-
-    /** PIN cancelled or no keyguard left: forget the peek tap; leave if already unlocked. */
-    private fun gaveUp() {
-        pendingOpen = null
-        if (!getSystemService(KeyguardManager::class.java).isKeyguardLocked) finish()
-    }
-
-    companion object {
-        /** A notification tapped in peek, opened on the cover once the user has unlocked. */
-        @Volatile var pendingOpen: String? = null
-
-        /** Called on wake: replaces Samsung's lock screen with ours if [shouldShowLock] says so. */
-        fun maybeShow(service: CoverAccessibility, tries: Int = 3) {
-            val ctx: Context = service
-            val cover = ctx.getSystemService(DisplayManager::class.java).getDisplay(COVER_DISPLAY)
-            val systemUi = runCatching {
-                ctx.packageManager.getApplicationLabel(ctx.packageManager.getApplicationInfo("com.android.systemui", 0)).toString()
-            }.getOrDefault("System UI")
-            val top = runCatching {
-                service.windowsOnAllDisplays[COVER_DISPLAY]?.firstOrNull {
-                    it.type == AccessibilityWindowInfo.TYPE_APPLICATION || it.type == AccessibilityWindowInfo.TYPE_SYSTEM
-                }?.let { topPackage(it.root?.packageName?.toString(), it.title?.toString(), systemUi) }
-            }.getOrNull()
-            if (top == ctx.packageName) return // already showing
-            // Still unknown just after wake: look again shortly rather than guess.
-            if (top == null && tries > 0) { Handler(Looper.getMainLooper()).postDelayed({ maybeShow(service, tries - 1) }, 250); return }
-            val show = shouldShowLock(
-                LockPrefs.lockScreen,
-                ctx.getSystemService(KeyguardManager::class.java).isKeyguardLocked,
-                cover?.state == Display.STATE_ON,
-                top,
-                // Ringing or in a call (any app): the call screen must stay on the cover.
-                ctx.getSystemService(AudioManager::class.java).mode.let {
-                    it == AudioManager.MODE_RINGTONE || it == AudioManager.MODE_IN_CALL || it == AudioManager.MODE_IN_COMMUNICATION
-                },
-            )
-            if (show) AppLauncher.start(ctx, Intent(ctx, LockActivity::class.java), animate = false) // replaces Samsung's at once
-        }
+    /** Called on wake: replaces Samsung's lock screen with ours if [shouldShowLock] says so. */
+    fun maybeShow(service: CoverAccessibility, tries: Int = 3) {
+        val ctx: Context = service
+        val cover = ctx.getSystemService(DisplayManager::class.java).getDisplay(COVER_DISPLAY)
+        val systemUi = runCatching {
+            ctx.packageManager.getApplicationLabel(ctx.packageManager.getApplicationInfo("com.android.systemui", 0)).toString()
+        }.getOrDefault("System UI")
+        val top = runCatching {
+            service.windowsOnAllDisplays[COVER_DISPLAY]?.firstOrNull {
+                it.type == AccessibilityWindowInfo.TYPE_APPLICATION || it.type == AccessibilityWindowInfo.TYPE_SYSTEM
+            }?.let { topPackage(it.root?.packageName?.toString(), it.title?.toString(), systemUi) }
+        }.getOrNull()
+        if (top == ctx.packageName) return // already showing
+        // Still unknown just after wake: look again shortly rather than guess.
+        if (top == null && tries > 0) { Handler(Looper.getMainLooper()).postDelayed({ maybeShow(service, tries - 1) }, 250); return }
+        val show = shouldShowLock(
+            LockPrefs.lockScreen,
+            ctx.getSystemService(KeyguardManager::class.java).isKeyguardLocked,
+            cover?.state == Display.STATE_ON,
+            top,
+            // Ringing or in a call (any app): the call screen must stay on the cover.
+            ctx.getSystemService(AudioManager::class.java).mode.let {
+                it == AudioManager.MODE_RINGTONE || it == AudioManager.MODE_IN_CALL || it == AudioManager.MODE_IN_COMMUNICATION
+            },
+        )
+        if (show) AppLauncher.start(ctx, Intent(ctx, CoverActivity::class.java), animate = false) // over Samsung's, at once
     }
 }
 

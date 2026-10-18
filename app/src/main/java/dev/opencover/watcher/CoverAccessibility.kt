@@ -20,7 +20,7 @@ import dev.opencover.SAMSUNG_COVER_HOME
 import dev.opencover.apps.AppLauncher
 import dev.opencover.keyboard.KeyboardPrefs
 import dev.opencover.lock.AodOverlay
-import dev.opencover.lock.LockActivity
+import dev.opencover.lock.LockScreen
 import dev.opencover.lock.LockPrefs
 import dev.opencover.lock.aodReady
 import dev.opencover.lock.dozing
@@ -47,7 +47,7 @@ class CoverAccessibility : AccessibilityService() {
                 Intent.ACTION_DREAMING_STOPPED -> AodOverlay.hide()
             }
             // Woken (from doze or fully off): let the windows settle, then maybe replace Samsung's lock screen.
-            if (i.action != Intent.ACTION_DREAMING_STARTED) handler.postDelayed({ LockActivity.maybeShow(this@CoverAccessibility) }, 250)
+            if (i.action != Intent.ACTION_DREAMING_STARTED) handler.postDelayed({ LockScreen.maybeShow(this@CoverAccessibility) }, 250)
         }
     }
 
@@ -155,7 +155,7 @@ class CoverAccessibility : AccessibilityService() {
         // Samsung's cover home also sits behind the lock screen; redirecting there fights the
         // PIN/face unlock UI (flicker). CoverWatcher opens the launcher on unlock instead.
         if (getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
-            handler.postDelayed({ LockActivity.maybeShow(this) }, 250) // Home pressed on our lock screen
+            handler.postDelayed({ LockScreen.maybeShow(this) }, 250) // Home pressed on our lock screen
             return
         }
         Log.i(TAG, "open launcher (home)")

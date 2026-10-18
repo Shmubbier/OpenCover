@@ -21,7 +21,7 @@ import android.util.Log
 import android.view.Display
 import dev.opencover.COVER_DISPLAY
 import dev.opencover.apps.AppLauncher
-import dev.opencover.lock.LockActivity
+import dev.opencover.lock.LockScreen
 import dev.opencover.lock.openOnUnlock
 import dev.opencover.mirror.MirrorService
 import dev.opencover.notify.NotificationStore
@@ -51,13 +51,13 @@ class CoverWatcher : Service() {
                 Intent.ACTION_USER_PRESENT -> {
                     BankingMode.resume(this@CoverWatcher) // backstop if usage access is missing
                     // A notification tapped in peek opens on the cover; if it's gone, Home opens as usual.
-                    val pending = openOnUnlock(LockActivity.pendingOpen, coverActive() && MirrorService.instance == null)
-                    LockActivity.pendingOpen = null
+                    val pending = openOnUnlock(LockScreen.pendingOpen, coverActive() && MirrorService.instance == null)
+                    LockScreen.pendingOpen = null
                     if (pending == null || !NotificationStore.open(this@CoverWatcher, pending)) {
                         if (coverActive()) openLauncher("unlock", unlocked = true)
                     }
                 }
-                Intent.ACTION_SCREEN_OFF -> { paused = false; LockActivity.pendingOpen = null }
+                Intent.ACTION_SCREEN_OFF -> { paused = false; LockScreen.pendingOpen = null }
             }
             onCoverStateMaybeChanged()
         }

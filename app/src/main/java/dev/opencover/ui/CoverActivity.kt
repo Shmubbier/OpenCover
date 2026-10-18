@@ -1,6 +1,7 @@
 package dev.opencover.ui
 
 import android.Manifest
+import android.app.KeyguardManager
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.LauncherApps
@@ -15,6 +16,14 @@ import android.view.WindowInsetsController
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import dev.opencover.lock.LockLayer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.getValue
@@ -71,6 +80,18 @@ class CoverActivity : ComponentActivity() {
     private var showSetup by mutableStateOf(false)
     private var wallpaper by mutableStateOf<ImageBitmap?>(null)
     private var homeRequests by mutableIntStateOf(0)
+    /** Keyguard locked: only the lock layer is drawn (the activity shows over the keyguard while OpenCover's lock screen is on). */
+    private var locked by mutableStateOf(false)
+    // The locked-state listener is system-only; these broadcasts plus onResume cover every change.
+    private val lockEvents = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: android.content.Context, i: Intent) = refreshLocked()
+    }
+
+    fun refreshLocked() { locked = getSystemService(KeyguardManager::class.java).isKeyguardLocked }
+
+    /** Shows over the keyguard only while OpenCover's lock screen is switched on. */
+    fun applyLockScreen() = setShowWhenLocked(LockPrefs.lockScreen)
+
     /** Bumped when Home comes up straight from the lock screen: plays [Entrance]. */
     private var entrances by mutableIntStateOf(0)
     private var quickSettingsRequests by mutableIntStateOf(0)
@@ -99,6 +120,14 @@ class CoverActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (intent.getBooleanExtra(EXTRA_UNLOCKED, false)) entrances++
+        LockPrefs.load(this)
+        applyLockScreen()
+        refreshLocked()
+        registerReceiver(lockEvents, android.content.IntentFilter().apply {
+            addAction(Intent.ACTION_USER_PRESENT)
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+        }, RECEIVER_NOT_EXPORTED)
         // The main screen is broken: if we were opened anywhere else, move to the cover.
         if (display?.displayId != COVER_DISPLAY) {
             AppLauncher.start(this, Intent(this, CoverActivity::class.java))
@@ -156,12 +185,19 @@ class CoverActivity : ComponentActivity() {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 resumeTick // re-read permissions every time we come back from Settings
                 val required = Permissions.required(this)
-                if (required && !showSetup) Entrance(entrances) { Shell(layout, apps, actions, prompt, wallpaper, homeRequests, quickSettingsRequests) }
-                else Checklist(
-                    steps = setupSteps(),
-                    onAppInfo = { openSettings(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, withPackage = true) },
-                    onDone = if (required) ({ showSetup = false }) else null,
-                )
+                // Locked: nothing of Home is composed, only the lock layer; unlocking crossfades into Home.
+                Crossfade(locked, animationSpec = tween(260), label = "lock") { isLocked ->
+                    when {
+                        isLocked && LockPrefs.lockScreen -> LockLayer(this)
+                        isLocked -> Box(Modifier.fillMaxSize().background(Color.Black)) // not shown over the keyguard then
+                        required && !showSetup -> Entrance(entrances) { Shell(layout, apps, actions, prompt, wallpaper, homeRequests, quickSettingsRequests) }
+                        else -> Checklist(
+                            steps = setupSteps(),
+                            onAppInfo = { openSettings(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, withPackage = true) },
+                            onDone = if (required) ({ showSetup = false }) else null,
+                        )
+                    }
+                }
             }
         }
     }
@@ -225,6 +261,7 @@ class CoverActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        refreshLocked()
         if (ShizukuShell.allowed()) RotationFeature.upright(this) // shell call runs on its own thread
         current = this
         BankingMode.resume(this) // back in OpenCover, so any banking app was left
@@ -240,6 +277,7 @@ class CoverActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        runCatching { unregisterReceiver(lockEvents) }
         if (::repo.isInitialized) repo.unregister(appsCallback)
         super.onDestroy()
     }
