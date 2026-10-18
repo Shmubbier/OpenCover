@@ -8,7 +8,10 @@ import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityWindowInfo
 import android.app.KeyguardManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.inputmethod.EditorInfo
@@ -16,6 +19,9 @@ import dev.opencover.COVER_DISPLAY
 import dev.opencover.SAMSUNG_COVER_HOME
 import dev.opencover.apps.AppLauncher
 import dev.opencover.keyboard.KeyboardPrefs
+import dev.opencover.lock.AodOverlay
+import dev.opencover.lock.LockPrefs
+import dev.opencover.lock.aodReady
 import dev.opencover.phone.Fold
 import dev.opencover.phone.PhonePrefs
 import dev.opencover.phone.RotationFeature
@@ -31,8 +37,23 @@ import dev.opencover.ui.CoverActivity
 class CoverAccessibility : AccessibilityService() {
     private var keyboard: OverlayKeyboard? = null
 
+    /** Doze start and stop: the AOD overlay comes and goes with them. */
+    private val dreams = object : BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) {
+            when (i.action) {
+                Intent.ACTION_DREAMING_STARTED -> if (LockPrefs.aod && aodReady(c)) AodOverlay.show(this@CoverAccessibility)
+                Intent.ACTION_DREAMING_STOPPED -> AodOverlay.hide()
+            }
+        }
+    }
+
     override fun onServiceConnected() {
         instance = this
+        LockPrefs.load(this)
+        registerReceiver(dreams, IntentFilter().apply {
+            addAction(Intent.ACTION_DREAMING_STARTED)
+            addAction(Intent.ACTION_DREAMING_STOPPED)
+        }, RECEIVER_NOT_EXPORTED)
         refreshScope()
         // The hold and its watcher do not survive a reboot. Only re-hold: a reset while awake locks the phone.
         if (PhonePrefs(this).keepCoverOn) Fold.apply(this)
@@ -40,6 +61,8 @@ class CoverAccessibility : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        runCatching { unregisterReceiver(dreams) }
+        AodOverlay.hide()
         keyboard?.hide()
         instance = null
         super.onDestroy()

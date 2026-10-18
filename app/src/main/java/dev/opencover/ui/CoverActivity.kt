@@ -23,6 +23,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import dev.opencover.home.HomePrefs
+import dev.opencover.lock.LockPrefs
+import dev.opencover.lock.aodReady
 import dev.opencover.phone.RotationFeature
 import dev.opencover.home.Weather
 import dev.opencover.COVER_DISPLAY
@@ -144,7 +146,8 @@ class CoverActivity : ComponentActivity() {
             popups = { NotificationStore.popupsEnabled(this) },
             setPopups = { NotificationStore.setPopups(this, it) },
         )
-        HomePrefs.load(this); Weather.load(this)
+        HomePrefs.load(this)
+        LockPrefs.load(this); Weather.load(this)
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 resumeTick // re-read permissions every time we come back from Settings
@@ -159,11 +162,17 @@ class CoverActivity : ComponentActivity() {
         }
     }
 
-    private fun setupSteps() = listOf(
+    private fun setupSteps() = listOfNotNull(
         SetupStep("Accessibility (required)", "Brings OpenCover back when you swipe Home, and opens it on unlock",
             Permissions.accessibility(this)) { openSettings(Settings.ACTION_ACCESSIBILITY_SETTINGS) },
         SetupStep("Display over other apps (required)", "Keeps the cover screen awake when you ask",
             Permissions.overlay(this)) { openSettings(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, withPackage = true) },
+        if (!LockPrefs.aod) null else SetupStep("Samsung AOD set to Always (for OpenCover AOD)",
+            "Always On Display: Always, with tap to show off. OpenCover draws over it.", aodReady(this)) {
+            val tries = listOf("com.samsung.android.app.aodservice.settings.AODDisplayMode",
+                "com.samsung.android.app.aodservice.settings.AODSettingsMain", Settings.ACTION_DISPLAY_SETTINGS)
+            tries.firstOrNull { runCatching { AppLauncher.start(this, Intent(it)) }.isSuccess }
+        },
         SetupStep("Ignore battery optimization (recommended)", "Stops Android from putting OpenCover to sleep",
             Permissions.battery(this)) { openSettings(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, withPackage = true) },
         SetupStep("Usage access (optional)", "Sorts the app drawer by recently used",
