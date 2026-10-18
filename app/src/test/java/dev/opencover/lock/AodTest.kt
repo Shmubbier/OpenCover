@@ -18,4 +18,14 @@ class AodTest {
         assertEquals(burnIn(0), burnIn(4))
         assertEquals(4, setOf(burnIn(0), burnIn(1), burnIn(2), burnIn(3)).size)
     }
+
+    // An incoming call or alarm on top of the keyguard keeps the cover; only the keyguard or Samsung's cover home gets replaced.
+    @Test fun callOrAlarmOnTopKeepsTheCover() {
+        assertFalse(shouldShowLock(enabled = true, locked = true, coverOn = true, topPkg = "com.samsung.android.incallui"))
+        assertFalse(shouldShowLock(enabled = true, locked = true, coverOn = true, topPkg = "com.sec.android.app.clockpackage"))
+        assertTrue(shouldShowLock(enabled = true, locked = true, coverOn = true, topPkg = "com.android.systemui"))
+        assertTrue(shouldShowLock(enabled = true, locked = true, coverOn = true, topPkg = null))
+        assertFalse(shouldShowLock(enabled = true, locked = false, coverOn = true, topPkg = null))
+        assertFalse(shouldShowLock(enabled = false, locked = true, coverOn = true, topPkg = null))
+    }
 }

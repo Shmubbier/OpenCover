@@ -21,7 +21,9 @@ import android.util.Log
 import android.view.Display
 import dev.opencover.COVER_DISPLAY
 import dev.opencover.apps.AppLauncher
+import dev.opencover.lock.LockActivity
 import dev.opencover.mirror.MirrorService
+import dev.opencover.notify.NotificationStore
 import dev.opencover.phone.HeatGuard
 import dev.opencover.ui.CoverActivity
 
@@ -47,7 +49,10 @@ class CoverWatcher : Service() {
             when (i.action) {
                 Intent.ACTION_USER_PRESENT -> {
                     BankingMode.resume(this@CoverWatcher) // backstop if usage access is missing
-                    if (coverActive()) openLauncher("unlock")
+                    val pending = LockActivity.pendingOpen
+                    LockActivity.pendingOpen = null
+                    if (pending != null) NotificationStore.open(this@CoverWatcher, pending) // tapped in peek; opens on the cover
+                    else if (coverActive()) openLauncher("unlock")
                 }
                 Intent.ACTION_SCREEN_OFF -> paused = false
             }

@@ -20,6 +20,7 @@ import dev.opencover.SAMSUNG_COVER_HOME
 import dev.opencover.apps.AppLauncher
 import dev.opencover.keyboard.KeyboardPrefs
 import dev.opencover.lock.AodOverlay
+import dev.opencover.lock.LockActivity
 import dev.opencover.lock.LockPrefs
 import dev.opencover.lock.aodReady
 import dev.opencover.phone.Fold
@@ -44,6 +45,8 @@ class CoverAccessibility : AccessibilityService() {
                 Intent.ACTION_DREAMING_STARTED -> if (LockPrefs.aod && aodReady(c)) AodOverlay.show(this@CoverAccessibility)
                 Intent.ACTION_DREAMING_STOPPED -> AodOverlay.hide()
             }
+            // Woken (from doze or fully off): let the windows settle, then maybe replace Samsung's lock screen.
+            if (i.action != Intent.ACTION_DREAMING_STARTED) handler.postDelayed({ LockActivity.maybeShow(this@CoverAccessibility) }, 250)
         }
     }
 
@@ -53,6 +56,7 @@ class CoverAccessibility : AccessibilityService() {
         registerReceiver(dreams, IntentFilter().apply {
             addAction(Intent.ACTION_DREAMING_STARTED)
             addAction(Intent.ACTION_DREAMING_STOPPED)
+            addAction(Intent.ACTION_SCREEN_ON)
         }, RECEIVER_NOT_EXPORTED)
         refreshScope()
         // The hold and its watcher do not survive a reboot. Only re-hold: a reset while awake locks the phone.
@@ -84,7 +88,8 @@ class CoverAccessibility : AccessibilityService() {
             else (setOf("com.android.systemui") + BankingMode.apps(this@CoverAccessibility)).toTypedArray()
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
                 (if (topEdge) AccessibilityEvent.TYPE_WINDOWS_CHANGED else 0)
-            flags = (if (topEdge) flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+            // The window list: top-edge priority catches Samsung's panel; the lock screen checks nothing (a call, an alarm) is on top.
+            flags = (if (topEdge || LockPrefs.lockScreen) flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
             else flags and AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS.inv()).let {
                 if (typing) it or AccessibilityServiceInfo.FLAG_INPUT_METHOD_EDITOR else it and AccessibilityServiceInfo.FLAG_INPUT_METHOD_EDITOR.inv()
             }
