@@ -60,7 +60,8 @@ fun edgeBack(inward: Float): Boolean = inward >= EDGE_BACK_PX
 
 enum class NavStyle { BUTTONS, GESTURES }
 
-private const val RECENTS_COMPONENT = "com.sec.android.app.launcher/com.android.quickstep.RecentsActivity"
+private const val RECENTS_PACKAGE = "com.sec.android.app.launcher" // on the cover it only ever shows recents
+private const val RECENTS_COMPONENT = "$RECENTS_PACKAGE/com.android.quickstep.RecentsActivity"
 
 object NavPrefs {
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("nav", Context.MODE_PRIVATE)
@@ -80,11 +81,19 @@ object NavBar {
     private var bounds: Rect? = null
     private var style: NavStyle? = null
 
-    /** Samsung's bar on the cover, from the window list, or null when it isn't showing. */
+    private var lastBar: Rect? = null
+
+    /**
+     * Where OpenCover's bar goes: over Samsung's bar, or, while One UI's recents is up (Samsung hides its bar there and
+     * leaves only its own way home, through Samsung's cover home), where Samsung's bar was. Null: no bar.
+     */
     fun samsungBar(service: AccessibilityService): Rect? = runCatching {
-        service.windowsOnAllDisplays[COVER_DISPLAY]?.firstOrNull {
-            it.type == AccessibilityWindowInfo.TYPE_SYSTEM && it.title?.toString() == "Navigation bar"
-        }?.let { Rect().also(it::getBoundsInScreen) }
+        val windows = service.windowsOnAllDisplays[COVER_DISPLAY].orEmpty()
+        windows.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_SYSTEM && it.title?.toString() == "Navigation bar" }
+            ?.let { Rect().also(it::getBoundsInScreen) }?.also { lastBar = it }
+            ?: lastBar?.takeIf {
+                windows.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }?.root?.packageName == RECENTS_PACKAGE
+            }
     }.getOrNull()
 
     /** Shows the bar over [over], redraws it if Samsung's moved or the style changed, or removes it when [over] is null. */
