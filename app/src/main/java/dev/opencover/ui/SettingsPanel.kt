@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.opencover.keyboard.KeyboardPrefs
 import dev.opencover.media.MediaPrefs
+import dev.opencover.nav.NavPrefs
 import dev.opencover.watcher.CoverAccessibility
 
 @Composable
@@ -78,6 +79,18 @@ fun SettingsPanel(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Notification pop-ups", color = Color.White, modifier = Modifier.weight(1f))
             Switch(checked = popups, onCheckedChange = onPopups)
+        }
+        var nav by remember { mutableStateOf(NavPrefs.enabled(ctx)) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("OpenCover navigation bar", color = Color.White)
+                Text("Home goes straight to OpenCover instead of Samsung's cover home.", color = Color.Gray, fontSize = 11.sp)
+            }
+            Switch(checked = nav, onCheckedChange = {
+                nav = it
+                NavPrefs.setEnabled(ctx, it)
+                CoverAccessibility.instance?.apply { refreshScope(); updateNavBar() }
+            })
         }
         Text("Media player", color = Color.Gray, fontSize = 13.sp)
         Row(verticalAlignment = Alignment.CenterVertically) {

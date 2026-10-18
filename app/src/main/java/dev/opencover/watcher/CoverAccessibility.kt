@@ -19,6 +19,9 @@ import dev.opencover.COVER_DISPLAY
 import dev.opencover.SAMSUNG_COVER_HOME
 import dev.opencover.apps.AppLauncher
 import dev.opencover.keyboard.KeyboardPrefs
+import dev.opencover.nav.NavBar
+import dev.opencover.nav.NavPrefs
+import dev.opencover.nav.navBarShown
 import dev.opencover.lock.AodOverlay
 import dev.opencover.lock.LockScreen
 import dev.opencover.lock.LockPrefs
@@ -67,10 +70,12 @@ class CoverAccessibility : AccessibilityService() {
         refreshScope()
         // The hold and its watcher do not survive a reboot. Only re-hold: a reset while awake locks the phone.
         if (PhonePrefs(this).keepCoverOn) Fold.apply(this)
+        handler.post { updateNavBar() } // the window list is ready once connected
         if (PhonePrefs(this).rotationResetPending) RotationFeature.resetToDefault(this)
     }
 
     override fun onDestroy() {
+        NavBar.hide()
         runCatching { unregisterReceiver(dreams) }
         AodOverlay.hide()
         keyboard?.hide()
@@ -85,17 +90,20 @@ class CoverAccessibility : AccessibilityService() {
      */
     fun refreshScope() {
         val topEdge = TopEdge.enabled(this)
+        val nav = NavPrefs.enabled(this)
         val typing = KeyboardPrefs.enabled(this)
         if (typing && keyboard == null) keyboard = OverlayKeyboard(this)
         if (!typing) keyboard?.hide()
         serviceInfo = serviceInfo.apply {
             // A turned app needs its windows seen from every app; screen content is still never read.
-            packageNames = if (topEdge || PhonePrefs(this@CoverAccessibility).hasRotations) null
+            // Window-change events (top edge, our navigation bar) only arrive with every app in scope.
+            packageNames = if (topEdge || nav || PhonePrefs(this@CoverAccessibility).hasRotations) null
             else (setOf("com.android.systemui") + BankingMode.apps(this@CoverAccessibility)).toTypedArray()
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
-                (if (topEdge) AccessibilityEvent.TYPE_WINDOWS_CHANGED else 0)
-            // The window list: top-edge priority catches Samsung's panel; the lock screen checks nothing (a call, an alarm) is on top.
-            flags = (if (topEdge || LockPrefs.lockScreen) flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+                (if (topEdge || nav) AccessibilityEvent.TYPE_WINDOWS_CHANGED else 0)
+            // The window list: top-edge priority catches Samsung's panel; the lock screen checks nothing (a call, an alarm) is
+            // on top; OpenCover's navigation bar follows Samsung's.
+            flags = (if (topEdge || LockPrefs.lockScreen || nav) flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
             else flags and AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS.inv()).let {
                 if (typing) it or AccessibilityServiceInfo.FLAG_INPUT_METHOD_EDITOR else it and AccessibilityServiceInfo.FLAG_INPUT_METHOD_EDITOR.inv()
             }
@@ -137,6 +145,7 @@ class CoverAccessibility : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
             if (TopEdge.enabled(this)) takeTopEdge()
+            updateNavBar()
             return
         }
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
@@ -160,6 +169,13 @@ class CoverAccessibility : AccessibilityService() {
         }
         Log.i(TAG, "open launcher (home)")
         AppLauncher.start(this, Intent(this, CoverActivity::class.java))
+    }
+
+    /** OpenCover's bar over Samsung's while it's on the cover and the phone is unlocked. */
+    fun updateNavBar() {
+        val bar = NavBar.samsungBar(this)
+        val locked = getSystemService(KeyguardManager::class.java).isKeyguardLocked
+        NavBar.update(this, bar.takeIf { navBarShown(NavPrefs.enabled(this), bar != null, locked) })
     }
 
     override fun onInterrupt() {}

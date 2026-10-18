@@ -80,7 +80,7 @@ clock face, edge lighting, VoIP, AOD.
 7. Rotation: done (FreeFlip port). Per-app manual rotation; this phone has no accelerometer.
 8. AOD and lock screen: done.
 9. Cover screen while open: done (FreeFlip port, keep cover on).
-10. Own navigation: avoid the Samsung widgets flash on Home. Options: an OpenCover gesture zone above Samsung's, or OpenCover as default Home app (spike first; Samsung may keep its own cover home).
+10. Own navigation (done: OpenCover bar over Samsung's): avoid the Samsung widgets flash on Home. Options: an OpenCover gesture zone above Samsung's, or OpenCover as default Home app (spike first; Samsung may keep its own cover home).
 11. Screen mirroring: done (FreeFlip port).
 12. Edge lighting: glow on new notifications, also waking the screen (on AOD once 8 exists).
 
