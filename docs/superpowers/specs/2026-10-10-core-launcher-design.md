@@ -82,7 +82,7 @@ clock face, edge lighting, VoIP, AOD.
 9. Cover screen while open: done (FreeFlip port, keep cover on).
 10. Own navigation (done: OpenCover bar over Samsung's): avoid the Samsung widgets flash on Home. Options: an OpenCover gesture zone above Samsung's, or OpenCover as default Home app (spike first; Samsung may keep its own cover home).
 11. Screen mirroring: done (FreeFlip port).
-12. Edge lighting: glow on new notifications, also waking the screen (on AOD once 8 exists).
+12. Edge lighting (done): glow on new notifications, also waking the screen (on AOD once 8 exists).
 
 Later:
 - Recents on the cover: open One UI's own recents on display 1, plus an OpenCover clear-all button.

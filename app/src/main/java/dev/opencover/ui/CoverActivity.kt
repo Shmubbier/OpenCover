@@ -296,6 +296,12 @@ class CoverActivity : ComponentActivity() {
     }
 
     // Every launch through AppLauncher.start (Home gesture, unlock, fold) lands here: go to Home.
+    // A touch on Home or the lock screen during edge lighting keeps the cover awake afterwards.
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        dev.opencover.edge.EdgeLight.lastTouch = android.os.SystemClock.uptimeMillis()
+        return super.dispatchTouchEvent(ev)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         if (intent.getBooleanExtra(EXTRA_UNLOCKED, false)) entrances++
