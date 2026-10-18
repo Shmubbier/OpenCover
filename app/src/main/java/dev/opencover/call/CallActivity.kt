@@ -137,8 +137,9 @@ private fun Ringing(call: Call) {
 private fun InCall(call: Call) {
     val ctx = LocalContext.current
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) { while (true) { delay(1000); now = System.currentTimeMillis() } }
     var muted by remember { mutableStateOf(CallStore.micMuted(ctx)) }
+    // Follows the real microphone state: "Answer muted" mutes it a moment after the call connects.
+    LaunchedEffect(Unit) { while (true) { delay(1000); now = System.currentTimeMillis(); muted = CallStore.micMuted(ctx) } }
     val secs = ((now - call.since) / 1000).coerceAtLeast(0)
     Column(Modifier.fillMaxSize().padding(top = 16.dp, bottom = 40.dp), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween) {
