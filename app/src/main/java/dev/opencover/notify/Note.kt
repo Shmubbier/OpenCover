@@ -24,6 +24,8 @@ data class Note(
     val fromMe: Boolean = false,
     /** Name to show for a chat: conversation title, or the sender for 1:1 chats. */
     val chatTitle: String? = null,
+    /** Notification.visibility: PUBLIC, PRIVATE (the default) or SECRET on the lock screen. */
+    val lockVisibility: Int = android.app.Notification.VISIBILITY_PRIVATE,
 ) {
     val groupKey get() = "$user/$pkg/${conversation.orEmpty()}"
 }

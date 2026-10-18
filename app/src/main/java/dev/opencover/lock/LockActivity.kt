@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.hardware.display.DisplayManager
+import android.media.AudioManager
 import android.os.Bundle
 import android.view.Display
 import android.view.accessibility.AccessibilityWindowInfo
@@ -45,8 +46,11 @@ import dev.opencover.ui.lockPrivacy
 import dev.opencover.watcher.CoverAccessibility
 
 /** Show OpenCover's lock screen only when enabled, locked, the cover is on, and nothing but the keyguard is on top. */
-fun shouldShowLock(enabled: Boolean, locked: Boolean, coverOn: Boolean, topPkg: String?): Boolean =
-    enabled && locked && coverOn && (topPkg == null || topPkg == "com.android.systemui")
+fun shouldShowLock(enabled: Boolean, locked: Boolean, coverOn: Boolean, topPkg: String?, inCall: Boolean = false): Boolean =
+    enabled && locked && coverOn && !inCall && topPkg == "com.android.systemui" // unknown top: keep Samsung's
+
+/** The notification tapped in peek to open after unlock: only when unlocking on the cover. */
+fun openOnUnlock(pending: String?, coverActive: Boolean): String? = pending?.takeIf { coverActive }
 
 /** OpenCover's lock screen on the cover: shown over Samsung's keyguard; swipe up hands off to Samsung's PIN. */
 class LockActivity : ComponentActivity() {
@@ -76,6 +80,12 @@ class LockActivity : ComponentActivity() {
         }
     }
 
+    // Unlocked meanwhile (fingerprint during the wake): nothing to cover.
+    override fun onResume() {
+        super.onResume()
+        if (!getSystemService(KeyguardManager::class.java).isKeyguardLocked) finish()
+    }
+
     override fun onDestroy() {
         runCatching { unregisterReceiver(unlocked) }
         super.onDestroy()
@@ -84,7 +94,15 @@ class LockActivity : ComponentActivity() {
     private fun unlock() {
         getSystemService(KeyguardManager::class.java).requestDismissKeyguard(this, object : KeyguardManager.KeyguardDismissCallback() {
             override fun onDismissSucceeded() = finish()
+            override fun onDismissCancelled() = gaveUp()
+            override fun onDismissError() = gaveUp()
         })
+    }
+
+    /** PIN cancelled or no keyguard left: forget the peek tap; leave if already unlocked. */
+    private fun gaveUp() {
+        pendingOpen = null
+        if (!getSystemService(KeyguardManager::class.java).isKeyguardLocked) finish()
     }
 
     companion object {
@@ -106,6 +124,10 @@ class LockActivity : ComponentActivity() {
                 ctx.getSystemService(KeyguardManager::class.java).isKeyguardLocked,
                 cover?.state == Display.STATE_ON,
                 top,
+                // Ringing or in a call (any app): the call screen must stay on the cover.
+                ctx.getSystemService(AudioManager::class.java).mode.let {
+                    it == AudioManager.MODE_RINGTONE || it == AudioManager.MODE_IN_CALL || it == AudioManager.MODE_IN_COMMUNICATION
+                },
             )
             if (show) AppLauncher.start(ctx, Intent(ctx, LockActivity::class.java))
         }
@@ -116,7 +138,8 @@ class LockActivity : ComponentActivity() {
 private fun Peek(onOpen: (String) -> Unit, onClose: () -> Unit) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val privacy = lockPrivacy(ctx)
-    val notes = NotificationStore.notes.filter { shouldShow(it, ctx.packageName) }.sortedByDescending { it.time }
+    val notes = NotificationStore.notes.filter { shouldShow(it, ctx.packageName) && notePrivacy(privacy, it.lockVisibility) != Privacy.NONE }
+        .sortedByDescending { it.time }
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)).clickable(onClick = onClose), contentAlignment = Alignment.Center) {
         LazyColumn(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 40.dp).clip(RoundedCornerShape(16.dp))
@@ -129,7 +152,7 @@ private fun Peek(onOpen: (String) -> Unit, onClose: () -> Unit) {
                 }
                 Column(Modifier.fillMaxWidth().clickable { onOpen(n.key) }.padding(horizontal = 14.dp, vertical = 10.dp)) {
                     Text(app, color = Color.Gray, fontSize = 12.sp)
-                    if (privacy == Privacy.ALL) {
+                    if (notePrivacy(privacy, n.lockVisibility) == Privacy.ALL) {
                         Text(n.chatTitle ?: n.title, color = Color.White, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(n.text, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }

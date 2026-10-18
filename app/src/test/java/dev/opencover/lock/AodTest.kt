@@ -24,7 +24,7 @@ class AodTest {
         assertFalse(shouldShowLock(enabled = true, locked = true, coverOn = true, topPkg = "com.samsung.android.incallui"))
         assertFalse(shouldShowLock(enabled = true, locked = true, coverOn = true, topPkg = "com.sec.android.app.clockpackage"))
         assertTrue(shouldShowLock(enabled = true, locked = true, coverOn = true, topPkg = "com.android.systemui"))
-        assertTrue(shouldShowLock(enabled = true, locked = true, coverOn = true, topPkg = null))
+        assertFalse(shouldShowLock(enabled = true, locked = true, coverOn = true, topPkg = null)) // unknown: keep Samsung's
         assertFalse(shouldShowLock(enabled = true, locked = false, coverOn = true, topPkg = null))
         assertFalse(shouldShowLock(enabled = false, locked = true, coverOn = true, topPkg = null))
     }
@@ -35,5 +35,17 @@ class AodTest {
         assertTrue(dozing(interactive = false, coverState = android.view.Display.STATE_DOZE))
         assertFalse(dozing(interactive = true, coverState = android.view.Display.STATE_ON))
         assertFalse(dozing(interactive = false, coverState = android.view.Display.STATE_OFF))
+    }
+
+    @Test fun ringingOrInCallNeverShows() {
+        assertFalse(shouldShowLock(enabled = true, locked = true, coverOn = true, topPkg = "com.android.systemui", inCall = true))
+        assertTrue(shouldShowLock(enabled = true, locked = true, coverOn = true, topPkg = "com.android.systemui", inCall = false))
+    }
+
+    // A peek tap whose PIN was cancelled, or an unlock away from the cover, must not open anything.
+    @Test fun pendingOpensOnlyOnTheCover() {
+        assertEquals("k", openOnUnlock("k", coverActive = true))
+        assertEquals(null, openOnUnlock("k", coverActive = false))
+        assertEquals(null, openOnUnlock(null, coverActive = true))
     }
 }

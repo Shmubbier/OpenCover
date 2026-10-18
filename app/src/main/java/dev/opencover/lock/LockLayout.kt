@@ -11,7 +11,7 @@ val DEFAULT_LAYOUT: Map<Module, Spot> = mapOf(
     Module.DATE to Spot(0.05f, 0.66f, false), // most clock styles already show the date
     Module.BATTERY to Spot(0.05f, 0.50f, true),
     Module.ICONS to Spot(0.05f, 0.58f, true),
-    Module.NOW_PLAYING to Spot(0.03f, 0.82f, true),
+    Module.NOW_PLAYING to Spot(0.03f, 0.78f, true), // clear of the camera cutout
 )
 
 /** "CLOCK:0.05,0.06,1;DATE:..." Unknown or broken entries are dropped; missing modules keep their defaults. */
@@ -22,7 +22,8 @@ fun parseLayout(s: String?): Map<Module, Spot> {
         val v = rest.split(',')
         val x = v.getOrNull(0)?.toFloatOrNull()
         val y = v.getOrNull(1)?.toFloatOrNull()
-        if (x == null || y == null || v.size != 3) null else module to Spot(x, y, v[2] == "1")
+        val ok = x != null && y != null && x in 0f..1f && y in 0f..1f // NaN and Infinity fail the range check
+        if (!ok || v.size != 3) null else module to Spot(x!!, y!!, v[2] == "1")
     }.toMap()
     return DEFAULT_LAYOUT + saved
 }

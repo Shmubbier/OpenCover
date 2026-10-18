@@ -37,4 +37,19 @@ class LockLayoutTest {
         assertEquals(0.6f, s.x, 1e-4f)
         assertEquals(0.2f, s.y, 1e-4f)
     }
+
+    // NaN or out-of-range values would crash layout or hide a module off screen.
+    @Test fun badNumbersRejected() {
+        val m = parseLayout("CLOCK:NaN,0.1,1;DATE:0.1,Infinity,1;BATTERY:1.5,0.1,1;ICONS:0.2,0.3,1")
+        assertEquals(DEFAULT_LAYOUT.getValue(Module.CLOCK), m[Module.CLOCK])
+        assertEquals(DEFAULT_LAYOUT.getValue(Module.DATE), m[Module.DATE])
+        assertEquals(DEFAULT_LAYOUT.getValue(Module.BATTERY), m[Module.BATTERY])
+        assertEquals(Spot(0.2f, 0.3f, true), m[Module.ICONS])
+    }
+
+    // The default now-playing spot must keep a ~250x44 dp chip (at ~1.7 px/dp) clear of the camera cutout.
+    @Test fun defaultChipClearsCutout() {
+        val s = DEFAULT_LAYOUT.getValue(Module.NOW_PLAYING)
+        assertEquals(s, clamp(s, 425f / 748f, 75f / 720f))
+    }
 }

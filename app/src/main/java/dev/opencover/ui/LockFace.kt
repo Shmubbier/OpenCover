@@ -60,6 +60,7 @@ import dev.opencover.lock.LockPrefs
 import dev.opencover.lock.Module
 import dev.opencover.lock.Privacy
 import dev.opencover.lock.Spot
+import dev.opencover.lock.clamp
 import dev.opencover.lock.dropped
 import dev.opencover.lock.iconApps
 import dev.opencover.lock.privacy
@@ -97,8 +98,11 @@ fun LockFace(
         layout.forEach { (module, spot) ->
             if (!spot.on && onMove == null) return@forEach
             var drag by remember(module, spot) { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
-            val x = spot.x * wPx + drag.x
-            val y = spot.y * hPx + drag.y
+            // Clamped as drawn too: a module can grow after it was placed (another clock style, more icons, the chip).
+            val size = sizes[module] ?: IntSize.Zero
+            val shown = clamp(spot, size.width / wPx, size.height / hPx)
+            val x = shown.x * wPx + drag.x
+            val y = shown.y * hPx + drag.y
             var m = Modifier
                 .offset(with(density) { x.toDp() }, with(density) { y.toDp() })
                 .onSizeChanged { sizes[module] = it }
@@ -108,7 +112,7 @@ fun LockFace(
                     onDragEnd = {
                         val s = sizes[module] ?: IntSize.Zero
                         // From the live drag, not x/y: those were captured when the gesture started.
-                        onMove(module, dropped(spot, drag.x, drag.y, wPx, hPx, s.width / wPx, s.height / hPx))
+                        onMove(module, dropped(shown, drag.x, drag.y, wPx, hPx, s.width / wPx, s.height / hPx))
                         drag = androidx.compose.ui.geometry.Offset.Zero
                     },
                 ) { change, amount -> change.consume(); drag += amount }

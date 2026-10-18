@@ -16,8 +16,15 @@ fun privacy(showOnLock: Int, allowPrivate: Int): Privacy = when {
     else -> Privacy.ALL
 }
 
+/** One notification's privacy on the lock screen, as Android does it: secret ones hidden, public ones always shown. */
+fun notePrivacy(global: Privacy, lockVisibility: Int): Privacy = when {
+    global == Privacy.NONE || lockVisibility == android.app.Notification.VISIBILITY_SECRET -> Privacy.NONE
+    lockVisibility == android.app.Notification.VISIBILITY_PUBLIC -> Privacy.ALL
+    else -> global
+}
+
 /** Apps with notifications to show as icons, newest first, at most [max], plus how many more there are. */
 fun iconApps(notes: List<Note>, ownPkg: String, max: Int = 4): Pair<List<String>, Int> {
-    val apps = notes.filter { shouldShow(it, ownPkg) }.sortedByDescending { it.time }.map { it.pkg }.distinct()
+    val apps = notes.filter { shouldShow(it, ownPkg) && it.lockVisibility != android.app.Notification.VISIBILITY_SECRET }.sortedByDescending { it.time }.map { it.pkg }.distinct()
     return apps.take(max) to (apps.size - max).coerceAtLeast(0)
 }
