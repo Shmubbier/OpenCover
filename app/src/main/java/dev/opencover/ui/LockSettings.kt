@@ -31,6 +31,11 @@ import dev.opencover.lock.LockPrefs
 import dev.opencover.lock.Module
 import dev.opencover.lock.aodReady
 import dev.opencover.watcher.CoverAccessibility
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import dev.opencover.quick.ShizukuShell
+import androidx.compose.runtime.rememberCoroutineScope
+import android.provider.Settings
 
 private val moduleNames = mapOf(
     Module.CLOCK to "Clock", Module.DATE to "Date", Module.BATTERY to "Battery",
@@ -54,6 +59,20 @@ fun LockSettings(onBack: () -> Unit) {
             LockPrefs.aod) { LockPrefs.setAod(ctx, it) }
         SwitchRow("OpenCover lock screen", "Swipe up for Samsung's PIN. Samsung's quick panel still pulls down.",
             LockPrefs.lockScreen) { LockPrefs.setLockScreen(ctx, it); CoverAccessibility.instance?.refreshScope(); CoverActivity.current?.applyLockScreen() }
+        // Samsung's "Stay on Lock screen" for fingerprints, inverted: off means a fingerprint on the power key keeps you on
+        // the lock screen (swipe up then opens without the PIN). A secure setting, so it goes through Shizuku.
+        var straightHome by remember {
+            mutableStateOf(Settings.Secure.getInt(ctx.contentResolver, "fingerprint_stay_on_lock_screen", 0) == 0)
+        }
+        val scope = rememberCoroutineScope()
+        SwitchRow("Fingerprint opens Home",
+            if (!ShizukuShell.allowed()) "Needs Shizuku." else if (straightHome) "Power key with your fingerprint goes straight to Home."
+            else "Power key with your fingerprint stays on the lock screen; swipe up to open, no PIN.",
+            straightHome) { on ->
+            scope.launch(Dispatchers.IO) {
+                if (ShizukuShell.run("settings", "put", "secure", "fingerprint_stay_on_lock_screen", if (on) "0" else "1")) straightHome = on
+            }
+        }
         Text("Clock style", color = Color.Gray, fontSize = 13.sp)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ClockStyle.entries.forEach { s ->
