@@ -13,6 +13,7 @@ import android.os.Handler
 import android.os.Looper
 import android.service.notification.StatusBarNotification
 import android.telecom.TelecomManager
+import android.telephony.TelephonyManager
 import android.view.Display
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -135,11 +136,14 @@ object CallStore {
     }
 
     /**
-     * A call is ringing: Telecom knows even on vibrate or silent (needs "phone state"); the ringtone audio mode is the
+     * A call is ringing: telephony knows even on vibrate or silent (needs "phone state"); the ringtone audio mode is the
      * fallback, set only while a ringtone plays.
      */
     private fun ringingNow(ctx: Context): Boolean =
-        runCatching { ctx.getSystemService(TelecomManager::class.java).isRinging }.getOrDefault(false) ||
+        runCatching {
+            @Suppress("DEPRECATION") // the replacement needs a callback; one read is all this needs
+            ctx.getSystemService(TelephonyManager::class.java).callState == TelephonyManager.CALL_STATE_RINGING
+        }.getOrDefault(false) ||
             ctx.getSystemService(AudioManager::class.java).mode == AudioManager.MODE_RINGTONE
 
     fun micMuted(ctx: Context) = ctx.getSystemService(AudioManager::class.java).isMicrophoneMute
