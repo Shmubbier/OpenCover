@@ -18,6 +18,8 @@
     <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
     <!-- With it: whether a call is ringing, on vibrate or silent too. -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- "Answer muted" and the call screen's Mute: the phone's microphone mute. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />

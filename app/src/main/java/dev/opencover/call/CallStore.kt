@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.core.graphics.drawable.toBitmap
 import dev.opencover.COVER_DISPLAY
 import dev.opencover.apps.AppLauncher
+import dev.opencover.watcher.CoverAccessibility
 
 /** A call as the cover shows it. [answer]/[decline]/[hangUp] are the app's own buttons (null in the demo). */
 data class Call(
@@ -129,7 +130,13 @@ object CallStore {
         // Internet call apps keep their own microphone: press their Mute once the call is up, else mute the phone's.
         if (muted) {
             muteOnConnect = c.pkg
-            handler.postDelayed({ if (muteOnConnect == c.pkg) { muteOnConnect = null; setMicMuted(ctx, true) } }, 4000)
+            handler.postDelayed({
+                if (muteOnConnect == c.pkg) {
+                    muteOnConnect = null
+                    setMicMuted(ctx, true)
+                    CoverAccessibility.instance?.let { tapMute(it, c.pkg) } // apps that keep their own microphone
+                }
+            }, 4000)
             if (!handsOverOnAnswer(c.pkg)) handler.postDelayed({ setMicMuted(ctx, true) }, 1500)
         }
     }
@@ -167,6 +174,20 @@ object CallStore {
             ctx.getSystemService(TelephonyManager::class.java).callState == TelephonyManager.CALL_STATE_RINGING
         }.getOrDefault(false) ||
             ctx.getSystemService(AudioManager::class.java).mode == AudioManager.MODE_RINGTONE
+
+    /** Taps the mute control on [pkg]'s own call screen on the cover (matched by its label), if it shows one. */
+    private fun tapMute(service: CoverAccessibility, pkg: String) {
+        val root = runCatching {
+            service.windowsOnAllDisplays[COVER_DISPLAY]?.firstOrNull { it.root?.packageName == pkg }?.root
+        }.getOrNull() ?: return
+        fun find(n: android.view.accessibility.AccessibilityNodeInfo): android.view.accessibility.AccessibilityNodeInfo? {
+            val label = (n.contentDescription ?: n.text)?.toString()?.lowercase().orEmpty()
+            if (n.isClickable && (label.startsWith("mute") || label.contains("turn off microphone") || label.contains("microphone off"))) return n
+            for (i in 0 until n.childCount) n.getChild(i)?.let(::find)?.let { return it }
+            return null
+        }
+        find(root)?.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
+    }
 
     fun micMuted(ctx: Context) = ctx.getSystemService(AudioManager::class.java).isMicrophoneMute
     fun setMicMuted(ctx: Context, on: Boolean) { runCatching { ctx.getSystemService(AudioManager::class.java).isMicrophoneMute = on } }
