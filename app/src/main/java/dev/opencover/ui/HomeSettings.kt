@@ -103,6 +103,28 @@ fun HomeSettings(onBack: () -> Unit) {
         }
         Text(note ?: "Weather is the only feature that uses the internet: it sends rough coordinates to Open-Meteo.",
             color = Color.Gray, fontSize = 11.sp)
+        Text("Panel style (notifications, apps, drawer, quick settings)", color = Color.Gray, fontSize = 13.sp)
+        PanelStyleSettings()
         TextButton(onClick = onBack) { Text("Back") }
     }
+}
+
+/** The four panel styles, each with its own opacity and blur. */
+@Composable
+private fun PanelStyleSettings() {
+    val ctx = LocalContext.current
+    val style = dev.opencover.look.LookPrefs.style
+    val st = dev.opencover.look.LookPrefs.current
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        dev.opencover.look.PanelStyle.entries.forEach { s ->
+            androidx.compose.material3.FilterChip(selected = s == style, onClick = { dev.opencover.look.LookPrefs.setStyle(ctx, s) },
+                label = { Text(s.label) })
+        }
+    }
+    Text(if (style == dev.opencover.look.PanelStyle.CARDS) "Card opacity" else "Opacity", color = Color.White, fontSize = 13.sp)
+    androidx.compose.material3.Slider(value = st.opacity, valueRange = 0f..1f,
+        onValueChange = { dev.opencover.look.LookPrefs.setSettings(ctx, style, st.copy(opacity = it)) })
+    Text("Blur", color = Color.White, fontSize = 13.sp)
+    androidx.compose.material3.Slider(value = st.blur, valueRange = 0f..30f,
+        onValueChange = { dev.opencover.look.LookPrefs.setSettings(ctx, style, st.copy(blur = it)) })
 }

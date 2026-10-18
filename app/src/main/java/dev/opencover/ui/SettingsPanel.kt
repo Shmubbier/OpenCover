@@ -136,7 +136,7 @@ fun SettingsPanel(
         Button(onClick = { edgeSettings = true }) { Text("Edge lighting") }
         Button(onClick = onSamsungWidgets) { Text("Open Samsung widgets") }
         Button(onClick = onSetup) { Text("Setup & permissions") }
-        Button(onClick = onWallpaper) { Text("Set wallpaper") }
+        Button(onClick = onWallpaper) { Text("Set wallpaper (image or GIF)") }
         Button(onClick = onBanking) { Text("Banking apps") }
         Button(onClick = { experimental = true }) { Text("Experimental") }
         TextButton(onClick = onClose) { Text("Close") }

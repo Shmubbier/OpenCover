@@ -78,7 +78,6 @@ class CoverActivity : ComponentActivity() {
     private var loaded = false
     private var resumeTick by mutableIntStateOf(0)
     private var showSetup by mutableStateOf(false)
-    private var wallpaper by mutableStateOf<ImageBitmap?>(null)
     private var homeRequests by mutableIntStateOf(0)
     /** Keyguard locked: only the lock layer is drawn (the activity shows over the keyguard while OpenCover's lock screen is on). */
     private var locked by mutableStateOf(false)
@@ -136,7 +135,8 @@ class CoverActivity : ComponentActivity() {
         }
         store = LayoutStore(filesDir)
         repo = AppRepository(this)
-        wallpaper = Wallpaper.load(this)
+        Wallpaper.loadAll(this)
+        dev.opencover.look.LookPrefs.load(this)
         widgets = WidgetHost(this) { id, info, page ->
             // Provider sizes are px at the main display's density; convert to dp, then to cells.
             val sys = Resources.getSystem().displayMetrics.density
@@ -190,7 +190,7 @@ class CoverActivity : ComponentActivity() {
                     when {
                         isLocked && LockPrefs.lockScreen -> LockLayer(this)
                         isLocked -> Box(Modifier.fillMaxSize().background(Color.Black)) // not shown over the keyguard then
-                        required && !showSetup -> Entrance(entrances) { Shell(layout, apps, actions, prompt, wallpaper, homeRequests, quickSettingsRequests) }
+                        required && !showSetup -> Entrance(entrances) { Shell(layout, apps, actions, prompt, Wallpaper.homeStill, homeRequests, quickSettingsRequests) }
                         else -> Checklist(
                             steps = setupSteps(),
                             onAppInfo = { openSettings(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, withPackage = true) },
@@ -293,8 +293,7 @@ class CoverActivity : ComponentActivity() {
         if (requestCode == REQ_WALLPAPER) {
             val uri = data?.data
             if (resultCode == RESULT_OK && uri != null) {
-                if (Wallpaper.save(this, uri)) wallpaper = Wallpaper.load(this)
-                else Toast.makeText(this, "Couldn't use that photo", Toast.LENGTH_SHORT).show()
+                if (!Wallpaper.save(this, uri, pickingSlot)) Toast.makeText(this, "Couldn't use that photo", Toast.LENGTH_SHORT).show()
             }
             return
         }
@@ -314,7 +313,13 @@ class CoverActivity : ComponentActivity() {
         homeRequests++
     }
 
-    private fun pickWallpaper() {
+    private fun pickWallpaper() = pickBackground(dev.opencover.home.Slot.HOME)
+
+    private var pickingSlot = dev.opencover.home.Slot.HOME
+
+    /** Photo picker for a still or a GIF, for Home or the lock screen. */
+    fun pickBackground(slot: dev.opencover.home.Slot) {
+        pickingSlot = slot
         try {
             startActivityForResult(Intent(MediaStore.ACTION_PICK_IMAGES).setType("image/*"), REQ_WALLPAPER, AppLauncher.options())
         } catch (e: Exception) {

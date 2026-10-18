@@ -105,7 +105,7 @@ fun QuickPanel() {
     val onAddPage = editing && hidden.isNotEmpty() && pager.currentPage == pages - 1
 
     Column(
-        Modifier.fillMaxSize().background(Color(0xF0101010)).windowInsetsPadding(WindowInsets.displayCutout)
+        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.displayCutout)
             .padding(horizontal = 24.dp, vertical = 12.dp),
     ) {
         // Header: cover brightness and battery, or Done while editing.

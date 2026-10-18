@@ -70,11 +70,10 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 @Composable
-fun HomeScreen(home: Home, wallpaper: ImageBitmap?, a: LauncherActions, onEditSlot: (Int) -> Unit) {
+fun HomeScreen(home: Home, wallpaper: ImageBitmap?, a: LauncherActions, playing: Boolean = true, onEditSlot: (Int) -> Unit) {
     Box(Modifier.fillMaxSize()) {
-        if (wallpaper != null) {
-            Image(wallpaper, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        }
+        // An animated background plays only while Home is the page in view; elsewhere it holds its frame.
+        Background(wallpaper, dev.opencover.home.Wallpaper.homeMovie, dev.opencover.look.Playheads.home, playing)
         val style = HomePrefs.clock
         ClockFace(
             style,

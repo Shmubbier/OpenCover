@@ -98,10 +98,13 @@ fun LockFace(
     onSelect: (Module) -> Unit = {},
 ) {
     val ctx = LocalContext.current
-    val wallpaper = remember(dim) { if (dim) null else Wallpaper.load(ctx) }
     val sizes = remember { mutableStateMapOf<Module, IntSize>() }
     BoxWithConstraints(modifier.fillMaxSize().background(Color.Black)) {
-        wallpaper?.let { Image(it, null, Modifier.fillMaxSize().alpha(0.6f), contentScale = ContentScale.Crop) }
+        // The lock screen's background (Home's unless set); the AOD shows the frame the lock screen stopped on, dimmed.
+        Background(
+            Wallpaper.lockStill ?: Wallpaper.homeStill, Wallpaper.lockMovie ?: Wallpaper.homeMovie, dev.opencover.look.Playheads.lock,
+            playing = !dim, alpha = if (dim) 0.3f else 0.6f,
+        )
         val wPx = constraints.maxWidth.toFloat()
         val hPx = constraints.maxHeight.toFloat()
         val density = LocalDensity.current
