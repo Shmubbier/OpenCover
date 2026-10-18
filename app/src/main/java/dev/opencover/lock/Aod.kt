@@ -9,6 +9,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -16,6 +17,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -45,6 +48,9 @@ fun burnIn(minute: Long): Pair<Int, Int> = when ((minute % 4).toInt()) {
     else -> 0 to 4
 }
 
+private const val DP_SCALE = 0.8f // icons and spacing
+private const val SP_SCALE = 340f / 480f // text
+
 /** The AOD: OpenCover's face in an accessibility overlay on the cover while the phone dozes. Main thread only. */
 object AodOverlay {
     private var view: View? = null
@@ -53,18 +59,23 @@ object AodOverlay {
     fun show(service: AccessibilityService) {
         if (view != null) return
         val cover = service.getSystemService(android.hardware.display.DisplayManager::class.java).getDisplay(COVER_DISPLAY) ?: return
-        val wm = service.createDisplayContext(cover)
-            .createWindowContext(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, null)
-            .getSystemService(WindowManager::class.java)
+        // The cover's own context: its density (340 dpi), not the inner screen's, so the face matches the lock screen.
+        val wctx = service.createDisplayContext(cover).createWindowContext(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, null)
+        val wm = wctx.getSystemService(WindowManager::class.java)
         val o = Owner().also { owner = it }
-        val v = ComposeView(service).apply {
+        val v = ComposeView(wctx).apply {
             setViewTreeLifecycleOwner(o)
             setViewTreeSavedStateRegistryOwner(o)
             setContent {
                 var minute by remember { mutableLongStateOf(System.currentTimeMillis() / 60_000) }
                 LaunchedEffect(Unit) { while (true) { delay(60_000L - System.currentTimeMillis() % 60_000L); minute++ } }
                 val (dx, dy) = burnIn(minute)
-                LockFace(LockPrefs.layout, dim = true, locked = false, modifier = Modifier.offset(dx.dp, dy.dp))
+                // ponytail: activities on the cover (Home, the lock screen) run in Samsung's compat config and come out smaller
+                // than this native 340 dpi window: 0.8x for dp, 0.71x for text (measured on the Flip 5). Recheck on other covers.
+                val d = LocalDensity.current
+                CompositionLocalProvider(LocalDensity provides Density(d.density * DP_SCALE, d.fontScale * SP_SCALE / DP_SCALE)) {
+                    LockFace(LockPrefs.layout, dim = true, locked = false, modifier = Modifier.offset(dx.dp, dy.dp))
+                }
             }
         }
         val lp = WindowManager.LayoutParams(
