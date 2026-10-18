@@ -143,7 +143,14 @@ object NavBar {
             // One UI's own recents runs on the cover, but Samsung answers an app's launch with "Please open phone";
             // the same launch from the shell works (FreeFlip, Cover Recents). Without Shizuku: Android's recents action.
             NavButton.RECENTS -> Thread {
-                val ok = ShizukuShell.run("am", "start", "--display", "$COVER_DISPLAY", "-f", "0x10810000", "-n", RECENTS_COMPONENT)
+                // Without "recent.displayId 0" Samsung lists only the cover's own tasks ("No recently used apps").
+                val ok = ShizukuShell.run(
+                    "am", "start", "--display", "$COVER_DISPLAY", "-f", "0x10008000", "-n", RECENTS_COMPONENT,
+                    "--ei", "com.samsung.android.activity.displayid", "0",
+                    "--ei", "com.samsung.android.activity.recent.displayId", "0",
+                    "--ez", "com.android.systemui.recents.extra.RESET_RECENTS", "true",
+                    "--ez", "com.android.launcher3.intent.extra.FORCE_OVERVIEW", "true",
+                )
                 if (!ok) service.mainExecutor.execute { service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS) }
             }.start()
         }
@@ -162,10 +169,17 @@ object NavBar {
         private var stillSince = 0L
         private var fired = false
 
+        private val pressed = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(0x40, 0, 0, 0) }
+
         override fun onDraw(c: Canvas) {
             c.drawColor(Color.rgb(0xC1, 0xC1, 0xC2))
             val cy = height / 2f
             val r = height * 0.22f
+            // The button under the finger darkens, like Samsung's ripple.
+            down?.let { b ->
+                val (l, rr) = when (b) { NavButton.RECENTS -> RECENTS_L to RECENTS_R; NavButton.HOME -> HOME_L to HOME_R; NavButton.BACK -> BACK_L to BACK_R }
+                c.drawCircle(width * (l + rr) / 2, cy, height * 0.45f, pressed)
+            }
             if (style == NavStyle.GESTURES) {
                 val half = width * 0.12f
                 c.drawLine(width * LIP_CENTER - half, cy, width * LIP_CENTER + half, cy, icon.apply { strokeWidth = 8f })
@@ -194,6 +208,7 @@ object NavBar {
                     MotionEvent.ACTION_UP -> { buttonAt(e.x, width)?.takeIf { it == down }?.let(::fire); down = null }
                     MotionEvent.ACTION_CANCEL -> down = null
                 }
+                invalidate() // show or clear the pressed highlight
                 return true
             }
             // Gestures: raw coordinates, since the finger leaves this short window while swiping up.
