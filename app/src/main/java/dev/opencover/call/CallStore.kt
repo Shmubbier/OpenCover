@@ -112,7 +112,11 @@ object CallStore {
     private val CALL_SCREENS = setOf("com.samsung.android.incallui", "com.android.server.telecom", "com.android.dialer")
 
     fun removed(ctx: Context, key: String) {
-        if (call?.key == key) { call = null; raises = 0 }
+        if (call?.key == key) {
+            call = null; raises = 0
+            // The phone's microphone mute outlives the call: lift ours so the next call or voice note isn't silent.
+            if (micMutedByUs) setMicMuted(ctx, false)
+        }
         if (ringMutedFor == key) unmuteRing(ctx)
     }
 
@@ -190,7 +194,11 @@ object CallStore {
     }
 
     fun micMuted(ctx: Context) = ctx.getSystemService(AudioManager::class.java).isMicrophoneMute
-    fun setMicMuted(ctx: Context, on: Boolean) { runCatching { ctx.getSystemService(AudioManager::class.java).isMicrophoneMute = on } }
+    private var micMutedByUs = false
+
+    fun setMicMuted(ctx: Context, on: Boolean) {
+        runCatching { ctx.getSystemService(AudioManager::class.java).isMicrophoneMute = on }.onSuccess { micMutedByUs = on }
+    }
 
     /**
      * Sends an app's call button. Answer usually opens the app's call screen: Android only lets that start when the
