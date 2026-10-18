@@ -232,9 +232,11 @@ class CoverActivity : ComponentActivity() {
             else if (!ShizukuShell.running()) "Shizuku is installed but not running, see README"
             else "Tap to allow OpenCover in Shizuku",
             ShizukuShell.allowed()) { ShizukuShell.request() },
-        SetupStep("Answer phone calls (optional)", "Lets the cover call screen answer phone calls",
-            checkSelfPermission(Manifest.permission.ANSWER_PHONE_CALLS) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.ANSWER_PHONE_CALLS), 3)
+        SetupStep("Phone calls (optional)", "Lets the cover call screen see ringing calls and answer them",
+            listOf(Manifest.permission.ANSWER_PHONE_CALLS, Manifest.permission.READ_PHONE_STATE).all {
+                checkSelfPermission(it) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            }) {
+            requestPermissions(arrayOf(Manifest.permission.ANSWER_PHONE_CALLS, Manifest.permission.READ_PHONE_STATE), 3)
         },
         SetupStep("Microphone (optional)", "Voice replies to notifications",
             Permissions.mic(this)) { requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 2) },

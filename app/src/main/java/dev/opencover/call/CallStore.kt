@@ -45,7 +45,7 @@ object CallStore {
         val n = sbn.notification
         val x = n.extras
         val titles = n.actions.orEmpty().map { it.title?.toString().orEmpty() }
-        val ringing = ctx.getSystemService(AudioManager::class.java).mode == AudioManager.MODE_RINGTONE
+        val ringing = ringingNow(ctx)
         val notified = callPhase(x.getInt(Notification.EXTRA_CALL_TYPE, 0), n.category, titles)
         val phase = livePhase(notified, ringing)
         if (n.category == Notification.CATEGORY_CALL || phase != null) android.util.Log.d(
@@ -130,9 +130,17 @@ object CallStore {
      */
     fun refresh(ctx: Context) {
         val c = call?.takeIf { it.key != "demo" } ?: return
-        val now = livePhase(c.posted, ctx.getSystemService(AudioManager::class.java).mode == AudioManager.MODE_RINGTONE) ?: return
+        val now = livePhase(c.posted, ringingNow(ctx)) ?: return
         if (now != c.phase) call = c.copy(phase = now, since = if (now == Phase.ONGOING) System.currentTimeMillis() else c.since)
     }
+
+    /**
+     * A call is ringing: Telecom knows even on vibrate or silent (needs "phone state"); the ringtone audio mode is the
+     * fallback, set only while a ringtone plays.
+     */
+    private fun ringingNow(ctx: Context): Boolean =
+        runCatching { ctx.getSystemService(TelecomManager::class.java).isRinging }.getOrDefault(false) ||
+            ctx.getSystemService(AudioManager::class.java).mode == AudioManager.MODE_RINGTONE
 
     fun micMuted(ctx: Context) = ctx.getSystemService(AudioManager::class.java).isMicrophoneMute
     fun setMicMuted(ctx: Context, on: Boolean) { runCatching { ctx.getSystemService(AudioManager::class.java).isMicrophoneMute = on } }
