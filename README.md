@@ -13,6 +13,7 @@ A free, open-source (GPL-3.0) launcher for the Galaxy Z Flip 5 cover screen. No 
 - Rotate tile: turns the app you last had on the cover a quarter turn; it opens that way from then on. The cover never rotates by itself while folded.
 - Mirror tile: shows the inner screen on the cover with touch, for apps that need the phone open. Pick "Share entire screen" in Android's dialog. The phone locks when mirroring ends.
 - Settings > Phone: keep the cover on when the phone is opened, and a heat guard that warns at 42 °C and stops the hotspot and mirroring at 45 °C (only while one of them is on).
+- Settings > Lock screen: OpenCover's AOD (while the phone sleeps) and lock screen (swipe up for Samsung's PIN). Clock (Home's styles), date, battery, notification icons and a now-playing chip with play/pause; drag each anywhere, switch each off, then Lock. Tap the icons to peek at notifications. The AOD needs Samsung's Always On Display set to Always with tap to show off, which keeps the cover dimly lit (some battery).
 - Keep the cover screen awake in any app.
 - "Open Samsung widgets" in settings to reach Samsung's own cover widgets.
 
@@ -44,6 +45,8 @@ needs.
 - Mirroring captures the inner screen only while the Mirror tile is on, and turns OpenCover's
   accessibility service, developer options and unknown sources off for the session (banking
   apps refuse to run with them on). Everything is restored when it ends. Nothing is stored.
+- While OpenCover's lock screen is on, the service reads the window list on the cover (not their
+  content), so it never covers an incoming call or alarm.
 - Only the opt-in weather widget uses the internet: it sends rough coordinates (about 1 km) to
   Open-Meteo every 30 minutes at most, while the screen is on. Nothing else leaves your phone.
 
