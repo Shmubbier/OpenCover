@@ -19,6 +19,7 @@ import dev.opencover.COVER_DISPLAY
 import dev.opencover.SAMSUNG_COVER_HOME
 import dev.opencover.apps.AppLauncher
 import dev.opencover.keyboard.KeyboardPrefs
+import dev.opencover.call.CallStore
 import dev.opencover.nav.NavBar
 import dev.opencover.nav.NavPrefs
 import dev.opencover.nav.navBarShown
@@ -153,7 +154,7 @@ class CoverAccessibility : AccessibilityService() {
         if (event.displayId == COVER_DISPLAY && pkg != null) when (pkg) {
             packageName -> {} // OpenCover's overlays; CoverActivity uprights itself
             "com.android.systemui" -> if (event.className?.toString() == SAMSUNG_COVER_HOME) RotationFeature.upright(this)
-            else -> RotationFeature.onWindow(this, pkg)
+            else -> { RotationFeature.onWindow(this, pkg); CallStore.otherWindow(this, pkg) }
         }
         if (pkg != null && pkg in BankingMode.apps(this)) {
             BankingMode.pause(this, pkg) // opened some other way than from OpenCover

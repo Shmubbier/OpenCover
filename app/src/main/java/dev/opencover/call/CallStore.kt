@@ -1,0 +1,236 @@
+package dev.opencover.call
+
+import android.app.ActivityOptions
+import android.app.Notification
+import android.app.PendingIntent
+import android.app.Person
+import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.drawable.Icon
+import android.hardware.display.DisplayManager
+import android.media.AudioManager
+import android.os.Handler
+import android.os.Looper
+import android.service.notification.StatusBarNotification
+import android.telecom.TelecomManager
+import android.telephony.TelephonyManager
+import android.view.Display
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.core.graphics.drawable.toBitmap
+import dev.opencover.COVER_DISPLAY
+import dev.opencover.apps.AppLauncher
+import dev.opencover.watcher.CoverAccessibility
+
+/** A call as the cover shows it. [answer]/[decline]/[hangUp] are the app's own buttons (null in the demo). */
+data class Call(
+    val key: String, val pkg: String, val caller: String, val avatar: Bitmap?, val phase: Phase, val since: Long,
+    val answer: PendingIntent?, val decline: PendingIntent?, val hangUp: PendingIntent?,
+    /** What the app's notification says, before the phone's ring state is applied. */
+    val posted: Phase = phase,
+    val video: Boolean = false,
+    /** The app's own Mute button, if its call notification has one. */
+    val mute: PendingIntent? = null,
+)
+
+/**
+ * The current call, from call notifications: one cover call screen for every app. Answer, Decline, Answer muted,
+ * Decline and mute that person for 30 minutes; during the call, Mute and Hang up. Main thread only.
+ */
+object CallStore {
+    var call by mutableStateOf<Call?>(null)
+        private set
+    /**
+     * The app of an answered internet call: its own call screen takes over and ours steps aside until a new call rings.
+     * By app, not notification: Messenger posts the connected call under a new notification.
+     */
+    var handedOff by mutableStateOf<String?>(null)
+        private set
+    private var muteOnConnect: String? = null // "Answer muted": the app whose Mute to press once the call is up
+    private val handler = Handler(Looper.getMainLooper())
+    private var ringMutedFor: String? = null // the silenced call's key
+
+    private fun prefs(ctx: Context) = ctx.getSharedPreferences("calls", Context.MODE_PRIVATE)
+
+    fun posted(ctx: Context, sbn: StatusBarNotification) {
+        val n = sbn.notification
+        val x = n.extras
+        val titles = n.actions.orEmpty().map { it.title?.toString().orEmpty() }
+        val ringing = ringingNow(ctx)
+        val notified = callPhase(x.getInt(Notification.EXTRA_CALL_TYPE, 0), n.category, titles)
+        val phase = livePhase(notified, ringing)
+        if (n.category == Notification.CATEGORY_CALL || phase != null) android.util.Log.d(
+            "CallStore", "${sbn.packageName} category=${n.category} type=${x.getInt(Notification.EXTRA_CALL_TYPE, 0)} buttons=$titles -> $phase",
+        )
+        if (phase == null) return
+        val person = x.getParcelable(Notification.EXTRA_CALL_PERSON, Person::class.java)
+        val caller = person?.name?.toString() ?: x.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
+        val now = System.currentTimeMillis()
+        if (phase == Phase.RINGING && isMuted(parseMuted(prefs(ctx).getString("muted", null)), sbn.packageName, caller, now)) {
+            muteRing(ctx, sbn.key) // silenced for 30 minutes after "Decline and mute"
+            return
+        }
+        fun action(role: Role) = actionIndex(titles, role).takeIf { it >= 0 }?.let { n.actions[it].actionIntent }
+        val avatar = (person?.icon ?: n.getLargeIcon())?.let { icon(ctx, it) }
+        val before = call?.takeIf { it.key == sbn.key }?.phase
+        call = Call(
+            sbn.key, sbn.packageName, caller, avatar, phase, posted = notified!!,
+            since = if (n.extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER)) n.`when` else sbn.postTime,
+            answer = x.getParcelable(Notification.EXTRA_ANSWER_INTENT, PendingIntent::class.java) ?: action(Role.ANSWER),
+            decline = x.getParcelable(Notification.EXTRA_DECLINE_INTENT, PendingIntent::class.java) ?: action(Role.DECLINE),
+            hangUp = x.getParcelable(Notification.EXTRA_HANG_UP_INTENT, PendingIntent::class.java) ?: action(Role.HANG_UP)
+                ?: action(Role.DECLINE),
+            video = x.getBoolean("android.callIsVideo"),
+            mute = action(Role.MUTE),
+        )
+        val muteButton = call?.mute
+        if (phase == Phase.ONGOING && muteOnConnect == sbn.packageName && muteButton != null) { muteOnConnect = null; send(ctx, muteButton) }
+        if (phase == Phase.RINGING) handedOff = null // a new call rings: ours again
+        if (handedOff == sbn.packageName) return
+        // A new call, or one that just connected: the cover call screen, on top of the app's own if that opened first.
+        if (before != phase) { raises = 0; if (coverInUse(ctx)) show(ctx) }
+    }
+
+    /** Calls' own screens open on top of ours (Messenger's pop-up, Samsung's call screen): bring ours back, a few times. */
+    private var raises = 0
+
+    fun otherWindow(ctx: Context, pkg: String) {
+        val c = call ?: return
+        if (pkg == ctx.packageName || raises >= 10 || handedOff == c.pkg) return
+        if (pkg != c.pkg && pkg !in CALL_SCREENS) return
+        // Apps re-open their own call screen several times in a row (Messenger: five in a second); come back once they stop.
+        handler.removeCallbacks(raise)
+        raiseCtx = ctx.applicationContext
+        handler.postDelayed(raise, 400)
+    }
+
+    private var raiseCtx: Context? = null
+    private val raise = Runnable { raiseCtx?.let { if (call != null) { raises++; show(it) } } }
+
+    private val CALL_SCREENS = setOf("com.samsung.android.incallui", "com.android.server.telecom", "com.android.dialer")
+
+    fun removed(ctx: Context, key: String) {
+        if (call?.key == key) {
+            call = null; raises = 0
+            // The phone's microphone mute outlives the call: lift ours so the next call or voice note isn't silent.
+            if (micMutedByUs) setMicMuted(ctx, false)
+        }
+        if (ringMutedFor == key) unmuteRing(ctx)
+    }
+
+    /** Debug builds only: a pretend call, to see the screens without one. */
+    fun demo(ctx: Context, phase: Phase) {
+        call = Call("demo", ctx.packageName, "Alex Rivera", null, phase, System.currentTimeMillis(), null, null, null)
+    }
+
+    fun answer(ctx: Context, muted: Boolean) {
+        val c = call ?: return
+        if (c.key == "demo") { call = c.copy(phase = Phase.ONGOING, since = System.currentTimeMillis()); return }
+        if (handsOverOnAnswer(c.pkg)) handedOff = c.pkg
+        // Samsung's phone app gives no Answer button: answer through Telecom (needs "Answer phone calls").
+        if (c.answer != null) send(ctx, c.answer) else runCatching { ctx.getSystemService(TelecomManager::class.java).acceptRingingCall() }
+        // Internet call apps keep their own microphone: press their Mute once the call is up, else mute the phone's.
+        if (muted) {
+            muteOnConnect = c.pkg
+            handler.postDelayed({
+                if (muteOnConnect == c.pkg) {
+                    muteOnConnect = null
+                    setMicMuted(ctx, true)
+                    CoverAccessibility.instance?.let { tapMute(it, c.pkg) } // apps that keep their own microphone
+                }
+            }, 4000)
+            if (!handsOverOnAnswer(c.pkg)) handler.postDelayed({ setMicMuted(ctx, true) }, 1500)
+        }
+    }
+
+    fun decline(ctx: Context, muteFor30: Boolean) {
+        val c = call ?: return
+        if (muteFor30) prefs(ctx).edit()
+            .putString("muted", formatMuted(mutePerson(parseMuted(prefs(ctx).getString("muted", null)), c.pkg, c.caller, System.currentTimeMillis())))
+            .apply()
+        if (c.key == "demo") call = null else send(ctx, c.decline ?: c.hangUp)
+    }
+
+    fun hangUp(ctx: Context) {
+        val c = call ?: return
+        if (c.key == "demo") call = null else send(ctx, c.hangUp)
+    }
+
+    /**
+     * Called every second by the call screen: the ring state changes without the app saying so (Samsung's phone app
+     * starts ringing just after posting its call, and keeps the same notification once answered).
+     */
+    fun refresh(ctx: Context) {
+        val c = call?.takeIf { it.key != "demo" } ?: return
+        val now = livePhase(c.posted, ringingNow(ctx)) ?: return
+        if (now != c.phase) call = c.copy(phase = now, since = if (now == Phase.ONGOING) System.currentTimeMillis() else c.since)
+    }
+
+    /**
+     * A call is ringing: telephony knows even on vibrate or silent (needs "phone state"); the ringtone audio mode is the
+     * fallback, set only while a ringtone plays.
+     */
+    private fun ringingNow(ctx: Context): Boolean =
+        runCatching {
+            @Suppress("DEPRECATION") // the replacement needs a callback; one read is all this needs
+            ctx.getSystemService(TelephonyManager::class.java).callState == TelephonyManager.CALL_STATE_RINGING
+        }.getOrDefault(false) ||
+            ctx.getSystemService(AudioManager::class.java).mode == AudioManager.MODE_RINGTONE
+
+    /** Taps the mute control on [pkg]'s own call screen on the cover (matched by its label), if it shows one. */
+    private fun tapMute(service: CoverAccessibility, pkg: String) {
+        val root = runCatching {
+            service.windowsOnAllDisplays[COVER_DISPLAY]?.firstOrNull { it.root?.packageName == pkg }?.root
+        }.getOrNull() ?: return
+        fun find(n: android.view.accessibility.AccessibilityNodeInfo): android.view.accessibility.AccessibilityNodeInfo? {
+            val label = (n.contentDescription ?: n.text)?.toString()?.lowercase().orEmpty()
+            if (n.isClickable && (label.startsWith("mute") || label.contains("turn off microphone") || label.contains("microphone off"))) return n
+            for (i in 0 until n.childCount) n.getChild(i)?.let(::find)?.let { return it }
+            return null
+        }
+        find(root)?.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
+    }
+
+    fun micMuted(ctx: Context) = ctx.getSystemService(AudioManager::class.java).isMicrophoneMute
+    private var micMutedByUs = false
+
+    fun setMicMuted(ctx: Context, on: Boolean) {
+        runCatching { ctx.getSystemService(AudioManager::class.java).isMicrophoneMute = on }.onSuccess { micMutedByUs = on }
+    }
+
+    /**
+     * Sends an app's call button. Answer usually opens the app's call screen: Android only lets that start when the
+     * sender is in front and says so, so it carries our permission (the call screen is in front) and the cover display.
+     */
+    private fun send(ctx: Context, pi: PendingIntent?) {
+        pi ?: return
+        val opts = ActivityOptions.makeBasic().setLaunchDisplayId(COVER_DISPLAY)
+            .setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS)
+        runCatching { pi.send(ctx, 0, null, null, null, null, opts.toBundle()) }.onFailure { runCatching { pi.send() } }
+    }
+
+    private fun icon(ctx: Context, icon: Icon): Bitmap? = runCatching { icon.loadDrawable(ctx)?.toBitmap(160, 160) }.getOrNull()
+
+    /** Folded with the cover on or asleep: the call screen belongs on the cover. Open: the inner screen has its own. */
+    private fun coverInUse(ctx: Context) =
+        ctx.getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)?.state != Display.STATE_ON
+
+    fun show(ctx: Context) {
+        val dm = ctx.getSystemService(DisplayManager::class.java)
+        if (dm.getDisplay(COVER_DISPLAY) == null) return
+        AppLauncher.start(ctx, Intent(ctx, CallActivity::class.java), animate = false)
+    }
+
+    private fun muteRing(ctx: Context, key: String) {
+        if (ringMutedFor != null) return
+        runCatching { ctx.getSystemService(AudioManager::class.java).adjustStreamVolume(AudioManager.STREAM_RING, AudioManager.ADJUST_MUTE, 0) }
+            .onSuccess { ringMutedFor = key }
+    }
+
+    private fun unmuteRing(ctx: Context) {
+        runCatching { ctx.getSystemService(AudioManager::class.java).adjustStreamVolume(AudioManager.STREAM_RING, AudioManager.ADJUST_UNMUTE, 0) }
+        ringMutedFor = null
+    }
+}
