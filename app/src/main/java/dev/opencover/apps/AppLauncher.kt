@@ -15,12 +15,14 @@ object AppLauncher {
     fun options(): Bundle =
         ActivityOptions.makeBasic().setLaunchDisplayId(COVER_DISPLAY).toBundle()
 
-    /** Starts one of our own screens (or a Settings page) on the cover display, fading in ([enterAnim] 0: no animation). */
-    fun start(ctx: Context, intent: Intent, enterAnim: Int = android.R.anim.fade_in) {
+    /**
+     * Starts one of our own screens (or a Settings page) on the cover display. [animate] false: no system transition
+     * (custom ones are ignored when we start from the background), the screen animates itself instead.
+     */
+    fun start(ctx: Context, intent: Intent, animate: Boolean = true) {
         // The accessibility service is exempt from the background-start block (the mirror view opens from a service).
-        val starter = CoverAccessibility.instance ?: ctx
-        val opts = ActivityOptions.makeCustomAnimation(starter, enterAnim, 0).setLaunchDisplayId(COVER_DISPLAY)
-        starter.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), opts.toBundle())
+        if (!animate) intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+        (CoverAccessibility.instance ?: ctx).startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), options())
     }
 
     /** Launches an installed app on the cover display as the given user (serial number). False if it failed. */

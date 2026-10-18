@@ -22,6 +22,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import dev.opencover.home.HomePrefs
 import dev.opencover.lock.LockPrefs
 import dev.opencover.lock.aodReady
@@ -70,6 +71,8 @@ class CoverActivity : ComponentActivity() {
     private var showSetup by mutableStateOf(false)
     private var wallpaper by mutableStateOf<ImageBitmap?>(null)
     private var homeRequests by mutableIntStateOf(0)
+    /** Bumped when Home comes up straight from the lock screen: plays [Entrance]. */
+    private var entrances by mutableIntStateOf(0)
     private var quickSettingsRequests by mutableIntStateOf(0)
 
     /** Called by the accessibility service after it closes Samsung's panel. */
@@ -95,6 +98,7 @@ class CoverActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (intent.getBooleanExtra(EXTRA_UNLOCKED, false)) entrances++
         // The main screen is broken: if we were opened anywhere else, move to the cover.
         if (display?.displayId != COVER_DISPLAY) {
             AppLauncher.start(this, Intent(this, CoverActivity::class.java))
@@ -152,7 +156,7 @@ class CoverActivity : ComponentActivity() {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 resumeTick // re-read permissions every time we come back from Settings
                 val required = Permissions.required(this)
-                if (required && !showSetup) Shell(layout, apps, actions, prompt, wallpaper, homeRequests, quickSettingsRequests)
+                if (required && !showSetup) Entrance(entrances) { Shell(layout, apps, actions, prompt, wallpaper, homeRequests, quickSettingsRequests) }
                 else Checklist(
                     steps = setupSteps(),
                     onAppInfo = { openSettings(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, withPackage = true) },
@@ -256,6 +260,7 @@ class CoverActivity : ComponentActivity() {
     // Every launch through AppLauncher.start (Home gesture, unlock, fold) lands here: go to Home.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_UNLOCKED, false)) entrances++
         homeRequests++
     }
 
@@ -311,6 +316,7 @@ class CoverActivity : ComponentActivity() {
     }
 
     companion object {
+        const val EXTRA_UNLOCKED = "unlocked"
         /** The launcher while it's in front (resumed), else null. */
         var current: CoverActivity? = null
             private set
@@ -320,4 +326,20 @@ class CoverActivity : ComponentActivity() {
         private const val CELL_H_DP = 84
         private const val REQ_WALLPAPER = 21
     }
+}
+
+/** Home's own entrance after unlock (the system's app-open animation is off): a quick fade and settle. */
+@androidx.compose.runtime.Composable
+private fun Entrance(key: Int, content: @androidx.compose.runtime.Composable () -> Unit) {
+    val t = androidx.compose.runtime.remember { androidx.compose.animation.core.Animatable(1f) }
+    androidx.compose.runtime.LaunchedEffect(key) {
+        if (key == 0) return@LaunchedEffect
+        t.snapTo(0f)
+        t.animateTo(1f, androidx.compose.animation.core.tween(260, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+    }
+    androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.graphicsLayer {
+        alpha = t.value
+        scaleX = 0.96f + 0.04f * t.value
+        scaleY = scaleX
+    }) { content() }
 }

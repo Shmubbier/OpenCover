@@ -69,7 +69,7 @@ class LockActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setShowWhenLocked(true)
-        overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, android.R.anim.fade_out)
+        overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
         registerReceiver(unlocked, IntentFilter(Intent.ACTION_USER_PRESENT), RECEIVER_NOT_EXPORTED)
         setContent {
             var peek by remember { mutableStateOf(false) }
@@ -148,7 +148,7 @@ class LockActivity : ComponentActivity() {
                     it == AudioManager.MODE_RINGTONE || it == AudioManager.MODE_IN_CALL || it == AudioManager.MODE_IN_COMMUNICATION
                 },
             )
-            if (show) AppLauncher.start(ctx, Intent(ctx, LockActivity::class.java), enterAnim = 0) // replaces Samsung's at once
+            if (show) AppLauncher.start(ctx, Intent(ctx, LockActivity::class.java), animate = false) // replaces Samsung's at once
         }
     }
 }

@@ -54,7 +54,7 @@ class CoverWatcher : Service() {
                     val pending = openOnUnlock(LockActivity.pendingOpen, coverActive() && MirrorService.instance == null)
                     LockActivity.pendingOpen = null
                     if (pending == null || !NotificationStore.open(this@CoverWatcher, pending)) {
-                        if (coverActive()) openLauncher("unlock")
+                        if (coverActive()) openLauncher("unlock", unlocked = true)
                     }
                 }
                 Intent.ACTION_SCREEN_OFF -> { paused = false; LockActivity.pendingOpen = null }
@@ -135,10 +135,11 @@ class CoverWatcher : Service() {
         wasActive = active
     }
 
-    private fun openLauncher(why: String) {
+    /** [unlocked]: straight from the lock screen; Home plays its own entrance instead of the system's app-open animation. */
+    private fun openLauncher(why: String, unlocked: Boolean = false) {
         if (MirrorService.instance != null) return // the forced unfolded state looks like a fold
         Log.i(TAG, "open launcher ($why)")
-        AppLauncher.start(this, Intent(this, CoverActivity::class.java))
+        AppLauncher.start(this, Intent(this, CoverActivity::class.java).putExtra(CoverActivity.EXTRA_UNLOCKED, unlocked), animate = !unlocked)
     }
 
     private fun notification(): Notification {
