@@ -25,6 +25,8 @@ import dev.opencover.apps.AppLauncher
 data class Call(
     val key: String, val pkg: String, val caller: String, val avatar: Bitmap?, val phase: Phase, val since: Long,
     val answer: PendingIntent?, val decline: PendingIntent?, val hangUp: PendingIntent?,
+    /** What the app's notification says, before the phone's ring state is applied. */
+    val posted: Phase = phase,
 )
 
 /**
@@ -44,7 +46,8 @@ object CallStore {
         val x = n.extras
         val titles = n.actions.orEmpty().map { it.title?.toString().orEmpty() }
         val ringing = ctx.getSystemService(AudioManager::class.java).mode == AudioManager.MODE_RINGTONE
-        val phase = livePhase(callPhase(x.getInt(Notification.EXTRA_CALL_TYPE, 0), n.category, titles), ringing)
+        val notified = callPhase(x.getInt(Notification.EXTRA_CALL_TYPE, 0), n.category, titles)
+        val phase = livePhase(notified, ringing)
         if (n.category == Notification.CATEGORY_CALL || phase != null) android.util.Log.d(
             "CallStore", "${sbn.packageName} category=${n.category} type=${x.getInt(Notification.EXTRA_CALL_TYPE, 0)} buttons=$titles -> $phase",
         )
@@ -60,7 +63,7 @@ object CallStore {
         val avatar = (person?.icon ?: n.getLargeIcon())?.let { icon(ctx, it) }
         val before = call?.takeIf { it.key == sbn.key }?.phase
         call = Call(
-            sbn.key, sbn.packageName, caller, avatar, phase,
+            sbn.key, sbn.packageName, caller, avatar, phase, posted = notified!!,
             since = if (n.extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER)) n.`when` else sbn.postTime,
             answer = x.getParcelable(Notification.EXTRA_ANSWER_INTENT, PendingIntent::class.java) ?: action(Role.ANSWER),
             decline = x.getParcelable(Notification.EXTRA_DECLINE_INTENT, PendingIntent::class.java) ?: action(Role.DECLINE),
@@ -76,9 +79,16 @@ object CallStore {
 
     fun otherWindow(ctx: Context, pkg: String) {
         val c = call ?: return
-        if (pkg == ctx.packageName || raises >= 3) return
-        if (pkg == c.pkg || pkg in CALL_SCREENS) { raises++; show(ctx) }
+        if (pkg == ctx.packageName || raises >= 10) return
+        if (pkg != c.pkg && pkg !in CALL_SCREENS) return
+        // Apps re-open their own call screen several times in a row (Messenger: five in a second); come back once they stop.
+        handler.removeCallbacks(raise)
+        raiseCtx = ctx.applicationContext
+        handler.postDelayed(raise, 400)
     }
+
+    private var raiseCtx: Context? = null
+    private val raise = Runnable { raiseCtx?.let { if (call != null) { raises++; show(it) } } }
 
     private val CALL_SCREENS = setOf("com.samsung.android.incallui", "com.android.server.telecom", "com.android.dialer")
 
@@ -114,12 +124,14 @@ object CallStore {
         if (c.key == "demo") call = null else send(c.hangUp)
     }
 
-    /** Called every second by the call screen: the phone stopped ringing (answered here or elsewhere) without the app saying so. */
+    /**
+     * Called every second by the call screen: the ring state changes without the app saying so (Samsung's phone app
+     * starts ringing just after posting its call, and keeps the same notification once answered).
+     */
     fun refresh(ctx: Context) {
-        val c = call ?: return
-        if (c.phase == Phase.RINGING && c.key != "demo" &&
-            ctx.getSystemService(AudioManager::class.java).mode != AudioManager.MODE_RINGTONE
-        ) call = c.copy(phase = Phase.ONGOING, since = System.currentTimeMillis())
+        val c = call?.takeIf { it.key != "demo" } ?: return
+        val now = livePhase(c.posted, ctx.getSystemService(AudioManager::class.java).mode == AudioManager.MODE_RINGTONE) ?: return
+        if (now != c.phase) call = c.copy(phase = now, since = if (now == Phase.ONGOING) System.currentTimeMillis() else c.since)
     }
 
     fun micMuted(ctx: Context) = ctx.getSystemService(AudioManager::class.java).isMicrophoneMute
