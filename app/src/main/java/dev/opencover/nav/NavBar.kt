@@ -2,7 +2,6 @@ package dev.opencover.nav
 
 import android.accessibilityservice.AccessibilityService
 import android.annotation.SuppressLint
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Canvas
@@ -19,6 +18,7 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityWindowInfo
 import dev.opencover.COVER_DISPLAY
 import dev.opencover.apps.AppLauncher
+import dev.opencover.quick.ShizukuShell
 import dev.opencover.ui.CoverActivity
 import kotlin.math.abs
 
@@ -27,10 +27,11 @@ enum class NavButton { HOME, BACK, RECENTS }
 /** OpenCover's bar shows only over Samsung's (apps that hide it keep none) and never on the lock screen. */
 fun navBarShown(enabled: Boolean, samsungBar: Boolean, locked: Boolean): Boolean = enabled && samsungBar && !locked
 
-// Samsung's cover bar, measured on the 748 px wide cover: Home x 64-166, Back x 183-285. Recents follows at the same pitch.
-private const val HOME_L = 64f / 748; private const val HOME_R = 166f / 748
-private const val BACK_L = 183f / 748; private const val BACK_R = 285f / 748
-private const val RECENTS_L = 302f / 748; private const val RECENTS_R = 404f / 748
+// Recents | Home | Back in three equal slots left of the camera lip (the cutout starts at x 379 of the 748 px cover).
+private const val RECENTS_L = 4f / 748; private const val RECENTS_R = 118f / 748
+private const val HOME_L = 128f / 748; private const val HOME_R = 242f / 748
+private const val BACK_L = 252f / 748; private const val BACK_R = 366f / 748
+private const val LIP_CENTER = 185f / 748 // middle of the part left of the lip, for the gesture pill
 
 /** The button under a touch at [x] on a bar [width] px wide, or null. */
 fun buttonAt(x: Float, width: Int): NavButton? {
@@ -58,6 +59,8 @@ fun barGesture(dy: Float, dx: Float, heldMs: Long): NavButton? = when {
 fun edgeBack(inward: Float): Boolean = inward >= EDGE_BACK_PX
 
 enum class NavStyle { BUTTONS, GESTURES }
+
+private const val RECENTS_COMPONENT = "com.sec.android.app.launcher/com.android.quickstep.RecentsActivity"
 
 object NavPrefs {
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("nav", Context.MODE_PRIVATE)
@@ -137,12 +140,12 @@ object NavBar {
                 AppLauncher.start(service, intent, animate = false)
             }
             NavButton.BACK -> service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
-            // One UI's own recents screen runs on the cover.
-            NavButton.RECENTS -> runCatching {
-                AppLauncher.start(service, Intent().setComponent(
-                    ComponentName("com.sec.android.app.launcher", "com.android.quickstep.RecentsActivity"),
-                ))
-            }
+            // One UI's own recents runs on the cover, but Samsung answers an app's launch with "Please open phone";
+            // the same launch from the shell works (FreeFlip, Cover Recents). Without Shizuku: Android's recents action.
+            NavButton.RECENTS -> Thread {
+                val ok = ShizukuShell.run("am", "start", "--display", "$COVER_DISPLAY", "-f", "0x10810000", "-n", RECENTS_COMPONENT)
+                if (!ok) service.mainExecutor.execute { service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS) }
+            }.start()
         }
     }
 
@@ -165,7 +168,7 @@ object NavBar {
             val r = height * 0.22f
             if (style == NavStyle.GESTURES) {
                 val half = width * 0.12f
-                c.drawLine(width / 2f - half, cy, width / 2f + half, cy, icon.apply { strokeWidth = 8f })
+                c.drawLine(width * LIP_CENTER - half, cy, width * LIP_CENTER + half, cy, icon.apply { strokeWidth = 8f })
                 icon.strokeWidth = 4f
                 return
             }

@@ -13,16 +13,16 @@ class NavBarTest {
         assertFalse(navBarShown(enabled = false, samsungBar = true, locked = false))
     }
 
-    // Samsung's buttons: Home x 64-166, Back x 183-285 on the 748 px wide bar; elsewhere nothing.
+    // Recents | Home | Back, all left of the camera lip (the cutout starts at x 379 of 748); elsewhere nothing.
     @Test fun touchHitsTheButtonUnderIt() {
-        assertEquals(NavButton.HOME, buttonAt(115f, 748))
-        assertEquals(NavButton.BACK, buttonAt(234f, 748))
-        assertEquals(null, buttonAt(500f, 748))
-        assertEquals(NavButton.HOME, buttonAt(57f, 374)) // a half-width bar scales the same spots
+        assertEquals(NavButton.RECENTS, buttonAt(61f, 748))
+        assertEquals(NavButton.HOME, buttonAt(185f, 748))
+        assertEquals(NavButton.BACK, buttonAt(309f, 748))
+        assertEquals(null, buttonAt(500f, 748)) // beside the lip
+        assertEquals(NavButton.HOME, buttonAt(92f, 374)) // a half-width bar scales the same spots
     }
 
-    // The third button sits after Back, the same width: x 302-404.
-    @Test fun recentsButtonAfterBack() = assertEquals(NavButton.RECENTS, buttonAt(353f, 748))
+    @Test fun buttonsStayLeftOfTheLip() = assertEquals(null, buttonAt(379f, 748))
 
     // Gestures on the bar: a short swipe up is Home, swipe up and hold is Recents, a tap or sideways move is nothing.
     @Test fun swipeUpHomeHoldRecents() {
