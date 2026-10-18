@@ -48,4 +48,11 @@ class AodTest {
         assertEquals(null, openOnUnlock("k", coverActive = false))
         assertEquals(null, openOnUnlock(null, coverActive = true))
     }
+
+    // Right after wake the keyguard window's content can be unreadable; its title (System UI's app name) still identifies it.
+    @Test fun keyguardKnownByTitleWhenContentUnreadable() {
+        assertEquals("com.android.systemui", topPackage(rootPkg = null, title = "System UI", systemUiLabel = "System UI"))
+        assertEquals("com.whatsapp", topPackage(rootPkg = "com.whatsapp", title = "System UI", systemUiLabel = "System UI"))
+        assertEquals(null, topPackage(rootPkg = null, title = "Phone", systemUiLabel = "System UI"))
+    }
 }

@@ -8,7 +8,11 @@ import android.content.IntentFilter
 import android.hardware.display.DisplayManager
 import android.media.AudioManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Display
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.view.accessibility.AccessibilityWindowInfo
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -49,6 +53,10 @@ import dev.opencover.watcher.CoverAccessibility
 fun shouldShowLock(enabled: Boolean, locked: Boolean, coverOn: Boolean, topPkg: String?, inCall: Boolean = false): Boolean =
     enabled && locked && coverOn && !inCall && topPkg == "com.android.systemui" // unknown top: keep Samsung's
 
+/** The top cover window's package: from its content, or, when that can't be read yet, System UI known by its title. */
+fun topPackage(rootPkg: String?, title: String?, systemUiLabel: String): String? =
+    rootPkg ?: "com.android.systemui".takeIf { title == systemUiLabel }
+
 /** The notification tapped in peek to open after unlock: only when unlocking on the cover. */
 fun openOnUnlock(pending: String?, coverActive: Boolean): String? = pending?.takeIf { coverActive }
 
@@ -61,6 +69,7 @@ class LockActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setShowWhenLocked(true)
+        overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, android.R.anim.fade_out)
         registerReceiver(unlocked, IntentFilter(Intent.ACTION_USER_PRESENT), RECEIVER_NOT_EXPORTED)
         setContent {
             var peek by remember { mutableStateOf(false) }
@@ -77,6 +86,11 @@ class LockActivity : ComponentActivity() {
                 LockFace(LockPrefs.layout, dim = false, locked = true, onPeek = { peek = true })
                 if (peek) Peek(onOpen = { key -> pendingOpen = key; unlock() }, onClose = { peek = false })
             }
+        }
+        // No navigation bar on the lock screen; a swipe from the bottom edge still shows it for a moment.
+        window.insetsController?.apply {
+            hide(WindowInsets.Type.navigationBars())
+            systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
     }
 
@@ -110,15 +124,20 @@ class LockActivity : ComponentActivity() {
         @Volatile var pendingOpen: String? = null
 
         /** Called on wake: replaces Samsung's lock screen with ours if [shouldShowLock] says so. */
-        fun maybeShow(service: CoverAccessibility) {
+        fun maybeShow(service: CoverAccessibility, tries: Int = 3) {
             val ctx: Context = service
             val cover = ctx.getSystemService(DisplayManager::class.java).getDisplay(COVER_DISPLAY)
+            val systemUi = runCatching {
+                ctx.packageManager.getApplicationLabel(ctx.packageManager.getApplicationInfo("com.android.systemui", 0)).toString()
+            }.getOrDefault("System UI")
             val top = runCatching {
                 service.windowsOnAllDisplays[COVER_DISPLAY]?.firstOrNull {
                     it.type == AccessibilityWindowInfo.TYPE_APPLICATION || it.type == AccessibilityWindowInfo.TYPE_SYSTEM
-                }?.root?.packageName?.toString()
+                }?.let { topPackage(it.root?.packageName?.toString(), it.title?.toString(), systemUi) }
             }.getOrNull()
             if (top == ctx.packageName) return // already showing
+            // Still unknown just after wake: look again shortly rather than guess.
+            if (top == null && tries > 0) { Handler(Looper.getMainLooper()).postDelayed({ maybeShow(service, tries - 1) }, 250); return }
             val show = shouldShowLock(
                 LockPrefs.lockScreen,
                 ctx.getSystemService(KeyguardManager::class.java).isKeyguardLocked,
@@ -129,7 +148,7 @@ class LockActivity : ComponentActivity() {
                     it == AudioManager.MODE_RINGTONE || it == AudioManager.MODE_IN_CALL || it == AudioManager.MODE_IN_COMMUNICATION
                 },
             )
-            if (show) AppLauncher.start(ctx, Intent(ctx, LockActivity::class.java))
+            if (show) AppLauncher.start(ctx, Intent(ctx, LockActivity::class.java), enterAnim = 0) // replaces Samsung's at once
         }
     }
 }

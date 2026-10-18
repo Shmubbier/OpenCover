@@ -3,8 +3,14 @@ package dev.opencover.lock
 /** What the AOD and lock screen can show. Ids are saved, so never rename one. */
 enum class Module { CLOCK, DATE, BATTERY, ICONS, NOW_PLAYING }
 
-/** A module's top-left corner as fractions of the cover (0..1), and whether it shows. */
-data class Spot(val x: Float, val y: Float, val on: Boolean)
+/** A module's top-left corner as fractions of the cover (0..1), whether it shows, and its size (1 = normal). */
+data class Spot(val x: Float, val y: Float, val on: Boolean, val scale: Float = 1f)
+
+const val MIN_SCALE = 0.5f
+const val MAX_SCALE = 2.5f
+
+/** [s] after a pinch by [zoom], kept between [MIN_SCALE] and [MAX_SCALE]. */
+fun resized(s: Spot, zoom: Float): Spot = s.copy(scale = (s.scale * zoom).coerceIn(MIN_SCALE, MAX_SCALE))
 
 val DEFAULT_LAYOUT: Map<Module, Spot> = mapOf(
     Module.CLOCK to Spot(0.05f, 0.06f, true),
@@ -14,7 +20,7 @@ val DEFAULT_LAYOUT: Map<Module, Spot> = mapOf(
     Module.NOW_PLAYING to Spot(0.03f, 0.78f, true), // clear of the camera cutout
 )
 
-/** "CLOCK:0.05,0.06,1;DATE:..." Unknown or broken entries are dropped; missing modules keep their defaults. */
+/** "CLOCK:0.05,0.06,1,1.0;DATE:..." (size optional). Unknown or broken entries are dropped; missing modules keep their defaults. */
 fun parseLayout(s: String?): Map<Module, Spot> {
     val saved = s.orEmpty().split(';').mapNotNull { entry ->
         val (id, rest) = entry.split(':', limit = 2).takeIf { it.size == 2 } ?: return@mapNotNull null
@@ -23,13 +29,14 @@ fun parseLayout(s: String?): Map<Module, Spot> {
         val x = v.getOrNull(0)?.toFloatOrNull()
         val y = v.getOrNull(1)?.toFloatOrNull()
         val ok = x != null && y != null && x in 0f..1f && y in 0f..1f // NaN and Infinity fail the range check
-        if (!ok || v.size != 3) null else module to Spot(x!!, y!!, v[2] == "1")
+        val scale = if (v.size == 4) v[3].toFloatOrNull()?.takeIf { it in MIN_SCALE..MAX_SCALE } else 1f
+        if (!ok || v.size !in 3..4 || scale == null) null else module to Spot(x!!, y!!, v[2] == "1", scale)
     }.toMap()
     return DEFAULT_LAYOUT + saved
 }
 
 fun formatLayout(m: Map<Module, Spot>): String =
-    m.entries.joinToString(";") { (k, s) -> "${k.name}:${s.x},${s.y},${if (s.on) 1 else 0}" }
+    m.entries.joinToString(";") { (k, s) -> "${k.name}:${s.x},${s.y},${if (s.on) 1 else 0},${s.scale}" }
 
 // Camera cutout, bottom right of the 748x720 cover: Rect(379, 654 - 748, 720).
 private const val CUT_X = 379 / 748f

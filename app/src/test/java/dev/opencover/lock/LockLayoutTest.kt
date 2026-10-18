@@ -52,4 +52,19 @@ class LockLayoutTest {
         val s = DEFAULT_LAYOUT.getValue(Module.NOW_PLAYING)
         assertEquals(s, clamp(s, 425f / 748f, 75f / 720f))
     }
+
+    // Sizes are saved as a fourth number; layouts saved before resizing existed keep size 1.
+    @Test fun scaleSavedAndOldLayoutsDefaultToOne() {
+        val m = parseLayout("CLOCK:0.1,0.1,1,1.5;DATE:0.1,0.2,1")
+        assertEquals(1.5f, m.getValue(Module.CLOCK).scale, 1e-4f)
+        assertEquals(1f, m.getValue(Module.DATE).scale, 1e-4f)
+        assertEquals(m, parseLayout(formatLayout(m)))
+    }
+
+    @Test fun pinchResizesWithinLimits() {
+        val s = Spot(0.1f, 0.1f, true)
+        assertEquals(1.5f, resized(s, 1.5f).scale, 1e-4f)
+        assertEquals(MAX_SCALE, resized(s, 10f).scale, 1e-4f)
+        assertEquals(MIN_SCALE, resized(s, 0.1f).scale, 1e-4f)
+    }
 }

@@ -9,7 +9,6 @@ import android.provider.Settings
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -55,6 +54,11 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.TransformOrigin
+import dev.opencover.lock.resized
 import dev.opencover.home.Wallpaper
 import dev.opencover.lock.LockPrefs
 import dev.opencover.lock.Module
@@ -97,25 +101,27 @@ fun LockFace(
         val density = LocalDensity.current
         layout.forEach { (module, spot) ->
             if (!spot.on && onMove == null) return@forEach
-            var drag by remember(module, spot) { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
             // Clamped as drawn too: a module can grow after it was placed (another clock style, more icons, the chip).
             val size = sizes[module] ?: IntSize.Zero
-            val shown = clamp(spot, size.width / wPx, size.height / hPx)
-            val x = shown.x * wPx + drag.x
-            val y = shown.y * hPx + drag.y
+            val w = size.width * spot.scale / wPx
+            val h = size.height * spot.scale / hPx
+            val shown = clamp(spot, w, h)
+            val current by rememberUpdatedState(shown)
             var m = Modifier
-                .offset(with(density) { x.toDp() }, with(density) { y.toDp() })
+                .offset(with(density) { (shown.x * wPx).toDp() }, with(density) { (shown.y * hPx).toDp() })
                 .onSizeChanged { sizes[module] = it }
-                .alpha(if (!spot.on) 0.3f else if (dim) 0.55f else 1f)
-            if (onMove != null) m = m.pointerInput(module, spot) {
-                detectDragGestures(
-                    onDragEnd = {
-                        val s = sizes[module] ?: IntSize.Zero
-                        // From the live drag, not x/y: those were captured when the gesture started.
-                        onMove(module, dropped(shown, drag.x, drag.y, wPx, hPx, s.width / wPx, s.height / hPx))
-                        drag = androidx.compose.ui.geometry.Offset.Zero
-                    },
-                ) { change, amount -> change.consume(); drag += amount }
+                .graphicsLayer {
+                    scaleX = spot.scale; scaleY = spot.scale
+                    transformOrigin = TransformOrigin(0f, 0f)
+                    alpha = if (!spot.on) 0.3f else if (dim) 0.55f else 1f
+                }
+            // Editor: drag to move, pinch to resize; each step is saved to the draft at once.
+            if (onMove != null) m = m.pointerInput(module) {
+                detectTransformGestures { _, pan, zoom, _ ->
+                    val s = sizes[module] ?: IntSize.Zero
+                    val next = resized(current, zoom)
+                    onMove(module, dropped(next, pan.x, pan.y, wPx, hPx, s.width * next.scale / wPx, s.height * next.scale / hPx))
+                }
             }
             Box(m) { ModuleView(module, locked || onMove != null, onPeek) }
         }
