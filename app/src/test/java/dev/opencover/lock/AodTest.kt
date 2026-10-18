@@ -28,4 +28,12 @@ class AodTest {
         assertFalse(shouldShowLock(enabled = true, locked = false, coverOn = true, topPkg = null))
         assertFalse(shouldShowLock(enabled = false, locked = true, coverOn = true, topPkg = null))
     }
+
+    // OpenCover restarted while the phone sleeps: the AOD must come back without waiting for the next sleep.
+    @Test fun dozingMeansNotInteractiveAndCoverInDoze() {
+        assertTrue(dozing(interactive = false, coverState = android.view.Display.STATE_DOZE_SUSPEND))
+        assertTrue(dozing(interactive = false, coverState = android.view.Display.STATE_DOZE))
+        assertFalse(dozing(interactive = true, coverState = android.view.Display.STATE_ON))
+        assertFalse(dozing(interactive = false, coverState = android.view.Display.STATE_OFF))
+    }
 }

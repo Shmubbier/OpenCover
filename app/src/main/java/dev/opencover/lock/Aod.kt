@@ -40,6 +40,10 @@ fun aodReady(ctx: Context): Boolean = aodReady(
     Settings.System.getInt(ctx.contentResolver, "aod_tap_to_show_mode", 1),
 )
 
+/** The phone is asleep with the cover showing Samsung's AOD (so OpenCover's can be drawn over it). */
+fun dozing(interactive: Boolean, coverState: Int): Boolean =
+    !interactive && (coverState == android.view.Display.STATE_DOZE || coverState == android.view.Display.STATE_DOZE_SUSPEND)
+
 /** Offset (dp) for minute [minute]: a small square walk, so the AOD never sits still long enough to burn in. */
 fun burnIn(minute: Long): Pair<Int, Int> = when ((minute % 4).toInt()) {
     0 -> 0 to 0

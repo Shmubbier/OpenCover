@@ -23,6 +23,7 @@ import dev.opencover.lock.AodOverlay
 import dev.opencover.lock.LockActivity
 import dev.opencover.lock.LockPrefs
 import dev.opencover.lock.aodReady
+import dev.opencover.lock.dozing
 import dev.opencover.phone.Fold
 import dev.opencover.phone.PhonePrefs
 import dev.opencover.phone.RotationFeature
@@ -58,6 +59,11 @@ class CoverAccessibility : AccessibilityService() {
             addAction(Intent.ACTION_DREAMING_STOPPED)
             addAction(Intent.ACTION_SCREEN_ON)
         }, RECEIVER_NOT_EXPORTED)
+        // Restarted while the phone sleeps (update, low memory): the doze began before we were listening.
+        val cover = getSystemService(android.hardware.display.DisplayManager::class.java).getDisplay(dev.opencover.COVER_DISPLAY)
+        if (LockPrefs.aod && aodReady(this) &&
+            dozing(getSystemService(android.os.PowerManager::class.java).isInteractive, cover?.state ?: android.view.Display.STATE_OFF)
+        ) AodOverlay.show(this)
         refreshScope()
         // The hold and its watcher do not survive a reboot. Only re-hold: a reset while awake locks the phone.
         if (PhonePrefs(this).keepCoverOn) Fold.apply(this)
