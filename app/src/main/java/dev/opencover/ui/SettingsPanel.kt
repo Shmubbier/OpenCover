@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.sp
 import dev.opencover.keyboard.KeyboardPrefs
 import dev.opencover.media.MediaPrefs
 import dev.opencover.nav.NavPrefs
+import dev.opencover.nav.NavStyle
+import androidx.compose.material3.FilterChip
 import dev.opencover.watcher.CoverAccessibility
 
 @Composable
@@ -91,6 +93,21 @@ fun SettingsPanel(
                 NavPrefs.setEnabled(ctx, it)
                 CoverAccessibility.instance?.apply { refreshScope(); updateNavBar() }
             })
+        }
+        if (nav) {
+            var style by remember { mutableStateOf(NavPrefs.style(ctx)) }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Style", color = Color.White, modifier = Modifier.weight(1f))
+                listOf(NavStyle.BUTTONS to "Buttons", NavStyle.GESTURES to "Gestures").forEach { (s, label) ->
+                    FilterChip(selected = style == s, onClick = {
+                        style = s
+                        NavPrefs.setStyle(ctx, s)
+                        CoverAccessibility.instance?.updateNavBar()
+                    }, label = { Text(label) })
+                }
+            }
+            if (style == NavStyle.GESTURES) Text("Swipe up: Home. Swipe up and hold: Recents. Swipe in from a side edge: Back.",
+                color = Color.Gray, fontSize = 11.sp)
         }
         Text("Media player", color = Color.Gray, fontSize = 13.sp)
         Row(verticalAlignment = Alignment.CenterVertically) {
