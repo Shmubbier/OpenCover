@@ -70,16 +70,20 @@ fun LockSettings(onBack: () -> Unit) {
 private fun LayoutEditor(onDone: () -> Unit) {
     val ctx = LocalContext.current
     var draft by remember { mutableStateOf(LockPrefs.layout) }
+    var selected by remember { mutableStateOf<Module?>(null) }
     BackHandler(onBack = onDone) // leaving without Lock drops the changes
     Box(Modifier.fillMaxSize()) {
-        LockFace(draft, dim = false, locked = true, onMove = { m, s -> draft = draft + (m to s) })
+        LockFace(draft, dim = false, locked = true, onMove = { m, s -> draft = draft + (m to s) }, selected = selected, onSelect = { selected = it })
         Row(
             Modifier.fillMaxWidth().background(Color(0xCC000000)).horizontalScroll(rememberScrollState()).padding(4.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Module.entries.forEach { m ->
                 val s = draft.getValue(m)
-                FilterChip(selected = s.on, onClick = { draft = draft + (m to s.copy(on = !s.on)) }, label = { Text(moduleNames.getValue(m)) })
+                FilterChip(selected = s.on, onClick = {
+                    draft = draft + (m to s.copy(on = !s.on))
+                    if (!s.on) selected = m // just switched on: select it
+                }, label = { Text(moduleNames.getValue(m)) })
             }
             Button(onClick = { LockPrefs.setLayout(ctx, draft); onDone() }) { Text("Lock") }
         }

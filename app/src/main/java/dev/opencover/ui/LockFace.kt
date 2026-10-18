@@ -94,11 +94,12 @@ fun LockFace(
     onPeek: () -> Unit = {},
     modifier: Modifier = Modifier,
     onMove: ((Module, Spot) -> Unit)? = null,
+    selected: Module? = null,
+    onSelect: (Module) -> Unit = {},
 ) {
     val ctx = LocalContext.current
     val wallpaper = remember(dim) { if (dim) null else Wallpaper.load(ctx) }
     val sizes = remember { mutableStateMapOf<Module, IntSize>() }
-    var active by remember { mutableStateOf<Module?>(null) } // editor: the module under the finger
     BoxWithConstraints(modifier.fillMaxSize().background(Color.Black)) {
         wallpaper?.let { Image(it, null, Modifier.fillMaxSize().alpha(0.6f), contentScale = ContentScale.Crop) }
         val wPx = constraints.maxWidth.toFloat()
@@ -120,15 +121,13 @@ fun LockFace(
                     transformOrigin = TransformOrigin(0f, 0f)
                     alpha = if (!spot.on) 0.3f else if (dim) 0.55f else 1f
                 }
-            // Editor: outline the module being touched, so it's clear which one moves.
+            // Editor: the selected module is outlined until another one is touched.
             if (onMove != null) m = m
-                .border(2.dp, if (active == module) Color(0xFF8AB4F8) else Color.Transparent, RoundedCornerShape(6.dp))
+                .border(2.dp, if (selected == module) Color(0xFF8AB4F8) else Color.Transparent, RoundedCornerShape(6.dp))
                 .pointerInput(module) {
                     awaitEachGesture {
                         awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                        active = module
-                        do { val e = awaitPointerEvent(PointerEventPass.Initial) } while (e.changes.any { it.pressed })
-                        active = null
+                        onSelect(module)
                     }
                 }
             // Editor: drag to move, pinch to resize; each step is saved to the draft at once.
