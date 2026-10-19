@@ -117,9 +117,11 @@ private fun DisplaySettings(prefs: PhonePrefs) {
     val scope = rememberCoroutineScope()
     var density by remember { mutableStateOf<Int?>(null) }
     var font by remember { mutableStateOf<Float?>(null) }
+    var anim by remember { mutableStateOf<Float?>(null) }
     var tick by remember { mutableIntStateOf(0) } // re-reads the phone's values after a change
     LaunchedEffect(tick) {
         withContext(Dispatchers.IO) { DisplayTweaks.coverDensity() to DisplayTweaks.fontScale() }.let { (d, f) -> density = d; font = f }
+        anim = withContext(Dispatchers.IO) { DisplayTweaks.animationScale() }
     }
     fun apply(block: () -> Unit) = scope.launch { withContext(Dispatchers.IO) { block() }; tick++ }
 
@@ -134,6 +136,13 @@ private fun DisplaySettings(prefs: PhonePrefs) {
         onPlus = { font = ((font ?: 1f) + 0.05f).coerceAtMost(DisplayTweaks.MAX_FONT) },
         onApply = { font?.let { f -> apply { DisplayTweaks.setFontScale(f) } } }, onReset = { apply { DisplayTweaks.setFontScale(1f) } })
     Text("For the whole phone, inner screen too.", color = Color.Gray, fontSize = 11.sp)
+    Text("Animation speed", color = Color.White)
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        DisplayTweaks.ANIMATION_SCALES.forEach { (label, v) ->
+            FilterChip(selected = anim == v, onClick = { anim = v; apply { DisplayTweaks.setAnimationScale(v) } }, label = { Text(label) })
+        }
+    }
+    Text("For the whole phone. 0.5x makes going home from Recents quicker.", color = Color.Gray, fontSize = 11.sp)
 
     var resize by remember { mutableStateOf(prefs.mirrorResize) }
     var size by remember { mutableStateOf(prefs.mirrorSize) }

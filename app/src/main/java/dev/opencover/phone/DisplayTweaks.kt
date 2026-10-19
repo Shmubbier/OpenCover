@@ -23,6 +23,17 @@ object DisplayTweaks {
     /** The system font size (the whole phone, not just the cover). Blocking. */
     fun fontScale(): Float? = ShizukuShell.output("settings", "get", "system", "font_scale")?.trim()?.toFloatOrNull()
 
+    /** Animation speeds offered: label to scale (lower is faster; 0 is off). */
+    val ANIMATION_SCALES = listOf("Off" to 0f, "0.5x" to 0.5f, "0.75x" to 0.75f, "1x" to 1f)
+    private val ANIMATION_KEYS = listOf("window_animation_scale", "transition_animation_scale", "animator_duration_scale")
+
+    /** The animator scale (it sets the speed of One UI's swipe-home and of OpenCover's own animations). Blocking. */
+    fun animationScale(): Float? = ShizukuShell.output("settings", "get", "global", "animator_duration_scale")?.trim()?.toFloatOrNull()
+
+    /** Sets all three system animation scales, as Developer options does. Blocking. */
+    fun setAnimationScale(scale: Float): Boolean =
+        ShizukuShell.run("sh", "-c", ANIMATION_KEYS.joinToString("; ") { "settings put global $it ${"%.2f".format(java.util.Locale.ROOT, scale.coerceIn(0f, 10f))}" })
+
     fun setFontScale(scale: Float): Boolean =
         ShizukuShell.run("settings", "put", "system", "font_scale", "%.2f".format(java.util.Locale.ROOT, scale.coerceIn(MIN_FONT, MAX_FONT)))
 }
