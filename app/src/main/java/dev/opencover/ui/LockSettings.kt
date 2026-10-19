@@ -80,9 +80,9 @@ fun LockSettings(onBack: () -> Unit) {
             }
         }
         Button(onClick = { editing = true }) { Text("Edit layout") }
-        Text("Background (an image or an animated GIF; the AOD shows the frame the lock screen stopped on)", color = Color.Gray, fontSize = 13.sp)
+        Text("Background (an image, or an animated GIF or WebP; the AOD shows the frame the lock screen stopped on)", color = Color.Gray, fontSize = 13.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { CoverActivity.current?.pickBackground(dev.opencover.home.Slot.LOCK) }) { Text("Pick image or GIF") }
+            Button(onClick = { CoverActivity.current?.pickBackground(dev.opencover.home.Slot.LOCK) }) { Text("Pick image, GIF or WebP") }
             if (dev.opencover.home.Wallpaper.lockStill != null) TextButton(onClick = { dev.opencover.home.Wallpaper.clearLock(ctx) }) { Text("Use Home's") }
         }
         TextButton(onClick = onBack) { Text("Back") }

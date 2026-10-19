@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
-import android.graphics.Movie
 import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -19,35 +18,36 @@ import kotlin.math.roundToInt
 enum class Slot(val base: String) { HOME("wallpaper"), LOCK("lock_wallpaper") }
 
 /**
- * Backgrounds, as Compose state: a still for each slot (a GIF's first frame, used for blurred panels too) and, for a
- * GIF, its animation. Stills are cropped to the cover; GIFs are kept as they are.
+ * Backgrounds, as Compose state: a still for each slot (an animation's first frame, used for blurred panels too) and,
+ * for a GIF or animated WebP, its animation. Stills are cropped to the cover; animations are kept as they are.
  */
 object Wallpaper {
     private const val W = 748
     private const val H = 720
 
     var homeStill by mutableStateOf<ImageBitmap?>(null); private set
-    var homeMovie by mutableStateOf<Movie?>(null); private set
+    var homeAnim by mutableStateOf<Animation?>(null); private set
     var lockStill by mutableStateOf<ImageBitmap?>(null); private set
-    var lockMovie by mutableStateOf<Movie?>(null); private set
+    /** The lock screen's animation, or its own copy of Home's: the two play at different moments. */
+    var lockAnim by mutableStateOf<Animation?>(null); private set
 
     private fun still(ctx: Context, s: Slot) = File(ctx.filesDir, "${s.base}.jpg")
-    private fun gif(ctx: Context, s: Slot) = File(ctx.filesDir, "${s.base}.gif")
+    // The name stays .gif for files saved before WebP was supported; the content decides the format.
+    private fun anim(ctx: Context, s: Slot) = File(ctx.filesDir, "${s.base}.gif")
 
     fun loadAll(ctx: Context) {
-        homeStill = load(ctx, Slot.HOME); homeMovie = movie(ctx, Slot.HOME)
-        lockStill = load(ctx, Slot.LOCK); lockMovie = movie(ctx, Slot.LOCK)
+        homeStill = load(ctx, Slot.HOME); homeAnim = animation(ctx, Slot.HOME)
+        lockStill = load(ctx, Slot.LOCK)
+        lockAnim = animation(ctx, Slot.LOCK) ?: if (lockStill == null) animation(ctx, Slot.HOME) else null
     }
 
     // ponytail: decodes on the main thread (~0.5 s for a large photo); move off-thread if it janks.
     fun save(ctx: Context, uri: Uri, slot: Slot = Slot.HOME): Boolean = try {
-        val isGif = ctx.contentResolver.getType(uri) == "image/gif"
-        if (isGif) ctx.contentResolver.openInputStream(uri)!!.use { input ->
-            val tmp = File(ctx.filesDir, "${slot.base}.gif.tmp")
-            FileOutputStream(tmp).use { input.copyTo(it); it.fd.sync() }
-            tmp.renameTo(gif(ctx, slot))
-        } else gif(ctx, slot).delete()
-        // The still: a photo, or a GIF's first frame (ImageDecoder decodes that one).
+        // Keep the file as it is if it animates (GIF or animated WebP).
+        val raw = File(ctx.filesDir, "${slot.base}.anim.tmp")
+        ctx.contentResolver.openInputStream(uri)!!.use { input -> FileOutputStream(raw).use { input.copyTo(it); it.fd.sync() } }
+        if (Animation.open(raw) != null) raw.renameTo(anim(ctx, slot)) else { raw.delete(); anim(ctx, slot).delete() }
+        // The still: a photo, or an animation's first frame (ImageDecoder decodes that one).
         val src = ImageDecoder.decodeBitmap(ImageDecoder.createSource(ctx.contentResolver, uri)) { d, info, _ ->
             d.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
             val s = maxOf(W.toFloat() / info.size.width, H.toFloat() / info.size.height)
@@ -66,14 +66,12 @@ object Wallpaper {
 
     /** The lock screen goes back to Home's background. */
     fun clearLock(ctx: Context) {
-        still(ctx, Slot.LOCK).delete(); gif(ctx, Slot.LOCK).delete()
+        still(ctx, Slot.LOCK).delete(); anim(ctx, Slot.LOCK).delete()
         loadAll(ctx)
     }
 
     fun load(ctx: Context, slot: Slot = Slot.HOME): ImageBitmap? =
         still(ctx, slot).takeIf { it.exists() }?.let { BitmapFactory.decodeFile(it.path)?.asImageBitmap() }
 
-    @Suppress("DEPRECATION") // Movie is the platform GIF decoder that can show any moment of the animation
-    private fun movie(ctx: Context, slot: Slot): Movie? =
-        gif(ctx, slot).takeIf { it.exists() }?.let { Movie.decodeFile(it.path) }?.takeIf { it.duration() > 0 }
+    private fun animation(ctx: Context, slot: Slot): Animation? = anim(ctx, slot).takeIf { it.exists() }?.let { Animation.open(it) }
 }

@@ -73,7 +73,7 @@ import java.time.format.DateTimeFormatter
 fun HomeScreen(home: Home, wallpaper: ImageBitmap?, a: LauncherActions, playing: Boolean = true, onEditSlot: (Int) -> Unit) {
     Box(Modifier.fillMaxSize()) {
         // An animated background plays only while Home is the page in view; elsewhere it holds its frame.
-        Background(wallpaper, dev.opencover.home.Wallpaper.homeMovie, dev.opencover.look.Playheads.home, playing)
+        Background(wallpaper, dev.opencover.home.Wallpaper.homeAnim, dev.opencover.look.Playheads.home, playing)
         val style = HomePrefs.clock
         ClockFace(
             style,
