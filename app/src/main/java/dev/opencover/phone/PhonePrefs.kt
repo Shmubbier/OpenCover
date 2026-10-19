@@ -15,6 +15,9 @@ class PhonePrefs(ctx: Context) {
         sp.edit().putString("app_rotations", encodeRotations(all)).commit()
     }
 
+    /** Every turned app and its quarter turns. */
+    val rotations: Map<String, Int> get() = parseRotations(sp.getString("app_rotations", null))
+
     /** At least one app is turned: the accessibility service then has to see every app's windows. */
     val hasRotations: Boolean get() = parseRotations(sp.getString("app_rotations", null)).isNotEmpty()
 
