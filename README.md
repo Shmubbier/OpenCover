@@ -4,13 +4,16 @@ A free, open-source (GPL-3.0) launcher for the Galaxy Z Flip 5 cover screen. No 
 
 ## What works
 - Home with wallpaper, clock and 4 shortcuts. Clock styles (Current, Big, Stacked, Analog, At a Glance) and widgets (battery, next alarm, weather) in Settings > Home. Swipe left for notifications, right for apps, up for media, down for quick settings.
+- Long-press an empty spot on Home to move, resize or hide the clock and shortcuts.
+- Backgrounds for Home and the lock screen: a photo, an animated GIF or an animated WebP. Four panel styles (frosted glass, scrim, Material You tint, floating cards) in Settings > Home.
+- Icons (Settings > Home): any Nova or ADW icon pack, Lawnchair's icon shapes, and themed icons in one colour taken from the wallpaper. Themed icons work best with [Lawnicons](https://github.com/lawnchairlauncher/lawnicons) by the Lawnchair team.
 - Apps pages: put apps and widgets anywhere on a 4x4 grid. Swipe up for the app drawer.
 - Opens automatically when you unlock the cover screen; Samsung's Home gesture returns to OpenCover.
 - Notifications: swipe left from Home. Grouped by conversation, with actions, swipe to dismiss, and replies by text or voice. New ones pop up over any app.
 - Media player: swipe up from Home. Tap to play or pause, swipe left or right to skip, swipe up for the next playing app, swipe down to close. Left edge seeks, right edge sets volume. Settings > Media player has a graded swipe-up option and a classic layout with buttons.
 - Quick settings: swipe down from Home. Cover brightness, battery, and tiles for Wi-Fi, Bluetooth, flashlight, rotation, sound, Do Not Disturb, battery saver, location, mobile data, airplane, NFC, dark mode and keep awake. Long-press a tile to add, remove or move tiles.
 - Keyboard (experimental, off by default): OpenCover's own keyboard on the cover (Samsung only allows its own keyboard app there). QWERTY, word suggestions, swipe typing, long-press popups. Turn it on in Settings > Experimental. Known issues: chat boxes don't move up for it, and it can stay open after swiping back.
-- Rotate tile: turns the app you last had on the cover a quarter turn; it opens that way from then on. The cover never rotates by itself while folded.
+- Rotate tile: turns the app you last had on the cover a quarter turn; it opens that way from then on. Settings > Phone lists every app's rotation. The cover never rotates by itself while folded.
 - Mirror tile: shows the inner screen on the cover with touch, for apps that need the phone open. Pick "Share entire screen" in Android's dialog. The phone locks when mirroring ends.
 - Settings > Phone: keep the cover on when the phone is opened, and a heat guard that warns at 42 °C and stops the hotspot and mirroring at 45 °C (only while one of them is on).
 - Settings > Lock screen: OpenCover's AOD (while the phone sleeps) and lock screen (swipe up for Samsung's PIN). Clock (Home's styles), date, battery, notification icons and a now-playing chip with play/pause; drag each anywhere, switch each off, then Lock. Tap the icons to peek at notifications. "Fingerprint opens Home" (Shizuku) switches Samsung's fingerprint "Stay on Lock screen": off keeps you on the lock screen after the power-key fingerprint, then a swipe opens without the PIN. The AOD needs Samsung's Always On Display set to Always with tap to show off, which keeps the cover dimly lit (some battery).
@@ -69,6 +72,10 @@ Settings > Banking apps and OpenCover steps aside while they're open. To let it 
 on afterwards, run once: `adb shell pm grant dev.opencover android.permission.WRITE_SECURE_SETTINGS`.
 That permission allows changing any secure setting; OpenCover only uses it to switch its own
 accessibility service. It also needs Usage access to notice when you leave the banking app.
+
+## Credits
+- [Lawnicons](https://github.com/lawnchairlauncher/lawnicons) by the Lawnchair team (Apache 2.0): the icon pack themed icons are made for. Install it separately; OpenCover doesn't include it.
+- Rotation, keep cover on, mirroring and the heat guard come from FreeFlip (same author). See `NOTICE`.
 
 ## Status
 Sub-project 1 of 8. See `docs/superpowers/specs/` for the roadmap.

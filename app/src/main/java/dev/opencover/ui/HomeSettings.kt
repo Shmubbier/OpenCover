@@ -130,22 +130,38 @@ private fun PanelStyleSettings() {
         onValueChange = { dev.opencover.look.LookPrefs.setSettings(ctx, style, st.copy(blur = it)) })
 }
 
-/** Pick an installed icon pack, or each app's own icons. */
+/** Icons: pack, shape and themed (one colour from the wallpaper), as in Lawnchair. */
 @Composable
 private fun IconPackSettings() {
     val ctx = LocalContext.current
     val packs = remember { dev.opencover.apps.IconPack.installed(ctx) }
-    Text("Icon pack", color = Color.Gray, fontSize = 13.sp)
-    if (packs.isEmpty()) {
-        Text("No icon packs installed. Any pack made for Nova or ADW launchers works.", color = Color.Gray, fontSize = 11.sp)
-        return
-    }
+    Text("Icons", color = Color.Gray, fontSize = 13.sp)
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         androidx.compose.material3.FilterChip(selected = HomePrefs.iconPack == null, onClick = { HomePrefs.setIconPack(ctx, null) },
             label = { Text("App icons") })
         packs.forEach { p ->
             androidx.compose.material3.FilterChip(selected = HomePrefs.iconPack == p.pkg, onClick = { HomePrefs.setIconPack(ctx, p.pkg) },
                 label = { Text(p.label) })
+        }
+        if (packs.none { it.pkg == dev.opencover.apps.LAWNICONS }) androidx.compose.material3.TextButton(onClick = {
+            runCatching {
+                dev.opencover.apps.AppLauncher.start(ctx, android.content.Intent(android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse("market://details?id=${dev.opencover.apps.LAWNICONS}")))
+            }
+        }) { Text("Get Lawnicons") }
+    }
+    Text("Any pack made for Nova or ADW launchers works. Lawnicons is made by the Lawnchair team " +
+        "(github.com/lawnchairlauncher/lawnicons, Apache 2.0).", color = Color.Gray, fontSize = 11.sp)
+    SwitchRow(
+        "Themed icons",
+        "One colour, taken from the Home wallpaper. Uses Lawnicons or the app's own themed icon; other apps keep theirs.",
+        HomePrefs.themedIcons,
+    ) { HomePrefs.setThemedIcons(ctx, it) }
+    Text("Icon shape", color = Color.Gray, fontSize = 13.sp)
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        dev.opencover.apps.IconShape.entries.forEach { sh ->
+            androidx.compose.material3.FilterChip(selected = HomePrefs.iconShape == sh, onClick = { HomePrefs.setIconShape(ctx, sh) },
+                label = { Text(sh.label) })
         }
     }
 }

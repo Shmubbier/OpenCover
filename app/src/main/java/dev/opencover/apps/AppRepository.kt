@@ -4,13 +4,13 @@ import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.pm.LauncherApps
 import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.os.Looper
 import android.os.UserHandle
 import android.os.UserManager
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import dev.opencover.layout.appKey
 
@@ -48,18 +48,37 @@ class AppRepository(private val ctx: Context) {
 
     private var pack: IconPack? = null
     private var packId: String? = null
+    private var style: Any? = null
 
-    /** An app's icon: from the chosen icon pack if it has one for the app, else the app's own (badged for work apps). */
+    /**
+     * An app's icon, in the chosen icon pack, shape and theming. Themed: a one-colour glyph (a monochrome pack's
+     * icon, else the app's own themed-icon layer) tinted from the Home wallpaper; apps with neither keep their icon.
+     */
     fun icon(pkg: String, activity: String, user: Long): ImageBitmap? {
-        // Reading the setting here (Compose state) redraws every icon when another pack is picked.
-        val want = dev.opencover.home.HomePrefs.iconPack
+        // Reading the settings here (Compose state) redraws every icon when one of them changes.
+        val prefs = dev.opencover.home.HomePrefs
+        val want = prefs.iconPack
         if (want != packId) { packId = want; pack = want?.let { IconPack.load(ctx, it) }; icons.clear() }
+        val still = dev.opencover.home.Wallpaper.homeStill
+        val now = listOf(prefs.iconShape, prefs.themedIcons, still)
+        if (now != style) { style = now; icons.clear() }
         val key = appKey(pkg, activity, user)
         icons[key]?.let { return it }
         val handle = users.getUserForSerialNumber(user) ?: return null
         val info = launcherApps.getActivityList(pkg, handle).find { it.componentName.className == activity } ?: return null
-        val drawable = pack?.icon(pkg, activity) ?: info.getBadgedIcon(0)
-        return drawable.toImageBitmap(iconPx).also { icons[key] = it }
+        val own = info.getIcon(0)
+        val packed = pack?.icon(pkg, activity)
+        val glyph = if (!prefs.themedIcons) null
+            else packed?.takeIf { pack?.monochrome == true } ?: own.takeIf { it is android.graphics.drawable.AdaptiveIconDrawable && it.monochrome != null }
+        val (fg, bg) = themedColors(still?.let { wallpaperAverage(it) } ?: 0xFF34245A.toInt())
+        // Work apps keep the system's badged icon (it isn't adaptive, so it isn't reshaped).
+        val plain = packed ?: if (handle == android.os.Process.myUserHandle()) own else info.getBadgedIcon(0)
+        return renderIcon(plain, glyph, prefs.iconShape, glyph != null, fg, bg, iconPx).asImageBitmap().also { icons[key] = it }
+    }
+
+    private fun wallpaperAverage(still: ImageBitmap): Int {
+        val small = Bitmap.createScaledBitmap(still.asAndroidBitmap(), 24, 24, true)
+        return IntArray(24 * 24).also { small.getPixels(it, 0, 24, 0, 0, 24, 24) }.let { dev.opencover.edge.averageColor(it, 0xFF34245A.toInt()) }
     }
 
     fun forget(pkg: String) {
@@ -68,11 +87,4 @@ class AppRepository(private val ctx: Context) {
 
     fun register(cb: LauncherApps.Callback) = launcherApps.registerCallback(cb, Handler(Looper.getMainLooper()))
     fun unregister(cb: LauncherApps.Callback) = launcherApps.unregisterCallback(cb)
-}
-
-private fun Drawable.toImageBitmap(px: Int): ImageBitmap {
-    val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
-    setBounds(0, 0, px, px)
-    draw(Canvas(bmp))
-    return bmp.asImageBitmap()
 }

@@ -14,7 +14,11 @@ data class IconPackInfo(val pkg: String, val label: String)
  * A pack's icons, read from its appfilter.xml, which maps an app's component ("ComponentInfo{pkg/Activity}") to a
  * drawable in the pack. Apps the pack doesn't cover keep their own icon.
  */
-class IconPack private constructor(private val res: Resources, private val pkg: String, private val map: Map<String, String>) {
+class IconPack private constructor(
+    private val res: Resources, private val pkg: String, private val map: Map<String, String>,
+    /** One-colour icons meant to be tinted (Lawnicons and other Material You packs). */
+    val monochrome: Boolean,
+) {
     /** The pack's icon for this app: its exact activity, else any icon the pack has for the app's package. */
     fun icon(appPkg: String, activity: String): Drawable? {
         val name = map["$appPkg/$activity"] ?: map[appPkg] ?: return null
@@ -45,7 +49,9 @@ class IconPack private constructor(private val res: Resources, private val pkg: 
             else ctx.createPackageContext(pkg, 0).assets.open("appfilter.xml").use { input ->
                 readAppFilter(Xml.newPullParser().apply { setInput(input, null) }, map)
             }
-            IconPack(res, pkg, map)
+            IconPack(res, pkg, map, monochrome = ctx.packageManager.queryIntentActivities(
+                Intent("org.adw.launcher.THEMES").addCategory("org.icontheme.CHANGES_WITH_MATERIAL_YOU_COLORS").setPackage(pkg), 0,
+            ).isNotEmpty() || pkg == LAWNICONS)
         } catch (e: Exception) {
             null
         }
@@ -61,6 +67,9 @@ class IconPack private constructor(private val res: Resources, private val pkg: 
         }
     }
 }
+
+/** Lawnicons (Apache 2.0, by the Lawnchair team): https://github.com/lawnchairlauncher/lawnicons */
+const val LAWNICONS = "app.lawnchair.lawnicons"
 
 /** "ComponentInfo{pkg/.Main}" as "pkg/pkg.Main"; null if it isn't a component. */
 fun componentKey(component: String): String? {
