@@ -15,6 +15,7 @@ import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
+import androidx.compose.ui.graphics.asAndroidBitmap
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityWindowInfo
 import dev.opencover.COVER_DISPLAY
@@ -134,7 +135,7 @@ object NavBar {
         windows.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_SYSTEM && it.title?.toString() == "Navigation bar" }
             ?.let { Rect().also(it::getBoundsInScreen) }?.also { lastBar = it }
             // With Samsung's swipe gestures the bar can't be touched, so it isn't listed: use where the system says it is.
-            ?: insetBar(service)
+            ?: insetBar(service)?.also { lastBar = it }
             ?: lastBar?.takeIf {
                 windows.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }?.root?.packageName == RECENTS_PACKAGE
             }
@@ -218,6 +219,62 @@ object NavBar {
         bounds = null
         style = null
         shownFor = null
+    }
+
+    /** Samsung's own swipe gestures are on (Settings > Display > Navigation bar). */
+    private fun View.samsungGestures(): Boolean =
+        android.provider.Settings.Global.getInt(context.contentResolver, "navigation_bar_gesture_while_hidden", 0) == 1
+
+    private var curtain: View? = null
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private val dropLater = Runnable { dropCurtain() }
+
+    /** Covers the cover screen with the Home wallpaper until OpenCover's Home is in front ([dropCurtainSoon]). */
+    private fun raiseCurtain(service: AccessibilityService) {
+        if (curtain != null) return
+        val cover = service.getSystemService(android.hardware.display.DisplayManager::class.java).getDisplay(COVER_DISPLAY) ?: return
+        val wm = service.createDisplayContext(cover).createWindowContext(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, null)
+            .getSystemService(WindowManager::class.java)
+        val v = CurtainView(service)
+        val lp = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.OPAQUE,
+        ).apply {
+            fitInsetsTypes = 0
+            layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+        }
+        if (runCatching { wm.addView(v, lp) }.isSuccess) curtain = v
+        main.removeCallbacks(dropLater)
+        main.postDelayed(dropLater, 2000) // never left up, whatever happens
+    }
+
+    /** OpenCover's Home is in front: lift the curtain once it has drawn. */
+    fun dropCurtainSoon() {
+        if (curtain == null) return
+        main.removeCallbacks(dropLater)
+        main.postDelayed(dropLater, 650) // Samsung's home is still on screen for a moment after ours resumes
+    }
+
+    private fun dropCurtain() {
+        curtain?.let { v -> runCatching { v.context.getSystemService(WindowManager::class.java).removeView(v) } }
+        curtain = null
+    }
+
+    /** The Home wallpaper's still, centre-cropped, as Home shows it. */
+    @SuppressLint("ViewConstructor")
+    private class CurtainView(ctx: Context) : View(ctx) {
+        private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
+        override fun onDraw(c: Canvas) {
+            c.drawColor(Color.BLACK)
+            val bmp = dev.opencover.home.Wallpaper.homeStill?.asAndroidBitmap() ?: return
+            val s = maxOf(width.toFloat() / bmp.width, height.toFloat() / bmp.height)
+            c.translate((width - bmp.width * s) / 2, (height - bmp.height * s) / 2)
+            c.scale(s, s)
+            c.drawBitmap(bmp, 0f, 0f, paint)
+        }
     }
 
     private fun hideKeyboard(service: AccessibilityService) {
@@ -360,6 +417,14 @@ object NavBar {
                 }
                 MotionEvent.ACTION_MOVE -> {
                     if (abs(dx) > 20 || abs(dy) > 20) removeCallbacks(longPress)
+                    // Samsung's swipe gestures take this swipe in a moment and briefly show Samsung's cover home on the
+                    // way: go Home now, behind a curtain of the wallpaper that hides Samsung's home until ours is up.
+                    if (!fired && CoverActivity.current == null && samsungGestures() && -dy > 16 && abs(dx) < -dy) {
+                        fired = true
+                        removeCallbacks(longPress)
+                        raiseCurtain(service)
+                        fire(NavButton.HOME)
+                    }
                     if (dy < topY - 8) { topY = dy; stillSince = SystemClock.uptimeMillis() } // still climbing
                     val held = SystemClock.uptimeMillis() - stillSince
                     if (!fired && barGesture(dy, dx, held) == NavButton.RECENTS) { fired = true; fire(NavButton.RECENTS) }
