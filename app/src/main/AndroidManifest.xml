@@ -39,6 +39,11 @@
         <intent>
             <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
         </intent>
+        <!-- Icon packs (Nova, ADW and GO launcher formats). -->
+        <intent><action android:name="org.adw.launcher.THEMES" /></intent>
+        <intent><action android:name="com.novalauncher.THEME" /></intent>
+        <intent><action android:name="com.gau.go.launcherex.theme" /></intent>
+        <intent><action android:name="org.adw.ActivityStarter.THEMES" /></intent>
     </queries>
 
     <application

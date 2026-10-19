@@ -46,12 +46,20 @@ class AppRepository(private val ctx: Context) {
             .mapValues { it.value.lastTimeUsed }
     }
 
+    private var pack: IconPack? = null
+    private var packId: String? = null
+
+    /** An app's icon: from the chosen icon pack if it has one for the app, else the app's own (badged for work apps). */
     fun icon(pkg: String, activity: String, user: Long): ImageBitmap? {
+        // Reading the setting here (Compose state) redraws every icon when another pack is picked.
+        val want = dev.opencover.home.HomePrefs.iconPack
+        if (want != packId) { packId = want; pack = want?.let { IconPack.load(ctx, it) }; icons.clear() }
         val key = appKey(pkg, activity, user)
         icons[key]?.let { return it }
         val handle = users.getUserForSerialNumber(user) ?: return null
         val info = launcherApps.getActivityList(pkg, handle).find { it.componentName.className == activity } ?: return null
-        return info.getBadgedIcon(0).toImageBitmap(iconPx).also { icons[key] = it }
+        val drawable = pack?.icon(pkg, activity) ?: info.getBadgedIcon(0)
+        return drawable.toImageBitmap(iconPx).also { icons[key] = it }
     }
 
     fun forget(pkg: String) {

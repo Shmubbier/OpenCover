@@ -103,6 +103,7 @@ fun HomeSettings(onBack: () -> Unit) {
         }
         Text(note ?: "Weather is the only feature that uses the internet: it sends rough coordinates to Open-Meteo.",
             color = Color.Gray, fontSize = 11.sp)
+        IconPackSettings()
         Text("Panel style (notifications, apps, drawer, quick settings)", color = Color.Gray, fontSize = 13.sp)
         PanelStyleSettings()
         TextButton(onClick = onBack) { Text("Back") }
@@ -127,4 +128,24 @@ private fun PanelStyleSettings() {
     Text("Blur", color = Color.White, fontSize = 13.sp)
     androidx.compose.material3.Slider(value = st.blur, valueRange = 0f..30f,
         onValueChange = { dev.opencover.look.LookPrefs.setSettings(ctx, style, st.copy(blur = it)) })
+}
+
+/** Pick an installed icon pack, or each app's own icons. */
+@Composable
+private fun IconPackSettings() {
+    val ctx = LocalContext.current
+    val packs = remember { dev.opencover.apps.IconPack.installed(ctx) }
+    Text("Icon pack", color = Color.Gray, fontSize = 13.sp)
+    if (packs.isEmpty()) {
+        Text("No icon packs installed. Any pack made for Nova or ADW launchers works.", color = Color.Gray, fontSize = 11.sp)
+        return
+    }
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        androidx.compose.material3.FilterChip(selected = HomePrefs.iconPack == null, onClick = { HomePrefs.setIconPack(ctx, null) },
+            label = { Text("App icons") })
+        packs.forEach { p ->
+            androidx.compose.material3.FilterChip(selected = HomePrefs.iconPack == p.pkg, onClick = { HomePrefs.setIconPack(ctx, p.pkg) },
+                label = { Text(p.label) })
+        }
+    }
 }
