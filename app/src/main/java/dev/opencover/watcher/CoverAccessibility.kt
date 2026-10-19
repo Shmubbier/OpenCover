@@ -73,6 +73,14 @@ class CoverAccessibility : AccessibilityService() {
         // Shizuku state does not survive a reboot, and after one Shizuku starts later than this service: redo it
         // whenever Shizuku comes up (sticky: also right now if it already is).
         rikka.shizuku.Shizuku.addBinderReceivedListenerSticky(shizukuUp, handler)
+        getSystemService(android.hardware.display.DisplayManager::class.java).registerDisplayListener(coverTurned, handler)
+    }
+
+    /** The cover turned (an app's rotation, or an app switching between landscape and portrait): the bar moves too. */
+    private val coverTurned = object : android.hardware.display.DisplayManager.DisplayListener {
+        override fun onDisplayChanged(id: Int) { if (id == COVER_DISPLAY) updateNavBar() }
+        override fun onDisplayAdded(id: Int) {}
+        override fun onDisplayRemoved(id: Int) {}
     }
 
     private val shizukuUp = rikka.shizuku.Shizuku.OnBinderReceivedListener {
@@ -83,6 +91,7 @@ class CoverAccessibility : AccessibilityService() {
 
     override fun onDestroy() {
         rikka.shizuku.Shizuku.removeBinderReceivedListener(shizukuUp)
+        getSystemService(android.hardware.display.DisplayManager::class.java).unregisterDisplayListener(coverTurned)
         NavBar.hide()
         runCatching { unregisterReceiver(dreams) }
         AodOverlay.hide()

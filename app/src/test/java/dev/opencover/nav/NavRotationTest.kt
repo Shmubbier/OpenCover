@@ -27,4 +27,12 @@ class NavRotationTest {
         assertArrayEquals(intArrayOf(100, 718, 654, 748), naturalToScreen(0, 100, 30, 654, 748, 720, 1))
         assertArrayEquals(intArrayOf(66, 0, 620, 30), naturalToScreen(0, 100, 30, 654, 748, 720, 3))
     }
+
+    // Samsung's button bar turns with the cover; its gesture bar stays on the screen's bottom.
+    @Test fun barSides() {
+        assertEquals(0, barSide(0, 654, 748, 720, 748, 720)) // bottom
+        assertEquals(1, barSide(654, 0, 720, 748, 720, 748)) // right
+        assertEquals(0, barSide(0, 682, 720, 748, 720, 748)) // gesture bar at 90 degrees: still the bottom
+        assertEquals(3, barSide(0, 0, 66, 748, 720, 748)) // left
+    }
 }
