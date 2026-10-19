@@ -161,6 +161,7 @@ class CoverAccessibility : AccessibilityService() {
         if (event.displayId == COVER_DISPLAY && pkg != null) when (pkg) {
             packageName -> {} // OpenCover's overlays; CoverActivity uprights itself
             "com.android.systemui" -> if (event.className?.toString() == SAMSUNG_COVER_HOME) RotationFeature.upright(this)
+            imePackage() -> {} // the keyboard opens over the app; it must not turn the cover back upright
             else -> { RotationFeature.onWindow(this, pkg); CallStore.otherWindow(this, pkg) }
         }
         if (pkg != null && pkg in BankingMode.apps(this)) {
@@ -183,7 +184,23 @@ class CoverAccessibility : AccessibilityService() {
     fun updateNavBar() {
         val bar = NavBar.samsungBar(this)
         val locked = getSystemService(KeyguardManager::class.java).isKeyguardLocked
-        NavBar.update(this, bar.takeIf { navBarShown(NavPrefs.enabled(this), bar != null, locked) })
+        NavBar.update(this, bar.takeIf { navBarShown(NavPrefs.enabled(this), bar != null, locked) }, keyboardUp())
+    }
+
+    /** The package of the keyboard in use ("pkg/.Service" in settings). */
+    private fun imePackage(): String? =
+        android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.DEFAULT_INPUT_METHOD)?.substringBefore('/')
+
+    /** A keyboard is up on the cover: Samsung's (an input-method window) or OpenCover's own. */
+    private fun keyboardUp(): Boolean = keyboard?.showing == true || runCatching {
+        windowsOnAllDisplays[dev.opencover.COVER_DISPLAY].orEmpty()
+            .any { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+    }.getOrDefault(false)
+
+    /** Hides whichever keyboard is up: OpenCover's own, or the input method (Back closes it). */
+    fun hideKeyboard() {
+        if (keyboard?.showing == true) keyboard?.hide() else performGlobalAction(GLOBAL_ACTION_BACK)
+        handler.postDelayed({ updateNavBar() }, 300) // drop the button once the keyboard has gone
     }
 
     override fun onInterrupt() {}

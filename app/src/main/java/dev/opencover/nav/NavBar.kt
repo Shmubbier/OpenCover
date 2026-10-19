@@ -58,6 +58,38 @@ fun barGesture(dy: Float, dx: Float, heldMs: Long): NavButton? = when {
 /** A swipe from a screen edge that came [inward] px in: far enough means Back. */
 fun edgeBack(inward: Float): Boolean = inward >= EDGE_BACK_PX
 
+/**
+ * The bar is always drawn and read in the cover's natural (upright) frame, so it looks and works the same whatever way
+ * the cover is turned. [rotation] is the cover's (Surface.ROTATION_*, 0..3). A move of [dx],[dy] on screen, in the
+ * natural frame (dy < 0 is towards the cover's top).
+ */
+fun toNatural(dx: Float, dy: Float, rotation: Int): Pair<Float, Float> = when (rotation and 3) {
+    1 -> -dy to dx
+    2 -> -dx to -dy
+    3 -> dy to -dx
+    else -> dx to dy
+}
+
+/** A point at [x],[y] in a bar view [w]x[h] as (along the bar from the cover's left, across it from its inner edge). */
+fun barPoint(x: Float, y: Float, w: Int, h: Int, rotation: Int): Pair<Float, Float> = when (rotation and 3) {
+    1 -> h - y to x
+    2 -> w - x to h - y
+    3 -> y to w - x
+    else -> x to y
+}
+
+/** A rectangle in the natural frame of a [natW]x[natH] cover, as left, top, right, bottom on screen at [rotation]. */
+fun naturalToScreen(l: Int, t: Int, r: Int, b: Int, natW: Int, natH: Int, rotation: Int): IntArray {
+    fun map(x: Int, y: Int): Pair<Int, Int> = when (rotation and 3) {
+        1 -> y to natW - x
+        2 -> natW - x to natH - y
+        3 -> natH - y to x
+        else -> x to y
+    }
+    val (x1, y1) = map(l, t); val (x2, y2) = map(r, b)
+    return intArrayOf(minOf(x1, x2), minOf(y1, y2), maxOf(x1, x2), maxOf(y1, y2))
+}
+
 enum class NavStyle { BUTTONS, GESTURES }
 
 private const val RECENTS_PACKAGE = "com.sec.android.app.launcher" // on the cover it only ever shows recents
@@ -80,6 +112,7 @@ object NavBar {
     private val views = mutableListOf<View>()
     private var bounds: Rect? = null
     private var style: NavStyle? = null
+    private var shownFor: Pair<Int, Boolean>? = null // rotation, keyboard up
 
     private var lastBar: Rect? = null
 
@@ -96,26 +129,37 @@ object NavBar {
             }
     }.getOrNull()
 
-    /** Shows the bar over [over], redraws it if Samsung's moved or the style changed, or removes it when [over] is null. */
-    fun update(service: AccessibilityService, over: Rect?) {
+    /**
+     * Shows the bar over [over], redraws it if Samsung's moved, the style or rotation changed or a keyboard came or went
+     * ([keyboard]: it then offers a hide-keyboard button), or removes it when [over] is null.
+     */
+    fun update(service: AccessibilityService, over: Rect?, keyboard: Boolean = false) {
         if (over == null || over.isEmpty) return hide()
         val s = NavPrefs.style(service)
-        if (views.isNotEmpty() && over == bounds && s == style) return
-        hide()
         val cover = service.getSystemService(android.hardware.display.DisplayManager::class.java).getDisplay(COVER_DISPLAY) ?: return
+        val rot = cover.rotation
+        if (views.isNotEmpty() && over == bounds && s == style && shownFor == (rot to keyboard)) return
+        hide()
         val wm = service.createDisplayContext(cover)
             .createWindowContext(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, null)
             .getSystemService(WindowManager::class.java)
-        add(wm, BarView(service, service, s), over.left, over.top, over.width(), over.height())
+        add(wm, BarView(service, service, s, rot, keyboard), over.left, over.top, over.width(), over.height())
         if (s == NavStyle.GESTURES) {
-            // Back strips on both edges, between the top quarter (Samsung's panel pull-down) and the bar.
+            // Back strips on the cover's two side edges, between its top quarter (Samsung's panel pull-down) and the
+            // bar, worked out upright and then turned with the cover.
+            val size = android.graphics.Point().also { @Suppress("DEPRECATION") cover.getRealSize(it) }
+            val (natW, natH) = if (rot % 2 == 1) size.y to size.x else size.x to size.y
+            val barTop = natH - minOf(over.width(), over.height())
             val edge = 30 // px on the 748 px cover, about 14 dp
-            val top = over.top / 4
-            add(wm, EdgeView(service, service, fromLeft = true), 0, top, edge, over.top - top)
-            add(wm, EdgeView(service, service, fromLeft = false), over.right - edge, top, edge, over.top - top)
+            val top = barTop / 4
+            for (left in listOf(true, false)) {
+                val (l, t, r, b) = naturalToScreen(if (left) 0 else natW - edge, top, if (left) edge else natW, barTop, natW, natH, rot)
+                add(wm, EdgeView(service, service, fromLeft = left, rot), l, t, r - l, b - t)
+            }
         }
         bounds = Rect(over)
         style = s
+        shownFor = rot to keyboard
     }
 
     private fun add(wm: WindowManager, v: View, x: Int, y: Int, w: Int, h: Int) {
@@ -138,6 +182,11 @@ object NavBar {
         views.clear()
         bounds = null
         style = null
+        shownFor = null
+    }
+
+    private fun hideKeyboard(service: AccessibilityService) {
+        (service as? dev.opencover.watcher.CoverAccessibility)?.hideKeyboard() ?: service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
     }
 
     private fun act(service: AccessibilityService, b: NavButton) {
@@ -165,9 +214,15 @@ object NavBar {
         }
     }
 
-    /** Samsung's bar, redrawn: buttons (ring, chevron, three bars) at its spots, or a pill for gestures. */
+    /**
+     * Samsung's bar, redrawn: buttons (ring, chevron, three bars) at its spots, or a pill for gestures; with a keyboard
+     * up, Back (or, with gestures, a button beside the pill) is a down chevron that hides it. Drawn and read upright.
+     */
     @SuppressLint("ViewConstructor")
-    private class BarView(ctx: Context, private val service: AccessibilityService, private val style: NavStyle) : View(ctx) {
+    private class BarView(
+        ctx: Context, private val service: AccessibilityService, private val style: NavStyle,
+        private val rotation: Int, private val keyboard: Boolean,
+    ) : View(ctx) {
         private val icon = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE; strokeWidth = 4f; color = Color.rgb(0x44, 0x44, 0x46); strokeCap = Paint.Cap.ROUND
         }
@@ -180,8 +235,20 @@ object NavBar {
 
         private val pressed = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(0x40, 0, 0, 0) }
 
+        /** The bar's length along the cover's bottom edge and its thickness, whatever the rotation. */
+        private val long get() = if (rotation % 2 == 1) height else width
+        private val thick get() = if (rotation % 2 == 1) width else height
+
         override fun onDraw(c: Canvas) {
             c.drawColor(Color.rgb(0xC1, 0xC1, 0xC2))
+            // Turn the canvas so everything below is drawn upright, as at rotation 0.
+            when (rotation and 3) {
+                1 -> { c.translate(0f, height.toFloat()); c.rotate(-90f) }
+                2 -> { c.translate(width.toFloat(), height.toFloat()); c.rotate(180f) }
+                3 -> { c.translate(width.toFloat(), 0f); c.rotate(90f) }
+            }
+            val width = long
+            val height = thick
             val cy = height / 2f
             val r = height * 0.22f
             // The button under the finger darkens, like Samsung's ripple.
@@ -189,64 +256,87 @@ object NavBar {
                 val (l, rr) = when (b) { NavButton.RECENTS -> RECENTS_L to RECENTS_R; NavButton.HOME -> HOME_L to HOME_R; NavButton.BACK -> BACK_L to BACK_R }
                 c.drawCircle(width * (l + rr) / 2, cy, height * 0.45f, pressed)
             }
+            val bx = width * (BACK_L + BACK_R) / 2
             if (style == NavStyle.GESTURES) {
                 val half = width * 0.12f
                 c.drawLine(width * LIP_CENTER - half, cy, width * LIP_CENTER + half, cy, icon.apply { strokeWidth = 8f })
                 icon.strokeWidth = 4f
+                if (keyboard) hideChevron(c, bx + width * 0.03f, cy, r)
                 return
             }
             val hx = width * (HOME_L + HOME_R) / 2
             c.drawRoundRect(hx - r, cy - r, hx + r, cy + r, r * 0.8f, r * 0.8f, icon)
-            val bx = width * (BACK_L + BACK_R) / 2
-            c.drawLine(bx + r * 0.5f, cy - r, bx - r * 0.5f, cy, icon)
-            c.drawLine(bx - r * 0.5f, cy, bx + r * 0.5f, cy + r, icon)
+            if (keyboard) hideChevron(c, bx, cy, r) else {
+                c.drawLine(bx + r * 0.5f, cy - r, bx - r * 0.5f, cy, icon)
+                c.drawLine(bx - r * 0.5f, cy, bx + r * 0.5f, cy + r, icon)
+            }
             val rx = width * (RECENTS_L + RECENTS_R) / 2
             for (i in -1..1) c.drawLine(rx + i * r * 0.7f, cy - r * 0.8f, rx + i * r * 0.7f, cy + r * 0.8f, icon)
         }
 
+        /** A down chevron: "hide the keyboard". */
+        private fun hideChevron(c: Canvas, x: Float, cy: Float, r: Float) {
+            c.drawLine(x - r, cy - r * 0.4f, x, cy + r * 0.4f, icon)
+            c.drawLine(x, cy + r * 0.4f, x + r, cy - r * 0.4f, icon)
+        }
+
         private fun fire(b: NavButton) {
             performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-            act(service, b)
+            if (b == NavButton.BACK && keyboard) hideKeyboard(service) else act(service, b)
         }
+
+        /** The button under a touch, read upright. */
+        private fun buttonUnder(e: MotionEvent): NavButton? = buttonAt(barPoint(e.x, e.y, width, height, rotation).first, long)
 
         @SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(e: MotionEvent): Boolean {
             if (style == NavStyle.BUTTONS) {
                 when (e.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> down = buttonAt(e.x, width)
-                    MotionEvent.ACTION_UP -> { buttonAt(e.x, width)?.takeIf { it == down }?.let(::fire); down = null }
+                    MotionEvent.ACTION_DOWN -> down = buttonUnder(e)
+                    MotionEvent.ACTION_UP -> { buttonUnder(e)?.takeIf { it == down }?.let(::fire); down = null }
                     MotionEvent.ACTION_CANCEL -> down = null
                 }
                 invalidate() // show or clear the pressed highlight
                 return true
             }
-            // Gestures: raw coordinates, since the finger leaves this short window while swiping up.
+            // Gestures: raw coordinates, since the finger leaves this short window while swiping up; turned upright.
+            val (dx, dy) = toNatural(e.rawX - startX, e.rawY - startY, rotation)
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    startX = e.rawX; startY = e.rawY; topY = e.rawY; stillSince = SystemClock.uptimeMillis(); fired = false
+                    startX = e.rawX; startY = e.rawY; topY = 0f; stillSince = SystemClock.uptimeMillis(); fired = false
+                    tapped = buttonUnder(e)
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    if (e.rawY < topY - 8) { topY = e.rawY; stillSince = SystemClock.uptimeMillis() } // still climbing
+                    if (dy < topY - 8) { topY = dy; stillSince = SystemClock.uptimeMillis() } // still climbing
                     val held = SystemClock.uptimeMillis() - stillSince
-                    if (!fired && barGesture(e.rawY - startY, e.rawX - startX, held) == NavButton.RECENTS) { fired = true; fire(NavButton.RECENTS) }
+                    if (!fired && barGesture(dy, dx, held) == NavButton.RECENTS) { fired = true; fire(NavButton.RECENTS) }
                 }
-                MotionEvent.ACTION_UP -> if (!fired) barGesture(e.rawY - startY, e.rawX - startX, 0)?.let(::fire)
+                MotionEvent.ACTION_UP -> if (!fired) {
+                    val g = barGesture(dy, dx, 0)
+                    // A tap on the chevron beside the pill hides the keyboard.
+                    if (g == null && keyboard && tapped == NavButton.BACK && abs(dx) < 20 && abs(dy) < 20) fire(NavButton.BACK)
+                    else g?.let(::fire)
+                }
             }
             return true
         }
+
+        private var tapped: NavButton? = null
     }
 
     /** A thin strip on a screen edge: swipe inward far enough for Back. */
     @SuppressLint("ViewConstructor")
-    private class EdgeView(ctx: Context, private val service: AccessibilityService, private val fromLeft: Boolean) : View(ctx) {
+    private class EdgeView(ctx: Context, private val service: AccessibilityService, private val fromLeft: Boolean, private val rotation: Int) : View(ctx) {
         private var startX = 0f
+        private var startY = 0f
 
         @SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(e: MotionEvent): Boolean {
             when (e.actionMasked) {
-                MotionEvent.ACTION_DOWN -> startX = e.rawX
+                MotionEvent.ACTION_DOWN -> { startX = e.rawX; startY = e.rawY }
                 MotionEvent.ACTION_UP -> {
-                    val inward = if (fromLeft) e.rawX - startX else startX - e.rawX
+                    val dx = toNatural(e.rawX - startX, e.rawY - startY, rotation).first // towards the cover's right
+                    val inward = if (fromLeft) dx else -dx
                     if (edgeBack(inward)) {
                         performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                         act(service, NavButton.BACK)
