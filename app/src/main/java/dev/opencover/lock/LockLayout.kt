@@ -21,10 +21,13 @@ val DEFAULT_LAYOUT: Map<Module, Spot> = mapOf(
 )
 
 /** "CLOCK:0.05,0.06,1,1.0;DATE:..." (size optional). Unknown or broken entries are dropped; missing modules keep their defaults. */
-fun parseLayout(s: String?): Map<Module, Spot> {
+fun parseLayout(s: String?): Map<Module, Spot> = parseSpots(s, Module.entries, DEFAULT_LAYOUT)
+
+/** [parseLayout] for any set of items: [keys] are the known ones, [defaults] fill in the rest. */
+fun <K : Enum<K>> parseSpots(s: String?, keys: List<K>, defaults: Map<K, Spot>): Map<K, Spot> {
     val saved = s.orEmpty().split(';').mapNotNull { entry ->
         val (id, rest) = entry.split(':', limit = 2).takeIf { it.size == 2 } ?: return@mapNotNull null
-        val module = Module.entries.find { it.name == id } ?: return@mapNotNull null
+        val module = keys.find { it.name == id } ?: return@mapNotNull null
         val v = rest.split(',')
         val x = v.getOrNull(0)?.toFloatOrNull()
         val y = v.getOrNull(1)?.toFloatOrNull()
@@ -32,10 +35,10 @@ fun parseLayout(s: String?): Map<Module, Spot> {
         val scale = if (v.size == 4) v[3].toFloatOrNull()?.takeIf { it in MIN_SCALE..MAX_SCALE } else 1f
         if (!ok || v.size !in 3..4 || scale == null) null else module to Spot(x!!, y!!, v[2] == "1", scale)
     }.toMap()
-    return DEFAULT_LAYOUT + saved
+    return defaults + saved
 }
 
-fun formatLayout(m: Map<Module, Spot>): String =
+fun formatLayout(m: Map<out Enum<*>, Spot>): String =
     m.entries.joinToString(";") { (k, s) -> "${k.name}:${s.x},${s.y},${if (s.on) 1 else 0},${s.scale}" }
 
 // Camera cutout, bottom right of the 748x720 cover: Rect(379, 654 - 748, 720).

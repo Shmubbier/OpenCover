@@ -98,50 +98,14 @@ fun LockFace(
     onSelect: (Module) -> Unit = {},
 ) {
     val ctx = LocalContext.current
-    val sizes = remember { mutableStateMapOf<Module, IntSize>() }
     BoxWithConstraints(modifier.fillMaxSize().background(Color.Black)) {
         // The lock screen's background (Home's unless set); the AOD shows the frame the lock screen stopped on, dimmed.
         Background(
             Wallpaper.lockStill ?: Wallpaper.homeStill, Wallpaper.lockAnim, dev.opencover.look.Playheads.lock,
             playing = !dim, alpha = if (dim) 0.3f else 0.6f,
         )
-        val wPx = constraints.maxWidth.toFloat()
-        val hPx = constraints.maxHeight.toFloat()
-        val density = LocalDensity.current
-        layout.forEach { (module, spot) ->
-            if (!spot.on && onMove == null) return@forEach
-            // Clamped as drawn too: a module can grow after it was placed (another clock style, more icons, the chip).
-            val size = sizes[module] ?: IntSize.Zero
-            val w = size.width * spot.scale / wPx
-            val h = size.height * spot.scale / hPx
-            val shown = clamp(spot, w, h)
-            val current by rememberUpdatedState(shown)
-            var m = Modifier
-                .offset(with(density) { (shown.x * wPx).toDp() }, with(density) { (shown.y * hPx).toDp() })
-                .onSizeChanged { sizes[module] = it }
-                .graphicsLayer {
-                    scaleX = spot.scale; scaleY = spot.scale
-                    transformOrigin = TransformOrigin(0f, 0f)
-                    alpha = if (!spot.on) 0.3f else if (dim) 0.55f else 1f
-                }
-            // Editor: the selected module is outlined until another one is touched.
-            if (onMove != null) m = m
-                .border(2.dp, if (selected == module) Color(0xFF8AB4F8) else Color.Transparent, RoundedCornerShape(6.dp))
-                .pointerInput(module) {
-                    awaitEachGesture {
-                        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                        onSelect(module)
-                    }
-                }
-            // Editor: drag to move, pinch to resize; each step is saved to the draft at once.
-            if (onMove != null) m = m.pointerInput(module) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    val s = sizes[module] ?: IntSize.Zero
-                    val next = resized(current, zoom)
-                    onMove(module, dropped(next, pan.x, pan.y, wPx, hPx, s.width * next.scale / wPx, s.height * next.scale / hPx))
-                }
-            }
-            Box(m) { ModuleView(module, locked || onMove != null, onPeek) }
+        Placed(layout, onMove, selected, onSelect, onAlpha = if (dim) 0.55f else 1f) { module ->
+            ModuleView(module, locked || onMove != null, onPeek)
         }
     }
 }

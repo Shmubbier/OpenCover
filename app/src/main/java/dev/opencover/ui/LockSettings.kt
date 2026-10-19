@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -97,26 +98,13 @@ private fun LayoutEditor(onDone: () -> Unit) {
     val ctx = LocalContext.current
     var draft by remember { mutableStateOf(LockPrefs.layout) }
     var selected by remember { mutableStateOf<Module?>(null) }
-    // The bar covers whatever is under it; it moves to the other edge so a module there can be dragged out.
-    var barAtBottom by remember { mutableStateOf(false) }
     BackHandler(onBack = onDone) // leaving without Lock drops the changes
-    Box(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
         LockFace(draft, dim = false, locked = true, onMove = { m, s -> draft = draft + (m to s) }, selected = selected, onSelect = { selected = it })
-        Row(
-            Modifier.align(if (barAtBottom) Alignment.BottomCenter else Alignment.TopCenter)
-                .fillMaxWidth().background(Color(0xCC000000)).let { if (barAtBottom) it.navigationBarsPadding() else it }
-                .horizontalScroll(rememberScrollState()).padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            TextButton(onClick = { barAtBottom = !barAtBottom }) { Text(if (barAtBottom) "Bar to top" else "Bar to bottom") }
-            Module.entries.forEach { m ->
-                val s = draft.getValue(m)
-                FilterChip(selected = s.on, onClick = {
-                    draft = draft + (m to s.copy(on = !s.on))
-                    if (!s.on) selected = m // just switched on: select it
-                }, label = { Text(moduleNames.getValue(m)) })
-            }
-            Button(onClick = { LockPrefs.setLayout(ctx, draft); onDone() }) { Text("Lock") }
-        }
+        PlaceBar(draft, moduleNames, onToggle = { m ->
+            val s = draft.getValue(m)
+            draft = draft + (m to s.copy(on = !s.on))
+            if (!s.on) selected = m // just switched on: select it
+        }, doneLabel = "Lock") { LockPrefs.setLayout(ctx, draft); onDone() }
     }
 }

@@ -115,6 +115,7 @@ fun Shell(
     quickSettingsRequests: Int,
 ) {
     var editing by remember { mutableStateOf(false) }
+    var homeEditing by remember { mutableStateOf(false) }
     var overlay by remember { mutableStateOf<Overlay?>(null) }
     var panel by remember { mutableStateOf<Panel?>(null) }
     var slotMenu by remember { mutableStateOf<Int?>(null) }
@@ -134,6 +135,7 @@ fun Shell(
     // Home gesture, unlock or fold: back to a clean Home.
     LaunchedEffect(homeRequests) {
         editing = false
+        homeEditing = false
         overlay = null
         slotMenu = null
         panel = null
@@ -186,8 +188,9 @@ fun Shell(
             }
             HorizontalPager(
                 state = pager,
-                modifier = Modifier.weight(1f).pointerInput(editing) {
-                    if (editing) return@pointerInput
+                userScrollEnabled = !homeEditing, // dragging Home's items must not turn the page
+                modifier = Modifier.weight(1f).pointerInput(editing, homeEditing) {
+                    if (editing || homeEditing) return@pointerInput
                     var total = 0f
                     val velocity = VelocityTracker()
                     // Pull a panel in: fully shown after PULL of the screen height. It snaps open past 15%; the app
@@ -213,7 +216,7 @@ fun Shell(
             ) { i ->
                 when (i) {
                     NOTIFICATIONS_PAGE -> PanelBackdrop { NotificationsPage(NotificationStore.notes) }
-                    HOME_PAGE -> HomeScreen(layout.home, a) { slot ->
+                    HOME_PAGE -> HomeScreen(layout.home, a, homeEditing, { homeEditing = it }) { slot ->
                         if (layout.home.quick[slot] == null) overlay = Overlay.PickSlot(slot) else slotMenu = slot
                     }
                     else -> PanelBackdrop { GridPage(layout, layoutPageFor(i)!!, editing, labels, a, onLongPress = { editing = true }) }
