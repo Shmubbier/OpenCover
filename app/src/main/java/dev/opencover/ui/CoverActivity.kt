@@ -270,7 +270,8 @@ class CoverActivity : ComponentActivity() {
         refreshLocked()
         if (ShizukuShell.allowed()) RotationFeature.upright(this) // shell call runs on its own thread
         current = this
-        dev.opencover.nav.NavBar.dropCurtainSoon() // Home is up: the curtain hiding Samsung's cover home can go
+        // Home resumed: check whether it's on top yet (the curtain hiding Samsung's cover home can go then).
+        dev.opencover.watcher.CoverAccessibility.instance?.let { dev.opencover.nav.NavBar.dropCurtainIfHome(it) }
         BankingMode.resume(this) // back in OpenCover, so any banking app was left
         // Full screen: a top-edge swipe only peeks the status bar, so Samsung's quick panel
         // doesn't fight our swipe-down quick settings.

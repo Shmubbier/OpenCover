@@ -251,16 +251,28 @@ object NavBar {
         main.postDelayed(dropLater, 2000) // never left up, whatever happens
     }
 
-    /** OpenCover's Home is in front: lift the curtain once it has drawn. */
-    fun dropCurtainSoon() {
+    /** A curtain is up: Home skips its own fade-in, since the wallpaper already shows. */
+    val curtainUp get() = curtain != null
+
+    /**
+     * The cover's windows changed: once OpenCover is the app on top (Samsung's cover home is gone), fade the curtain
+     * out. Resuming isn't enough: Samsung's home stays on screen for a moment after ours resumes.
+     */
+    fun dropCurtainIfHome(service: AccessibilityService) {
         if (curtain == null) return
-        main.removeCallbacks(dropLater)
-        main.postDelayed(dropLater, 650) // Samsung's home is still on screen for a moment after ours resumes
+        val top = runCatching {
+            service.windowsOnAllDisplays[COVER_DISPLAY].orEmpty()
+                .firstOrNull { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }?.title?.toString()
+        }.getOrNull()
+        if (top == "OpenCover" && CoverActivity.current != null) dropCurtain(fade = true)
     }
 
-    private fun dropCurtain() {
-        curtain?.let { v -> runCatching { v.context.getSystemService(WindowManager::class.java).removeView(v) } }
+    private fun dropCurtain(fade: Boolean = false) {
+        val v = curtain ?: return
         curtain = null
+        main.removeCallbacks(dropLater)
+        val remove = { runCatching { v.context.getSystemService(WindowManager::class.java).removeView(v) }; Unit }
+        if (fade) v.animate().alpha(0f).setDuration(150).withEndAction(remove).start() else remove()
     }
 
     /** The Home wallpaper's still, centre-cropped, as Home shows it. */
@@ -286,7 +298,7 @@ object NavBar {
             NavButton.HOME -> {
                 val intent = Intent(service, CoverActivity::class.java)
                 // Already on Home: back to its home page. Otherwise no system animation; Home plays its own entrance.
-                if (CoverActivity.current == null) intent.putExtra(CoverActivity.EXTRA_UNLOCKED, true)
+                if (CoverActivity.current == null && !curtainUp) intent.putExtra(CoverActivity.EXTRA_UNLOCKED, true)
                 AppLauncher.start(service, intent, animate = false)
             }
             NavButton.BACK -> service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)

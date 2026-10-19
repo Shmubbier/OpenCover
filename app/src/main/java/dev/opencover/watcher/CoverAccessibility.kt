@@ -163,6 +163,7 @@ class CoverAccessibility : AccessibilityService() {
         if (event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
             if (TopEdge.enabled(this)) takeTopEdge()
             updateNavBar()
+            NavBar.dropCurtainIfHome(this)
             return
         }
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
