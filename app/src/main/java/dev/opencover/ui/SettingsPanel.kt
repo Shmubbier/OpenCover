@@ -111,7 +111,7 @@ fun SettingsPanel(
                     }, label = { Text(label) })
                 }
             }
-            if (style == NavStyle.GESTURES) Text("Swipe up: Home. Swipe up and hold: Recents. Swipe in from a side edge: Back.",
+            if (style == NavStyle.GESTURES) Text("Swipe up: Home. Long-press the pill (or swipe up and hold, with Samsung's buttons): Recents. Swipe in from a side edge: Back.",
                 color = Color.Gray, fontSize = 11.sp)
         }
         Text("Media player", color = Color.Gray, fontSize = 13.sp)

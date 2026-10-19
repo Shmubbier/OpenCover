@@ -14,6 +14,7 @@ import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityWindowInfo
 import dev.opencover.COVER_DISPLAY
@@ -353,8 +354,12 @@ object NavBar {
                 MotionEvent.ACTION_DOWN -> {
                     startX = e.rawX; startY = e.rawY; topY = 0f; stillSince = SystemClock.uptimeMillis(); fired = false
                     onChevron = abs(barPoint(e.x, e.y, width, height, rotation).first / long - chevronAt) < 0.08f
+                    // Long-press for Recents: with Samsung's swipe gestures on, the system takes any swipe up from
+                    // the bottom edge before it gets here, but a finger held still stays ours.
+                    if (!onChevron || !keyboard) postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    if (abs(dx) > 20 || abs(dy) > 20) removeCallbacks(longPress)
                     if (dy < topY - 8) { topY = dy; stillSince = SystemClock.uptimeMillis() } // still climbing
                     val held = SystemClock.uptimeMillis() - stillSince
                     if (!fired && barGesture(dy, dx, held) == NavButton.RECENTS) { fired = true; fire(NavButton.RECENTS) }
@@ -366,9 +371,11 @@ object NavBar {
                     else g?.let(::fire)
                 }
             }
+            if (e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL) removeCallbacks(longPress)
             return true
         }
 
+        private val longPress = Runnable { if (!fired) { fired = true; fire(NavButton.RECENTS) } }
         private var onChevron = false
     }
 
