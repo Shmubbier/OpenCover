@@ -156,7 +156,7 @@ class CoverActivity : ComponentActivity() {
                 // Step aside before a banking app checks for accessibility services.
                 if (pkg in BankingMode.apps(this)) BankingMode.pause(this, pkg)
                 // Didn't open: we're still in OpenCover, so turn accessibility straight back on.
-                if (!AppLauncher.launch(this, pkg, activity, user)) BankingMode.resume(this)
+                AppLauncher.launch(this, pkg, activity, user) { BankingMode.resume(this) }
             },
             change = ::update,
             addApp = { e, page -> place(page, 1, 1, { AppItem(newId(), it, e.pkg, e.activity, e.user) }) },
