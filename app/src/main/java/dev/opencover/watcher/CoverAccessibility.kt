@@ -69,13 +69,20 @@ class CoverAccessibility : AccessibilityService() {
             dozing(getSystemService(android.os.PowerManager::class.java).isInteractive, cover?.state ?: android.view.Display.STATE_OFF)
         ) AodOverlay.show(this)
         refreshScope()
-        // The hold and its watcher do not survive a reboot. Only re-hold: a reset while awake locks the phone.
-        if (PhonePrefs(this).keepCoverOn) Fold.apply(this)
         handler.post { updateNavBar() } // the window list is ready once connected
+        // Shizuku state does not survive a reboot, and after one Shizuku starts later than this service: redo it
+        // whenever Shizuku comes up (sticky: also right now if it already is).
+        rikka.shizuku.Shizuku.addBinderReceivedListenerSticky(shizukuUp, handler)
+    }
+
+    private val shizukuUp = rikka.shizuku.Shizuku.OnBinderReceivedListener {
+        // Only re-hold the fold state: a reset while awake locks the phone.
+        if (PhonePrefs(this).keepCoverOn) Fold.apply(this)
         if (PhonePrefs(this).rotationResetPending) RotationFeature.resetToDefault(this)
     }
 
     override fun onDestroy() {
+        rikka.shizuku.Shizuku.removeBinderReceivedListener(shizukuUp)
         NavBar.hide()
         runCatching { unregisterReceiver(dreams) }
         AodOverlay.hide()
