@@ -21,6 +21,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -95,13 +97,18 @@ private fun LayoutEditor(onDone: () -> Unit) {
     val ctx = LocalContext.current
     var draft by remember { mutableStateOf(LockPrefs.layout) }
     var selected by remember { mutableStateOf<Module?>(null) }
+    // The bar covers whatever is under it; it moves to the other edge so a module there can be dragged out.
+    var barAtBottom by remember { mutableStateOf(false) }
     BackHandler(onBack = onDone) // leaving without Lock drops the changes
     Box(Modifier.fillMaxSize()) {
         LockFace(draft, dim = false, locked = true, onMove = { m, s -> draft = draft + (m to s) }, selected = selected, onSelect = { selected = it })
         Row(
-            Modifier.fillMaxWidth().background(Color(0xCC000000)).horizontalScroll(rememberScrollState()).padding(4.dp),
+            Modifier.align(if (barAtBottom) Alignment.BottomCenter else Alignment.TopCenter)
+                .fillMaxWidth().background(Color(0xCC000000)).let { if (barAtBottom) it.navigationBarsPadding() else it }
+                .horizontalScroll(rememberScrollState()).padding(4.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            TextButton(onClick = { barAtBottom = !barAtBottom }) { Text(if (barAtBottom) "Bar to top" else "Bar to bottom") }
             Module.entries.forEach { m ->
                 val s = draft.getValue(m)
                 FilterChip(selected = s.on, onClick = {
