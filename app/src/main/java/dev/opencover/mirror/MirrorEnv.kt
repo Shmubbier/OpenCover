@@ -12,7 +12,9 @@ import android.provider.Settings
 import java.util.concurrent.Executors
 import dev.opencover.watcher.CoverAccessibility
 import dev.opencover.watcher.withService
+import dev.opencover.phone.INNER_SCREEN_RESET
 import dev.opencover.phone.foldStateArgs
+import dev.opencover.phone.innerScreenScript
 import dev.opencover.phone.PhonePrefs
 import dev.opencover.phone.RotationFeature
 import dev.opencover.quick.ShizukuShell
@@ -45,7 +47,11 @@ object MirrorEnv {
             prefs.restoreSettings = "${Settings.Global.getInt(r, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0)}," +
                 Settings.Secure.getInt(r, SECURE_NON_MARKET, 0)
         }
-        return ShizukuShell.output("sh", "-c", "cmd device_state state $UNFOLDED_STATE; $HIDE; cmd device_state print-state")
+        // Optional: a shorter inner screen fits the near-square cover better. Before the state change, so the capture
+        // size read once the display settles already has it.
+        val resize = if (prefs.mirrorResize) innerScreenScript(prefs.mirrorSize, prefs.mirrorDensity) else null
+        if (resize != null) prefs.innerResetPending = true
+        return ShizukuShell.output("sh", "-c", "${resize.orEmpty()}cmd device_state state $UNFOLDED_STATE; $HIDE; cmd device_state print-state")
     }
 
     /**
@@ -67,15 +73,15 @@ object MirrorEnv {
     fun leave(ctx: Context) {
         val app = ctx.applicationContext
         PhonePrefs(app).resetPending = true
-        later { restoreSettings(app); restoreAccessibility(app) }
+        later { restoreSettings(app); restoreAccessibility(app); restoreInnerScreen(app) }
         resetState(app, wake = true)
     }
 
     /** Finish anything an earlier run left undone (process died, Shizuku was down). Call from Application.onCreate. */
     fun recover(app: Context) {
         val prefs = PhonePrefs(app)
-        if (prefs.restoreSettings != null || prefs.restoreAccessibility) {
-            later { restoreSettings(app); restoreAccessibility(app) }
+        if (prefs.restoreSettings != null || prefs.restoreAccessibility || prefs.innerResetPending) {
+            later { restoreSettings(app); restoreAccessibility(app); restoreInnerScreen(app) }
         }
         if (prefs.resetPending) resetWhenAsleep(app)
     }
@@ -86,6 +92,11 @@ object MirrorEnv {
         if (ShizukuShell.run("sh", "-c", "settings put secure $A11Y '$list'; settings put secure accessibility_enabled 1")) {
             prefs.restoreAccessibility = false
         }
+    }
+
+    private fun restoreInnerScreen(app: Context) {
+        val prefs = PhonePrefs(app)
+        if (prefs.innerResetPending && ShizukuShell.run("sh", "-c", INNER_SCREEN_RESET)) prefs.innerResetPending = false
     }
 
     private fun restoreSettings(app: Context) {

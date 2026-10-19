@@ -55,4 +55,22 @@ class PhonePrefs(ctx: Context) {
     var heatGuard: Boolean
         get() = sp.getBoolean("heat_guard", true)
         set(v) = sp.edit().putBoolean("heat_guard", v).apply()
+
+    /** Before mirroring, set the inner screen to [mirrorSize] at [mirrorDensity]; reset when mirroring ends. */
+    var mirrorResize: Boolean
+        get() = sp.getBoolean("mirror_resize", false)
+        set(v) = sp.edit().putBoolean("mirror_resize", v).apply()
+
+    var mirrorSize: String
+        get() = sp.getString("mirror_size", null) ?: "1080x1600"
+        set(v) = sp.edit().putString("mirror_size", v).apply()
+
+    var mirrorDensity: Int
+        get() = sp.getInt("mirror_density", 400)
+        set(v) = sp.edit().putInt("mirror_density", v).apply()
+
+    /** The inner screen was resized for mirroring and still has to be put back. */
+    var innerResetPending: Boolean
+        get() = sp.getBoolean("inner_reset_pending", false)
+        set(v) { sp.edit().putBoolean("inner_reset_pending", v).commit() }
 }

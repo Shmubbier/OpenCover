@@ -2,6 +2,16 @@ package dev.opencover.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import dev.opencover.phone.DisplayTweaks
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -33,7 +43,7 @@ import dev.opencover.phone.nextTurns
 import dev.opencover.quick.ShizukuShell
 import dev.opencover.watcher.CoverAccessibility
 
-/** Settings > Phone: keep the cover on when opened, heat guard, rotation per app. */
+/** Settings > Phone: keep the cover on when opened, heat guard, display presets, rotation per app. */
 @Composable
 fun PhoneSettings(onBack: () -> Unit) {
     BackHandler(onBack = onBack)
@@ -56,6 +66,7 @@ fun PhoneSettings(onBack: () -> Unit) {
             "Only while the hotspot or mirroring is on. Warns at 42 °C, stops both at 45 °C.",
             heat,
         ) { heat = it; prefs.heatGuard = it; HeatGuard.evaluate() }
+        DisplaySettings(prefs)
         AppRotations(prefs)
         TextButton(onClick = onBack) { Text("Back") }
     }
@@ -97,5 +108,64 @@ private fun AppRotations(prefs: PhonePrefs) {
             Text(app.label, color = Color.White, modifier = Modifier.weight(1f))
             Text(if (t == 0) "Upright" else "${t * 90}°", color = if (t == 0) Color.Gray else Color(0xFFD0BCFF))
         }
+    }
+}
+
+/** Cover density and font size, and the inner screen's size while mirroring (all through Shizuku). */
+@Composable
+private fun DisplaySettings(prefs: PhonePrefs) {
+    val scope = rememberCoroutineScope()
+    var density by remember { mutableStateOf<Int?>(null) }
+    var font by remember { mutableStateOf<Float?>(null) }
+    var tick by remember { mutableIntStateOf(0) } // re-reads the phone's values after a change
+    LaunchedEffect(tick) {
+        withContext(Dispatchers.IO) { DisplayTweaks.coverDensity() to DisplayTweaks.fontScale() }.let { (d, f) -> density = d; font = f }
+    }
+    fun apply(block: () -> Unit) = scope.launch { withContext(Dispatchers.IO) { block() }; tick++ }
+
+    Text("Display", color = Color.White)
+    if (!ShizukuShell.allowed()) { Text("Start Shizuku to change these.", color = Color.Gray, fontSize = 11.sp); return }
+    Stepper("Cover density", density?.toString() ?: "…",
+        onMinus = { density = (density ?: 280) - 10 }, onPlus = { density = (density ?: 280) + 10 },
+        onApply = { apply { DisplayTweaks.setCoverDensity(density) } }, onReset = { apply { DisplayTweaks.setCoverDensity(null) } })
+    Text("Lower fits more on the cover. The cover's own is 340.", color = Color.Gray, fontSize = 11.sp)
+    Stepper("Font size", font?.let { "%.2f".format(it) } ?: "…",
+        onMinus = { font = ((font ?: 1f) - 0.05f).coerceAtLeast(DisplayTweaks.MIN_FONT) },
+        onPlus = { font = ((font ?: 1f) + 0.05f).coerceAtMost(DisplayTweaks.MAX_FONT) },
+        onApply = { font?.let { f -> apply { DisplayTweaks.setFontScale(f) } } }, onReset = { apply { DisplayTweaks.setFontScale(1f) } })
+    Text("For the whole phone, inner screen too.", color = Color.Gray, fontSize = 11.sp)
+
+    var resize by remember { mutableStateOf(prefs.mirrorResize) }
+    var size by remember { mutableStateOf(prefs.mirrorSize) }
+    var mirrorDpi by remember { mutableIntStateOf(prefs.mirrorDensity) }
+    SwitchRow(
+        "Resize the inner screen for mirroring",
+        "Set before mirroring starts, put back when it ends ($size at density $mirrorDpi).",
+        resize,
+    ) { resize = it; prefs.mirrorResize = it }
+    if (resize) {
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            DisplayTweaks.MIRROR_SIZES.forEach { (label, s) ->
+                FilterChip(selected = size == s, onClick = { size = s; prefs.mirrorSize = s }, label = { Text("$label  $s") })
+            }
+        }
+        Stepper("Inner density", "$mirrorDpi",
+            onMinus = { mirrorDpi = (mirrorDpi - 20).coerceAtLeast(DisplayTweaks.MIN_DENSITY); prefs.mirrorDensity = mirrorDpi },
+            onPlus = { mirrorDpi = (mirrorDpi + 20).coerceAtMost(DisplayTweaks.MAX_DENSITY); prefs.mirrorDensity = mirrorDpi })
+    }
+}
+
+/** A value with - and + to change it, and, when given, Apply and Reset. */
+@Composable
+private fun Stepper(label: String, value: String, onMinus: () -> Unit, onPlus: () -> Unit, onApply: (() -> Unit)? = null, onReset: (() -> Unit)? = null) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = Color.White, modifier = Modifier.weight(1f))
+        TextButton(onClick = onMinus) { Text("−", fontSize = 20.sp) }
+        Text(value, color = Color.White, fontSize = 16.sp)
+        TextButton(onClick = onPlus) { Text("+", fontSize = 20.sp) }
+    }
+    if (onApply != null || onReset != null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        onApply?.let { Button(onClick = it) { Text("Apply") } }
+        onReset?.let { TextButton(onClick = it) { Text("Reset") } }
     }
 }

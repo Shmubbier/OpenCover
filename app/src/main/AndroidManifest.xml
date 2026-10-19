@@ -56,7 +56,7 @@
             android:excludeFromRecents="true"
             android:launchMode="singleTask"
             android:resizeableActivity="true"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|keyboardHidden|uiMode">
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|fontScale|fontWeightAdjustment|keyboardHidden|uiMode">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
