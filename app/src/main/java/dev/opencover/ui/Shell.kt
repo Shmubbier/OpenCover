@@ -35,6 +35,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
@@ -151,7 +155,18 @@ fun Shell(
 
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         val heightPx = constraints.maxHeight.toFloat()
-        Column(Modifier.fillMaxSize()) {
+        // How far a page or panel covers Home, 0..1: the wallpaper blurs by as much as it is covered.
+        val pageAway = minOf(1f, kotlin.math.abs(pager.currentPage + pager.currentPageOffsetFraction - HOME_PAGE))
+        val panelOver = if (panel != null && panel != Panel.MEDIA) reveal.value else 0f
+        val covered = maxOf(pageAway, panelOver)
+        // One wallpaper for every page: it plays on Home and holds its frame elsewhere.
+        Background(
+            wallpaper, dev.opencover.home.Wallpaper.homeAnim, dev.opencover.look.Playheads.home,
+            playing = pager.currentPage == HOME_PAGE && panel == null,
+            modifier = Modifier.blur((dev.opencover.look.LookPrefs.current.blur * covered).dp, BlurredEdgeTreatment.Rectangle),
+        )
+        // A panel slides in over the wallpaper, not over the page under it: fade the page out as it comes.
+        Column(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - panelOver }) {
             if (editing) {
                 val removed = layoutPageFor(pager.currentPage)?.let { layout.removePage(it) }
                 EditBar(
@@ -198,7 +213,7 @@ fun Shell(
             ) { i ->
                 when (i) {
                     NOTIFICATIONS_PAGE -> PanelBackdrop { NotificationsPage(NotificationStore.notes) }
-                    HOME_PAGE -> HomeScreen(layout.home, wallpaper, a, playing = pager.currentPage == HOME_PAGE && panel == null) { slot ->
+                    HOME_PAGE -> HomeScreen(layout.home, a) { slot ->
                         if (layout.home.quick[slot] == null) overlay = Overlay.PickSlot(slot) else slotMenu = slot
                     }
                     else -> PanelBackdrop { GridPage(layout, layoutPageFor(i)!!, editing, labels, a, onLongPress = { editing = true }) }

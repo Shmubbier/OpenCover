@@ -70,10 +70,9 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 @Composable
-fun HomeScreen(home: Home, wallpaper: ImageBitmap?, a: LauncherActions, playing: Boolean = true, onEditSlot: (Int) -> Unit) {
+fun HomeScreen(home: Home, a: LauncherActions, onEditSlot: (Int) -> Unit) {
+    // The wallpaper is behind the whole pager (see Shell), so it stays put while the pages slide over it.
     Box(Modifier.fillMaxSize()) {
-        // An animated background plays only while Home is the page in view; elsewhere it holds its frame.
-        Background(wallpaper, dev.opencover.home.Wallpaper.homeAnim, dev.opencover.look.Playheads.home, playing)
         val style = HomePrefs.clock
         ClockFace(
             style,

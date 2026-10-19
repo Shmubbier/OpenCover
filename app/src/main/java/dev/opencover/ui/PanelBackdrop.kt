@@ -24,18 +24,16 @@ import dev.opencover.look.PanelStyle
 private val SheetShape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
 
 /**
- * The backdrop of the notifications page, the apps pages, the app drawer and quick settings, in the chosen panel style:
- * frosted glass, a Lawnchair-style scrim sheet, a sheet tinted with the wallpaper's colour, or a floating card.
+ * The mask of the notifications page, the apps pages, the app drawer and quick settings, in the chosen panel style:
+ * frosted glass, a Lawnchair-style scrim sheet, a sheet tinted with the wallpaper's colour, or a floating card. The
+ * wallpaper itself is behind everything (Shell blurs it as a page or panel covers Home).
  */
 @Composable
 fun PanelBackdrop(content: @Composable () -> Unit) {
     val style = LookPrefs.style
     val s = LookPrefs.current
     val still = Wallpaper.homeStill
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
-        still?.let {
-            Image(it, null, Modifier.fillMaxSize().blur(s.blur.dp, BlurredEdgeTreatment.Rectangle), contentScale = ContentScale.Crop)
-        }
+    Box(Modifier.fillMaxSize()) {
         when (style) {
             PanelStyle.FROSTED -> Box(Modifier.fillMaxSize().background(Color(0xFF0E0E14).copy(alpha = s.opacity))) { content() }
             PanelStyle.SCRIM -> Box(Modifier.fillMaxSize().padding(top = 10.dp).background(Color(0xFF0A0A0C).copy(alpha = s.opacity), SheetShape)) { content() }
