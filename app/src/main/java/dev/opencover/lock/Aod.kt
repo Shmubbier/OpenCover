@@ -55,6 +55,35 @@ fun burnIn(minute: Long): Pair<Int, Int> = when ((minute % 4).toInt()) {
 private const val DP_SCALE = 0.8f // icons and spacing
 private const val SP_SCALE = 340f / 480f // text
 
+/**
+ * The density and font scale OpenCover's cover activity (Home, the lock screen) actually draws at. Samsung runs cover
+ * activities in a compat config that differs from this overlay's, and both move when the cover density is changed, so
+ * the activity records its own and the AOD draws with exactly those: its modules then match the lock screen's.
+ */
+object CoverScale {
+    private fun prefs(ctx: Context) = ctx.getSharedPreferences("lock", Context.MODE_PRIVATE)
+
+    /**
+     * Samsung draws cover activities in a bigger space (the inner screen's density, 1282x1234 px) and shrinks the
+     * window onto the 748x720 cover; the density as seen on the cover is the activity's times that shrink.
+     */
+    fun record(ctx: android.app.Activity) {
+        val m = ctx.resources.displayMetrics
+        val mode = ctx.display?.mode ?: return
+        val shrink = maxOf(mode.physicalWidth, mode.physicalHeight).toFloat() / maxOf(m.widthPixels, m.heightPixels)
+        prefs(ctx).edit()
+            .putFloat("cover_density", m.density * shrink.coerceAtMost(1f))
+            .putFloat("cover_font_scale", ctx.resources.configuration.fontScale).apply()
+    }
+
+    /** null until the activity has run once. */
+    fun density(ctx: Context): Density? {
+        val p = prefs(ctx)
+        val d = p.getFloat("cover_density", 0f).takeIf { it > 0f } ?: return null
+        return Density(d, p.getFloat("cover_font_scale", 1f))
+    }
+}
+
 /** The AOD: OpenCover's face in an accessibility overlay on the cover while the phone dozes. Main thread only. */
 object AodOverlay {
     private var view: View? = null
@@ -77,7 +106,8 @@ object AodOverlay {
                 // ponytail: activities on the cover (Home, the lock screen) run in Samsung's compat config and come out smaller
                 // than this native 340 dpi window: 0.8x for dp, 0.71x for text (measured on the Flip 5). Recheck on other covers.
                 val d = LocalDensity.current
-                CompositionLocalProvider(LocalDensity provides Density(d.density * DP_SCALE, d.fontScale * SP_SCALE / DP_SCALE)) {
+                val same = CoverScale.density(service) ?: Density(d.density * DP_SCALE, d.fontScale * SP_SCALE / DP_SCALE)
+                CompositionLocalProvider(LocalDensity provides same) {
                     LockFace(LockPrefs.layout, dim = true, locked = false, modifier = Modifier.offset(dx.dp, dy.dp))
                 }
             }

@@ -119,6 +119,7 @@ class CoverActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (intent.getBooleanExtra(EXTRA_UNLOCKED, false)) entrances++
+        dev.opencover.lock.CoverScale.record(this)
         LockPrefs.load(this)
         applyLockScreen()
         refreshLocked()
@@ -263,6 +264,12 @@ class CoverActivity : ComponentActivity() {
     override fun onPause() {
         current = null
         super.onPause()
+    }
+
+    // Density and font size changes don't restart this activity (see the manifest): keep the AOD's copy current.
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        dev.opencover.lock.CoverScale.record(this)
     }
 
     override fun onResume() {
