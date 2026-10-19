@@ -6,16 +6,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
 /**
- * Where an animated background is. It moves only by the time between drawn frames while [playing], so it holds still
- * when nothing is drawn (screen off, another page) and carries on from the same frame. [position] is Compose state.
+ * Where an animated background is. It moves only by the time between drawn frames of a playing screen, so it holds
+ * still when nothing plays it (screen off, another page, the AOD) and carries on from the same frame. [position] is
+ * Compose state.
  */
 class Playhead {
-    var playing = false
     var position by mutableStateOf(0L)
         private set
 
     /** One drawn frame, [dt] ms after the last; a long gap (the screen was off) counts as one short frame. */
-    fun frame(dt: Long) { if (playing) position += dt.coerceIn(0, MAX_STEP) }
+    fun frame(dt: Long) { position += dt.coerceIn(0, MAX_STEP) }
 
     /** The time into a GIF [duration] ms long. */
     fun at(duration: Int): Long = if (duration > 0) position % duration else 0L

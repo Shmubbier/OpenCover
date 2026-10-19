@@ -1,12 +1,13 @@
 package dev.opencover.ui
 
+import android.graphics.Bitmap
 import android.graphics.Movie
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -27,15 +28,19 @@ fun Background(still: ImageBitmap?, movie: Movie?, playhead: Playhead, playing: 
         return
     }
     LaunchedEffect(playing) {
-        playhead.playing = playing
+        // Only the playing screen moves the playhead; a paused one (the AOD) just shows where it is.
         if (!playing) return@LaunchedEffect
         var last = withFrameMillis { it }
         while (true) withFrameMillis { now -> playhead.frame(now - last); last = now }
     }
-    DisposableEffect(Unit) { onDispose { playhead.playing = false } }
+    // Movie can't draw straight to a hardware canvas (its frame texture goes stale): render each frame into a bitmap.
+    val frame = remember(movie) { Bitmap.createBitmap(movie.width(), movie.height(), Bitmap.Config.ARGB_8888) }
+    val frameCanvas = remember(frame) { android.graphics.Canvas(frame) }
     Canvas(modifier.fillMaxSize().alpha(alpha)) {
         @Suppress("DEPRECATION")
         movie.setTime(playhead.at(movie.duration()).toInt())
+        frame.eraseColor(0)
+        @Suppress("DEPRECATION") movie.draw(frameCanvas, 0f, 0f)
         // Centre-crop the GIF onto the screen.
         val s = maxOf(size.width / movie.width(), size.height / movie.height())
         drawIntoCanvas { c ->
@@ -43,7 +48,7 @@ fun Background(still: ImageBitmap?, movie: Movie?, playhead: Playhead, playing: 
             n.save()
             n.translate((size.width - movie.width() * s) / 2, (size.height - movie.height() * s) / 2)
             n.scale(s, s)
-            @Suppress("DEPRECATION") movie.draw(n, 0f, 0f)
+            n.drawBitmap(frame, 0f, 0f, null)
             n.restore()
         }
     }

@@ -6,22 +6,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LookTest {
-    // The playhead moves only by frame time while playing (screen off: no frames, no movement), looping over the GIF.
-    @Test fun playheadAdvancesOnlyWhilePlayingAndLoops() {
+    // The playhead moves only by frame time (screen off: no frames, no movement), looping over the GIF.
+    @Test fun playheadAdvancesByFramesAndLoops() {
         val p = Playhead()
-        p.frame(50); assertEquals(0L, p.position) // paused: frames don't move it
-        p.playing = true
         repeat(50) { p.frame(16) } // 50 frames at 60 fps
         assertEquals(800L, p.position)
-        assertEquals(300L, p.at(duration = 500))
-        p.playing = false
-        p.frame(400)
         assertEquals(300L, p.at(duration = 500)) // the AOD shows this frame; waking carries on from here
     }
 
     // A long gap between frames (the screen was off) doesn't jump the animation ahead.
     @Test fun longGapsAreCapped() {
-        val p = Playhead().apply { playing = true }
+        val p = Playhead()
         p.frame(60_000)
         assertTrue(p.position <= 100)
     }
