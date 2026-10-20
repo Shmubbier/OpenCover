@@ -73,6 +73,7 @@ fun PhoneSettings(onBack: () -> Unit) {
             deep,
         ) { deep = it; prefs.deepSleep = it; if (!it) dev.opencover.phone.DeepSleep.awake() }
         LocationScanning()
+        FiveG()
         DisplaySettings(prefs)
         InnerLauncherSettings()
         AppRotations(prefs)
@@ -247,4 +248,19 @@ private fun LocationScanning() {
     TextButton(onClick = {
         runCatching { dev.opencover.apps.AppLauncher.start(ctx, android.content.Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
     }) { Text("Location settings (Google Location Accuracy)") }
+}
+
+/** 5G on or off (battery: a weak 5G signal costs more than LTE). Wi-Fi, when there is one, costs less than either. */
+@Composable
+private fun FiveG() {
+    val scope = rememberCoroutineScope()
+    var on by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(Unit) { on = withContext(Dispatchers.IO) { dev.opencover.phone.Radio.fiveG() } }
+    val now = on ?: return // no Shizuku, or it can't be read
+    SwitchRow("5G", "Off: LTE only, which uses less battery when 5G is weak. Wi-Fi uses less than either.", now) { want ->
+        scope.launch {
+            withContext(Dispatchers.IO) { dev.opencover.phone.Radio.setFiveG(want) }
+            on = withContext(Dispatchers.IO) { dev.opencover.phone.Radio.fiveG() }
+        }
+    }
 }
