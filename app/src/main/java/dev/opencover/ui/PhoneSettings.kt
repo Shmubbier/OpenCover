@@ -67,6 +67,7 @@ fun PhoneSettings(onBack: () -> Unit) {
             heat,
         ) { heat = it; prefs.heatGuard = it; HeatGuard.evaluate() }
         DisplaySettings(prefs)
+        InnerLauncherSettings()
         AppRotations(prefs)
         TextButton(onClick = onBack) { Text("Back") }
     }
@@ -176,5 +177,37 @@ private fun Stepper(label: String, value: String, onMinus: () -> Unit, onPlus: (
     if (onApply != null || onReset != null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         onApply?.let { Button(onClick = it) { Text("Apply") } }
         onReset?.let { TextButton(onClick = it) { Text("Reset") } }
+    }
+}
+
+/** The phone's default home (inner screen and mirror); recommends Lawnchair, which matches OpenCover's Home. */
+@Composable
+private fun InnerLauncherSettings() {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var tick by remember { mutableIntStateOf(0) }
+    val homes = remember(tick) { dev.opencover.phone.InnerLauncher.installed(ctx) }
+    val current = remember(tick) { dev.opencover.phone.InnerLauncher.current(ctx) }
+    val hasLawnchair = homes.any { it.component.packageName in dev.opencover.phone.InnerLauncher.LAWNCHAIR }
+    Text("Inner screen launcher", color = Color.White)
+    Text("The phone's home, shown on the inner screen and when mirroring. The cover keeps OpenCover.", color = Color.Gray, fontSize = 11.sp)
+    if (!ShizukuShell.allowed()) { Text("Start Shizuku to change it.", color = Color.Gray, fontSize = 11.sp); return }
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        homes.forEach { h ->
+            FilterChip(selected = current == h.component.packageName, onClick = {
+                scope.launch {
+                    val ok = withContext(Dispatchers.IO) { dev.opencover.phone.InnerLauncher.choose(h.component) }
+                    if (!ok) toast(ctx, "Couldn't change the launcher")
+                    tick++
+                }
+            }, label = { Text(h.label) })
+        }
+    }
+    if (!hasLawnchair) {
+        Text("Lawnchair is recommended: with Lawnicons and its icon shapes it looks like OpenCover's Home.", color = Color.Gray, fontSize = 11.sp)
+        TextButton(onClick = {
+            val open = { url: String -> runCatching { dev.opencover.apps.AppLauncher.start(ctx, android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }.isSuccess }
+            if (!open(dev.opencover.phone.InnerLauncher.LAWNCHAIR_PLAY)) open(dev.opencover.phone.InnerLauncher.LAWNCHAIR_GITHUB)
+        }) { Text("Get Lawnchair") }
     }
 }
