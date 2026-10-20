@@ -164,8 +164,8 @@ fun Shell(
         // One wallpaper for every page: it plays on Home and holds its frame elsewhere.
         Background(
             wallpaper, dev.opencover.home.Wallpaper.homeAnim, dev.opencover.look.Playheads.home,
-            playing = pager.currentPage == HOME_PAGE && panel == null,
-            crop = dev.opencover.home.Wallpaper.homeCrop,
+            playing = covered == 0f, // a video can't be blurred: it pauses (on a captured frame) as soon as anything covers Home
+            crop = dev.opencover.home.Wallpaper.homeCrop, video = dev.opencover.home.Wallpaper.homeVideo,
             modifier = Modifier.blur((dev.opencover.look.LookPrefs.current.blur * covered).dp, BlurredEdgeTreatment.Rectangle),
         )
         // A panel slides in over the wallpaper, not over the page under it: fade the page out as it comes.

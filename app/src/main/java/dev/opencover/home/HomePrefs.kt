@@ -15,6 +15,9 @@ enum class ClockStyle { CURRENT, BIG, STACKED, ANALOG, GLANCE }
 /** Declaration order is the default order; names are saved, so never rename one. */
 enum class HomeWidget { BATTERY, ALARM, WEATHER }
 
+/** How animated backgrounds play. Ids are saved, so never rename one. */
+enum class AnimPlay(val label: String) { ALWAYS("Always"), BRIEFLY("First 10 s"), NEVER("Still only") }
+
 /** What Home shows and can be moved in its editor. Ids are saved, so never rename one. */
 enum class HomeItem { CLOCK, APPS }
 
@@ -50,6 +53,9 @@ object HomePrefs {
     /** The icon pack's package; null for each app's own icons. */
     var iconPack by mutableStateOf<String?>(null)
         private set
+    /** How animated backgrounds play (battery). */
+    var animPlay by mutableStateOf(AnimPlay.ALWAYS)
+        private set
     /** Icons cut to this shape (adaptive icons, and the themed backdrop). */
     var iconShape by mutableStateOf(dev.opencover.apps.IconShape.SYSTEM)
         private set
@@ -72,6 +78,7 @@ object HomePrefs {
         iconPack = p.getString("icon_pack", null)
         iconShape = dev.opencover.apps.IconShape.entries.find { it.name == p.getString("icon_shape", null) } ?: dev.opencover.apps.IconShape.SYSTEM
         themedIcons = p.getBoolean("themed_icons", false)
+        animPlay = AnimPlay.entries.find { it.name == p.getString("anim_play", null) } ?: AnimPlay.ALWAYS
         layout = p.getString("layout", null)?.let { parseSpots(it, HomeItem.entries, DEFAULT_HOME) }
         // Location revoked since: weather switches itself off rather than showing an old reading.
         if (HomeWidget.WEATHER !in off &&
@@ -89,6 +96,7 @@ object HomePrefs {
     }
     fun setIconPack(ctx: Context, pkg: String?) { iconPack = pkg; prefs(ctx).edit().putString("icon_pack", pkg).apply() }
     fun setIconShape(ctx: Context, s: dev.opencover.apps.IconShape) { iconShape = s; prefs(ctx).edit().putString("icon_shape", s.name).apply() }
+    fun setAnimPlay(ctx: Context, a: AnimPlay) { animPlay = a; prefs(ctx).edit().putString("anim_play", a.name).apply() }
     fun setThemedIcons(ctx: Context, on: Boolean) { themedIcons = on; prefs(ctx).edit().putBoolean("themed_icons", on).apply() }
     fun clearLayout(ctx: Context) { layout = null; prefs(ctx).edit().remove("layout").apply() }
     fun setLayout(ctx: Context, m: Map<HomeItem, Spot>) { layout = m; prefs(ctx).edit().putString("layout", formatLayout(m)).apply() }

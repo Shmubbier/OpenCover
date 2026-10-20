@@ -103,6 +103,14 @@ fun HomeSettings(onBack: () -> Unit) {
         }
         Text(note ?: "Weather is the only feature that uses the internet: it sends rough coordinates to Open-Meteo.",
             color = Color.Gray, fontSize = 11.sp)
+        Text("Animated wallpaper", color = Color.Gray, fontSize = 13.sp)
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            dev.opencover.home.AnimPlay.entries.forEach { a ->
+                androidx.compose.material3.FilterChip(selected = HomePrefs.animPlay == a, onClick = { HomePrefs.setAnimPlay(ctx, a) },
+                    label = { Text(a.label) })
+            }
+        }
+        Text("Plays on Home and the lock screen. First 10 s or Still only save battery.", color = Color.Gray, fontSize = 11.sp)
         IconPackSettings()
         Text("Panel style (notifications, apps, drawer, quick settings)", color = Color.Gray, fontSize = 13.sp)
         PanelStyleSettings()

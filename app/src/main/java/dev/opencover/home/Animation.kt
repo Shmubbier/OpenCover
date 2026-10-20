@@ -26,6 +26,9 @@ class Animation private constructor(val width: Int, val height: Int, val duratio
     private var next = 0
     private val copy = Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC) }
 
+    /** Draws the moment [time] ms in onto [out]; false if it shows the same frame as the last call. For [Video]. */
+    fun renderTo(out: Bitmap, time: Long): Boolean = render(out, time)
+
     /** The latest frame, as Compose state; null until the first one is decoded. */
     var frame by mutableStateOf<Bitmap?>(null); private set
 

@@ -17,6 +17,12 @@ class Playhead {
     /** One drawn frame, [dt] ms after the last; a long gap (the screen was off) counts as one short frame. */
     fun frame(dt: Long) { position += dt.coerceIn(0, MAX_STEP) }
 
+    /** The video frame it stopped on (captured on pause), for paused screens such as the AOD; Compose state. */
+    var stopped by mutableStateOf<android.graphics.Bitmap?>(null)
+
+    /** Where a video player stopped, so the next screen showing this background starts there. */
+    fun moveTo(ms: Long) { position = ms.coerceAtLeast(0) }
+
     /** The time into a GIF [duration] ms long. */
     fun at(duration: Int): Long = if (duration > 0) position % duration else 0L
 

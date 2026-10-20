@@ -31,6 +31,12 @@ object Wallpaper {
     var lockStill by mutableStateOf<ImageBitmap?>(null); private set
     /** The lock screen's animation, or its own copy of Home's: the two play at different moments. */
     var lockAnim by mutableStateOf<Animation?>(null); private set
+    private val making = mutableSetOf<String>() // videos being made, so loadAll doesn't start one twice (main thread)
+
+    /** Each slot's animation as a hardware-decoded video, once made (see [Video]); null: play [homeAnim] instead. */
+    var homeVideo by mutableStateOf<File?>(null); private set
+    /** The lock screen's (Home's when it borrows Home's background). */
+    var lockVideo by mutableStateOf<File?>(null); private set
     /** The part of each slot's image shown; null: centred (saved before cropping existed). */
     var homeCrop by mutableStateOf<Crop?>(null); private set
     var lockCrop by mutableStateOf<Crop?>(null); private set
@@ -46,6 +52,19 @@ object Wallpaper {
         lockAnim = animation(ctx, Slot.LOCK) ?: if (lockStill == null) animation(ctx, Slot.HOME) else null
         homeCrop = Crop.decode(prefs(ctx).getString("crop_${Slot.HOME.base}", null))
         lockCrop = Crop.decode(prefs(ctx).getString("crop_${Slot.LOCK.base}", null))
+        val homeFile = anim(ctx, Slot.HOME).takeIf { homeAnim != null }
+        val lockFile = anim(ctx, Slot.LOCK).takeIf { it.exists() && lockStill != null } ?: homeFile.takeIf { lockStill == null }
+        homeVideo = homeFile?.let(Video::of)
+        lockVideo = lockFile?.let(Video::of)
+        // Not made yet (just picked, or saved before videos): make them now, in the background, then use them.
+        val missing = listOfNotNull(homeFile, lockFile).distinct().filter { Video.of(it) == null && making.add(it.path) }
+        if (missing.isNotEmpty()) {
+            val app = ctx.applicationContext
+            Thread {
+                val made = missing.map { Video.make(it) }.any { it }
+                android.os.Handler(android.os.Looper.getMainLooper()).post { missing.forEach { making.remove(it.path) }; if (made) loadAll(app) }
+            }.apply { priority = Thread.MIN_PRIORITY }.start()
+        }
     }
 
     /** The crop the lock screen's animation uses (Home's when it borrows Home's). */
