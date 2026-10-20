@@ -72,6 +72,7 @@ object MirrorEnv {
 
     fun leave(ctx: Context) {
         val app = ctx.applicationContext
+        android.util.Log.i("OpenCoverMirror", "session ends", Throwable("who ended it"))
         PhonePrefs(app).resetPending = true
         later { restoreSettings(app); restoreAccessibility(app); restoreInnerScreen(app) }
         resetState(app, wake = true)
@@ -89,9 +90,9 @@ object MirrorEnv {
     private fun restoreAccessibility(app: Context) {
         val prefs = PhonePrefs(app)
         val list = restoredAccessibility(Settings.Secure.getString(app.contentResolver, A11Y), me(app), prefs.restoreAccessibility) ?: return
-        if (ShizukuShell.run("sh", "-c", "settings put secure $A11Y '$list'; settings put secure accessibility_enabled 1")) {
-            prefs.restoreAccessibility = false
-        }
+        val ok = ShizukuShell.run("sh", "-c", "settings put secure $A11Y '$list'; settings put secure accessibility_enabled 1")
+        android.util.Log.i("OpenCoverMirror", "restore accessibility: ${if (ok) "done" else "failed, will retry on unlock"}")
+        if (ok) prefs.restoreAccessibility = false
     }
 
     private fun restoreInnerScreen(app: Context) {

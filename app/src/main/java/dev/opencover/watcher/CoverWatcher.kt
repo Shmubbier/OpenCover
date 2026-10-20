@@ -49,6 +49,9 @@ class CoverWatcher : Service() {
         override fun onReceive(c: Context, i: Intent) {
             when (i.action) {
                 Intent.ACTION_USER_PRESENT -> {
+                    // A mirror session that ended while the screen was off or OpenCover was busy: finish putting back
+                    // what it changed (OpenCover's accessibility service above all).
+                    if (MirrorService.instance == null) dev.opencover.mirror.MirrorEnv.recover(applicationContext)
                     BankingMode.resume(this@CoverWatcher) // backstop if usage access is missing
                     // A notification tapped in peek opens on the cover; if it's gone, Home opens as usual.
                     val pending = openOnUnlock(LockScreen.pendingOpen, coverActive() && MirrorService.instance == null)

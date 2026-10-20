@@ -94,6 +94,35 @@ class MirrorActivity : ComponentActivity(), TextureView.SurfaceTextureListener {
         lp.topMargin = viewBox.top + (boxH - lp.height) / 2
         surfaceView.layoutParams = lp
         surfaceView.rotation = turns * 90f
+        placeControls(dw, dh)
+    }
+
+    /**
+     * The controls sit at the mirrored screen's own top-left, in the margin beside it, and turn with it, so they stay
+     * where they'd be if the cover itself were turned that way.
+     */
+    private fun placeControls(dw: Int, dh: Int) {
+        val density = resources.displayMetrics.density
+        // A point as seen upright from the mirror's side, mapped back to the cover.
+        fun toScreen(u: Int, v: Int): Pair<Int, Int> = when (turns) {
+            1 -> (dw - v) to u
+            2 -> (dw - u) to (dh - v)
+            3 -> v to (dh - u)
+            else -> u to v
+        }
+        controls.forEachIndexed { i, b ->
+            val size = b.layoutParams.width
+            val u = (8 * density).toInt()
+            val v = ((24 + i * 64) * density).toInt()
+            val (x1, y1) = toScreen(u, v)
+            val (x2, y2) = toScreen(u + size, v + size)
+            val lp = b.layoutParams as FrameLayout.LayoutParams
+            lp.gravity = Gravity.TOP or Gravity.START
+            lp.leftMargin = minOf(x1, x2).coerceIn(0, dw - size)
+            lp.topMargin = minOf(y1, y2).coerceIn(0, dh - size)
+            b.layoutParams = lp
+            b.rotation = turns * 90f
+        }
     }
 
     private fun onControl(x: Float, y: Float): Boolean = controls.any { b ->
