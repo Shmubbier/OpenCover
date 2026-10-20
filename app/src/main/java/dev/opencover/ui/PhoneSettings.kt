@@ -76,6 +76,7 @@ fun PhoneSettings(onBack: () -> Unit) {
         FiveG()
         DisplaySettings(prefs)
         InnerLauncherSettings()
+        AppSleepList()
         AppRotations(prefs)
         TextButton(onClick = onBack) { Text("Back") }
     }
@@ -261,6 +262,43 @@ private fun FiveG() {
         scope.launch {
             withContext(Dispatchers.IO) { dev.opencover.phone.Radio.setFiveG(want) }
             on = withContext(Dispatchers.IO) { dev.opencover.phone.Radio.fiveG() }
+        }
+    }
+}
+
+/** Restrict apps in the background (battery). The apps that used the most in this phone's stats are listed first. */
+@Composable
+private fun AppSleepList() {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    if (!ShizukuShell.allowed()) return
+    var open by remember { mutableStateOf(false) }
+    val heavy = listOf("com.discord", "com.instagram.android", "com.facebook.katana", "com.facebook.orca")
+    val apps = remember {
+        AppRepository(ctx).load().distinctBy { it.pkg }.filter { it.pkg != ctx.packageName }
+            .sortedWith(compareBy({ it.pkg !in heavy }, { it.label.lowercase() }))
+    }
+    var restricted by remember { mutableStateOf<Set<String>>(emptySet()) }
+    LaunchedEffect(open) {
+        if (open) restricted = withContext(Dispatchers.IO) { apps.filter { dev.opencover.phone.AppSleep.restricted(it.pkg) }.map { it.pkg }.toSet() }
+    }
+    Text("Restrict in background", color = Color.White)
+    Text("Stops an app working in the background. Saves battery; its notifications can arrive later, so keep chat apps you rely on unrestricted.",
+        color = Color.Gray, fontSize = 11.sp)
+    TextButton(onClick = { open = !open }) { Text(if (open) "Hide apps" else "Choose apps") }
+    if (open) apps.forEach { app ->
+        val on = app.pkg in restricted
+        Row(
+            Modifier.fillMaxWidth().clickable {
+                scope.launch {
+                    withContext(Dispatchers.IO) { dev.opencover.phone.AppSleep.set(app.pkg, !on) }
+                    restricted = if (!on) restricted + app.pkg else restricted - app.pkg
+                }
+            }.padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(app.label, color = Color.White, modifier = Modifier.weight(1f))
+            Text(if (on) "Restricted" else "Allowed", color = if (on) Color(0xFFD0BCFF) else Color.Gray)
         }
     }
 }

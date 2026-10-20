@@ -73,6 +73,11 @@ on afterwards, run once: `adb shell pm grant dev.opencover android.permission.WR
 That permission allows changing any secure setting; OpenCover only uses it to switch its own
 accessibility service. It also needs Usage access to notice when you leave the banking app.
 
+## Battery
+- Animated wallpapers play as hardware video (made once when set), or only for 10 s, or not at all (Settings > Home).
+- Settings > Phone (Shizuku): deep sleep when idle (this phone never enters deep doze on its own), location scanning, 5G, and restricting apps in the background.
+- Settings > Lock screen: black AOD, and turning the AOD off after 1 to 30 minutes.
+
 ## Credits
 - [Lawnicons](https://github.com/lawnchairlauncher/lawnicons) by the Lawnchair team (Apache 2.0): the icon pack themed icons are made for. Install it separately; OpenCover doesn't include it.
 - Rotation, keep cover on, mirroring and the heat guard come from FreeFlip (same author). See `NOTICE`.
