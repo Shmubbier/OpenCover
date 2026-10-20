@@ -136,6 +136,12 @@ fun SettingsPanel(
         Button(onClick = { edgeSettings = true }) { Text("Edge lighting") }
         Button(onClick = onSamsungWidgets) { Text("Open Samsung widgets") }
         Button(onClick = onSetup) { Text("Setup & permissions") }
+        val ctxP = androidx.compose.ui.platform.LocalContext.current
+        // The inner screen is broken: answer Android's debugging prompt, which only shows there.
+        TextButton(onClick = {
+            val r = dev.opencover.watcher.CoverAccessibility.instance?.approveInnerPrompt() ?: "Turn on OpenCover's accessibility first"
+            android.widget.Toast.makeText(ctxP, r, android.widget.Toast.LENGTH_LONG).show()
+        }) { Text("Approve debugging prompt (inner screen)") }
         Button(onClick = onWallpaper) { Text("Set wallpaper (image, GIF or WebP)") }
         val ctx = androidx.compose.ui.platform.LocalContext.current
         if (dev.opencover.home.Wallpaper.source(ctx, dev.opencover.home.Slot.HOME) != null)

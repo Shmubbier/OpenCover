@@ -215,6 +215,34 @@ class CoverAccessibility : AccessibilityService() {
     }.getOrDefault(false)
 
     /** Hides whichever keyboard is up: OpenCover's own, or the input method (Back closes it). */
+    /**
+     * The inner screen is broken, so Android's "Allow USB debugging?" (or wireless debugging) prompt, which shows only
+     * there, can't be answered. On the user's tap, find that prompt on the inner screen, tick "Always allow" and tap
+     * Allow. Returns what happened, for a toast.
+     */
+    fun approveInnerPrompt(): String {
+        val info = serviceInfo
+        val had = info.flags and android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS != 0
+        if (!had) serviceInfo = info.apply { flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS }
+        try {
+            val roots = windowsOnAllDisplays[android.view.Display.DEFAULT_DISPLAY].orEmpty()
+                .filter { it.root?.packageName == "com.android.systemui" }.mapNotNull { it.root }
+            for (root in roots) {
+                val allow = (root.findAccessibilityNodeInfosByViewId("android:id/button1") +
+                    root.findAccessibilityNodeInfosByText("Allow")).firstOrNull { n ->
+                        n.isClickable && n.text?.toString()?.trim()?.equals("Allow", ignoreCase = true) == true
+                    } ?: continue
+                root.findAccessibilityNodeInfosByText("Always allow").firstOrNull { it.isCheckable }?.let { box ->
+                    if (!box.isChecked) box.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
+                }
+                return if (allow.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)) "Allowed" else "Couldn't tap Allow"
+            }
+            return "No debugging prompt on the inner screen"
+        } finally {
+            if (!had) refreshScope()
+        }
+    }
+
     fun hideKeyboard() {
         if (keyboard?.showing == true) keyboard?.hide() else performGlobalAction(GLOBAL_ACTION_BACK)
         handler.postDelayed({ updateNavBar() }, 300) // drop the button once the keyboard has gone
