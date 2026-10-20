@@ -51,7 +51,14 @@ object MirrorEnv {
         // size read once the display settles already has it.
         val resize = if (prefs.mirrorResize) innerScreenScript(prefs.mirrorSize, prefs.mirrorDensity) else null
         if (resize != null) prefs.innerResetPending = true
-        return ShizukuShell.output("sh", "-c", "${resize.orEmpty()}cmd device_state state $UNFOLDED_STATE; $HIDE; cmd device_state print-state")
+        // Opening moves OpenCover's Home from the cover to the inner screen; put the phone's own home in front of it.
+        val home = ctx.packageManager.resolveActivity(
+            android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME),
+            android.content.pm.PackageManager.MATCH_DEFAULT_ONLY,
+        )?.activityInfo?.takeIf { it.packageName != "android" } // "android": no default home, it would ask
+            ?.let { "${it.packageName}/${it.name}" }
+        val showHome = home?.let { "; sleep 0.5; am start --display 0 -a android.intent.action.MAIN -c android.intent.category.HOME -n '$it'" }.orEmpty()
+        return ShizukuShell.output("sh", "-c", "${resize.orEmpty()}cmd device_state state $UNFOLDED_STATE; $HIDE$showHome; cmd device_state print-state")
     }
 
     /**
