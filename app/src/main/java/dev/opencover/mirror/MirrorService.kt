@@ -87,7 +87,11 @@ class MirrorService : Service() {
         // ponytail: 1.5 s fallback copied from Z Cover Power in case display 0 never reports a change.
         handler.postDelayed({ if (!listener.fired) { listener.fired = true; dm.unregisterDisplayListener(listener); ready.run() } }, 1500)
         val app = applicationContext
-        MirrorEnv.later { Log.d(TAG, "mirror env -> ${MirrorEnv.enter(app)?.trim() ?: "skipped"}") }
+        MirrorEnv.later {
+            Log.d(TAG, "mirror env -> ${MirrorEnv.enter(app)?.trim() ?: "skipped"}")
+            // Putting the phone's home on the inner screen also brings Samsung's cover home up over the mirror.
+            handler.post { if (instance === this && mirrorShown) showMirror(clear = false) }
+        }
         return START_NOT_STICKY
     }
 
@@ -110,10 +114,20 @@ class MirrorService : Service() {
         }, handler)
         Log.d(TAG, "projection ready ${captureWidth}x$captureHeight")
         // Launch only now: the device-state switch moves whatever is on the cover to display 0.
-        AppLauncher.start(this, Intent(this, MirrorActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK))
+        showMirror(clear = true)
+        mirrorShown = true
         MirrorInput.start(this) // live touch
         val app = applicationContext
         MirrorEnv.later { MirrorEnv.hideAccessibility(app) }
+    }
+
+    /** The mirror screen has been opened for this session (so bringing it back to the front is safe). */
+    private var mirrorShown = false
+
+    /** Opens the mirror screen on the cover; [clear] starts it fresh, otherwise it just comes back to the front. */
+    private fun showMirror(clear: Boolean) {
+        val i = Intent(this, MirrorActivity::class.java)
+        AppLauncher.start(this, if (clear) i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK) else i)
     }
 
     fun setSurface(s: Surface?) {

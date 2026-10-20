@@ -1,10 +1,8 @@
 package dev.opencover.mirror
 
-import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
@@ -91,7 +89,11 @@ object MirrorEnv {
         if (prefs.restoreSettings != null || prefs.restoreAccessibility || prefs.innerResetPending) {
             later { restoreSettings(app); restoreAccessibility(app); restoreInnerScreen(app) }
         }
-        if (prefs.resetPending) resetWhenAsleep(app)
+        // Left forced open the cover is black with nothing on it, so put the state back now, as a session end does
+        // (the phone locks), and wake the cover if it was on.
+        if (prefs.resetPending && MirrorService.instance == null) {
+            resetState(app, wake = app.getSystemService(PowerManager::class.java).isInteractive)
+        }
     }
 
     private fun restoreAccessibility(app: Context) {
@@ -113,24 +115,6 @@ object MirrorEnv {
         if (ShizukuShell.run("sh", "-c", "settings put global development_settings_enabled $dev; settings put secure $SECURE_NON_MARKET $nm")) {
             prefs.restoreSettings = null
         }
-    }
-
-    private fun resetWhenAsleep(app: Context) {
-        if (!app.getSystemService(PowerManager::class.java).isInteractive) { resetNow(app); return }
-        app.registerReceiver(object : BroadcastReceiver() {
-            override fun onReceive(c: Context, i: Intent) {
-                app.unregisterReceiver(this)
-                resetNow(app)
-            }
-        }, IntentFilter(Intent.ACTION_SCREEN_OFF), Context.RECEIVER_NOT_EXPORTED)
-    }
-
-    private fun resetNow(app: Context) {
-        val prefs = PhonePrefs(app)
-        if (!prefs.resetPending) return
-        // Screen off while mirroring ends the session (as in Z Cover Power); stop() comes back here with no session.
-        MirrorService.instance?.let { it.stop(); return }
-        resetState(app, wake = false)
     }
 
     /**
