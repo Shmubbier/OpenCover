@@ -165,6 +165,7 @@ fun Shell(
         Background(
             wallpaper, dev.opencover.home.Wallpaper.homeAnim, dev.opencover.look.Playheads.home,
             playing = pager.currentPage == HOME_PAGE && panel == null,
+            crop = dev.opencover.home.Wallpaper.homeCrop,
             modifier = Modifier.blur((dev.opencover.look.LookPrefs.current.blur * covered).dp, BlurredEdgeTreatment.Rectangle),
         )
         // A panel slides in over the wallpaper, not over the page under it: fade the page out as it comes.

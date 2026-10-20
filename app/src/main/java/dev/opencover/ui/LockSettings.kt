@@ -87,6 +87,8 @@ fun LockSettings(onBack: () -> Unit) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { CoverActivity.current?.pickBackground(dev.opencover.home.Slot.LOCK) }) { Text("Pick image, GIF or WebP") }
             if (dev.opencover.home.Wallpaper.lockStill != null) TextButton(onClick = { dev.opencover.home.Wallpaper.clearLock(ctx) }) { Text("Use Home's") }
+            if (dev.opencover.home.Wallpaper.source(ctx, dev.opencover.home.Slot.LOCK) != null)
+                TextButton(onClick = { CoverActivity.current?.adjustBackground(dev.opencover.home.Slot.LOCK) }) { Text("Adjust") }
         }
         TextButton(onClick = onBack) { Text("Back") }
     }

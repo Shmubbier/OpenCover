@@ -137,6 +137,9 @@ fun SettingsPanel(
         Button(onClick = onSamsungWidgets) { Text("Open Samsung widgets") }
         Button(onClick = onSetup) { Text("Setup & permissions") }
         Button(onClick = onWallpaper) { Text("Set wallpaper (image, GIF or WebP)") }
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        if (dev.opencover.home.Wallpaper.source(ctx, dev.opencover.home.Slot.HOME) != null)
+            TextButton(onClick = { CoverActivity.current?.adjustBackground(dev.opencover.home.Slot.HOME) }) { Text("Adjust wallpaper position") }
         Button(onClick = onBanking) { Text("Banking apps") }
         Button(onClick = { experimental = true }) { Text("Experimental") }
         TextButton(onClick = onClose) { Text("Close") }

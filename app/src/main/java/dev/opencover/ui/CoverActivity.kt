@@ -187,9 +187,10 @@ class CoverActivity : ComponentActivity() {
                 resumeTick // re-read permissions every time we come back from Settings
                 val required = Permissions.required(this)
                 // Locked: nothing of Home is composed, only the lock layer; unlocking crossfades into Home.
+                Box(Modifier.fillMaxSize()) {
                 Crossfade(locked, animationSpec = tween(260), label = "lock") { isLocked ->
                     when {
-                        isLocked && LockPrefs.lockScreen -> LockLayer(this)
+                        isLocked && LockPrefs.lockScreen -> LockLayer(this@CoverActivity)
                         isLocked -> Box(Modifier.fillMaxSize().background(Color.Black)) // not shown over the keyguard then
                         required && !showSetup -> Entrance(entrances) { Shell(layout, apps, actions, prompt, Wallpaper.homeStill, homeRequests, quickSettingsRequests) }
                         else -> Checklist(
@@ -199,8 +200,31 @@ class CoverActivity : ComponentActivity() {
                         )
                     }
                 }
+                cropping?.let { job ->
+                    CropScreen(job.image, job.start, onDone = { crop ->
+                        cropping = null
+                        if (!Wallpaper.save(this@CoverActivity, job.file, job.slot, crop))
+                            Toast.makeText(this@CoverActivity, "Couldn't use that image", Toast.LENGTH_SHORT).show()
+                    }, onCancel = { cropping = null; if (job.picked) job.file.delete() })
+                }
+                }
             }
         }
+    }
+
+    /** A background being cropped: the file, its picture, where to start; [picked]: just picked (else cropping again). */
+    private class CropJob(val slot: dev.opencover.home.Slot, val file: java.io.File, val image: android.graphics.Bitmap,
+        val start: dev.opencover.home.Crop?, val picked: Boolean)
+
+    private var cropping by mutableStateOf<CropJob?>(null)
+
+    /** Choose again which part of the slot's background shows. False when there's nothing to crop. */
+    fun adjustBackground(slot: dev.opencover.home.Slot): Boolean {
+        val f = Wallpaper.source(this, slot) ?: return false
+        val image = Wallpaper.preview(f) ?: return false
+        val start = if (slot == dev.opencover.home.Slot.HOME) Wallpaper.homeCrop else Wallpaper.lockCrop
+        cropping = CropJob(slot, f, image, start, picked = false)
+        return true
     }
 
     private fun setupSteps() = listOfNotNull(
@@ -302,7 +326,10 @@ class CoverActivity : ComponentActivity() {
         if (requestCode == REQ_WALLPAPER) {
             val uri = data?.data
             if (resultCode == RESULT_OK && uri != null) {
-                if (!Wallpaper.save(this, uri, pickingSlot)) Toast.makeText(this, "Couldn't use that photo", Toast.LENGTH_SHORT).show()
+                val f = Wallpaper.import(this, uri, pickingSlot)
+                val image = f?.let { Wallpaper.preview(it) }
+                if (f == null || image == null) Toast.makeText(this, "Couldn't use that image", Toast.LENGTH_SHORT).show()
+                else cropping = CropJob(pickingSlot, f, image, null, picked = true)
             }
             return
         }

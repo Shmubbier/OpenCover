@@ -5,7 +5,7 @@ A free, open-source (GPL-3.0) launcher for the Galaxy Z Flip 5 cover screen. No 
 ## What works
 - Home with wallpaper, clock and 4 shortcuts. Clock styles (Current, Big, Stacked, Analog, At a Glance) and widgets (battery, next alarm, weather) in Settings > Home. Swipe left for notifications, right for apps, up for media, down for quick settings.
 - Long-press an empty spot on Home to move, resize or hide the clock and shortcuts.
-- Backgrounds for Home and the lock screen: a photo, an animated GIF or an animated WebP. Four panel styles (frosted glass, scrim, Material You tint, floating cards) in Settings > Home.
+- Backgrounds for Home and the lock screen: a photo, an animated GIF or an animated WebP, of any shape. After picking, drag and pinch to choose the part the cover shows; "Adjust" changes it later. Four panel styles (frosted glass, scrim, Material You tint, floating cards) in Settings > Home.
 - Icons (Settings > Home): any Nova or ADW icon pack, Lawnchair's icon shapes, and themed icons in one colour taken from the wallpaper. Themed icons work best with [Lawnicons](https://github.com/lawnchairlauncher/lawnicons) by the Lawnchair team.
 - Apps pages: put apps and widgets anywhere on a 4x4 grid. Swipe up for the app drawer.
 - Opens automatically when you unlock the cover screen; Samsung's Home gesture returns to OpenCover.

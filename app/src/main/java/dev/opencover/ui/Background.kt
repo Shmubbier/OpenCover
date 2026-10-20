@@ -23,7 +23,10 @@ import kotlinx.coroutines.withContext
  * else the [still]. Paused, it shows the frame it stopped on.
  */
 @Composable
-fun Background(still: ImageBitmap?, anim: Animation?, playhead: Playhead, playing: Boolean, modifier: Modifier = Modifier, alpha: Float = 1f) {
+fun Background(
+    still: ImageBitmap?, anim: Animation?, playhead: Playhead, playing: Boolean, modifier: Modifier = Modifier, alpha: Float = 1f,
+    crop: dev.opencover.home.Crop? = null,
+) {
     val frame = anim?.frame
     if (anim == null || frame == null) still?.let { Image(it, null, modifier.fillMaxSize().alpha(alpha), contentScale = ContentScale.Crop) }
     if (anim == null) return
@@ -39,15 +42,14 @@ fun Background(still: ImageBitmap?, anim: Animation?, playhead: Playhead, playin
     }
     if (frame == null) return
     Canvas(modifier.fillMaxSize().alpha(alpha)) {
-        // Centre-crop onto the screen.
-        val s = maxOf(size.width / frame.width, size.height / frame.height)
-        drawIntoCanvas { c ->
-            val n = c.nativeCanvas
-            n.save()
-            n.translate((size.width - frame.width * s) / 2, (size.height - frame.height * s) / 2)
-            n.scale(s, s)
-            n.drawBitmap(frame, 0f, 0f, Smooth)
-            n.restore()
+        // The chosen part of the animation fills the screen; without one, the centre.
+        val c = crop ?: dev.opencover.home.Crop.centered(frame.width, frame.height, size.width, size.height)
+        drawIntoCanvas { canvas ->
+            val src = android.graphics.Rect(
+                (c.x * frame.width).toInt(), (c.y * frame.height).toInt(),
+                ((c.x + c.w) * frame.width).toInt(), ((c.y + c.h) * frame.height).toInt(),
+            )
+            canvas.nativeCanvas.drawBitmap(frame, src, android.graphics.RectF(0f, 0f, size.width, size.height), Smooth)
         }
     }
 }
