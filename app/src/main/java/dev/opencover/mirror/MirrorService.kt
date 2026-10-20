@@ -117,6 +117,8 @@ class MirrorService : Service() {
         showMirror(clear = true)
         mirrorShown = true
         MirrorInput.start(this) // live touch
+        innerWatch.wasOn = getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)?.state == Display.STATE_ON
+        getSystemService(DisplayManager::class.java).registerDisplayListener(innerWatch, handler)
         val app = applicationContext
         MirrorEnv.later { MirrorEnv.hideAccessibility(app) }
     }
@@ -147,7 +149,24 @@ class MirrorService : Service() {
         }
     }
 
+    /**
+     * The system can drop the forced-open state by itself (it does when its requester isn't on top), which turns the
+     * inner screen off: the session is then over, so end it as the stop button would rather than mirror nothing.
+     */
+    private val innerWatch = object : DisplayManager.DisplayListener {
+        var wasOn = false
+        override fun onDisplayChanged(id: Int) {
+            if (id != Display.DEFAULT_DISPLAY || instance !== this@MirrorService) return
+            val on = getSystemService(DisplayManager::class.java).getDisplay(id)?.state == Display.STATE_ON
+            if (on) wasOn = true
+            else if (wasOn) { Log.i(TAG, "inner screen turned off: ending the session"); stop() }
+        }
+        override fun onDisplayAdded(id: Int) {}
+        override fun onDisplayRemoved(id: Int) {}
+    }
+
     fun stop() {
+        runCatching { getSystemService(DisplayManager::class.java).unregisterDisplayListener(innerWatch) }
         MirrorInput.stop()
         if (instance != null) MirrorEnv.leave(this)
         instance = null
