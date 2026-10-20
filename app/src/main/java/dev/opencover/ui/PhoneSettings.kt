@@ -72,6 +72,7 @@ fun PhoneSettings(onBack: () -> Unit) {
             "Needs Shizuku. Puts the phone into deep doze 30 s after the screen turns off (its motion sensors can't). Saves battery; some notifications may arrive a little later.",
             deep,
         ) { deep = it; prefs.deepSleep = it; if (!it) dev.opencover.phone.DeepSleep.awake() }
+        LocationScanning()
         DisplaySettings(prefs)
         InnerLauncherSettings()
         AppRotations(prefs)
@@ -216,4 +217,34 @@ private fun InnerLauncherSettings() {
             if (!open(dev.opencover.phone.InnerLauncher.LAWNCHAIR_PLAY)) open(dev.opencover.phone.InnerLauncher.LAWNCHAIR_GITHUB)
         }) { Text("Get Lawnchair") }
     }
+}
+
+/**
+ * Wi-Fi and Bluetooth scanning for location: they wake the radios for Google's location service even with Wi-Fi and
+ * Bluetooth off (its wakelocks were the biggest after OpenCover's in the battery stats). Off saves battery; location
+ * still works from GPS and mobile data.
+ */
+@Composable
+private fun LocationScanning() {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    fun read() = android.provider.Settings.Global.getInt(ctx.contentResolver, "wifi_scan_always_enabled", 1) == 1 ||
+        android.provider.Settings.Global.getInt(ctx.contentResolver, "ble_scan_always_enabled", 1) == 1
+    var scanning by remember { mutableStateOf(read()) }
+    SwitchRow(
+        "Location scanning",
+        "Lets Google look for Wi-Fi networks and Bluetooth devices to place you, even with both off. Off saves battery.",
+        scanning,
+    ) { on ->
+        scope.launch {
+            val v = if (on) 1 else 0
+            withContext(Dispatchers.IO) {
+                ShizukuShell.run("sh", "-c", "settings put global wifi_scan_always_enabled $v; settings put global ble_scan_always_enabled $v")
+            }
+            scanning = read()
+        }
+    }
+    TextButton(onClick = {
+        runCatching { dev.opencover.apps.AppLauncher.start(ctx, android.content.Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
+    }) { Text("Location settings (Google Location Accuracy)") }
 }
