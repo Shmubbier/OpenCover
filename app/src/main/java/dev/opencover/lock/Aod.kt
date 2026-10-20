@@ -144,3 +144,35 @@ object AodOverlay {
         fun destroy() { registry.currentState = Lifecycle.State.DESTROYED }
     }
 }
+
+/**
+ * AOD timeout: after [LockPrefs.aodMinutes] of AOD the cover goes fully dark, by turning Samsung's AOD off through
+ * Shizuku; the next wake turns it back on. Saves the ambient display's power (about 14 mAh an hour on this phone).
+ */
+object AodTimeout {
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /** The AOD came on. */
+    fun start(ctx: Context) {
+        handler.removeCallbacksAndMessages(null)
+        val m = LockPrefs.aodMinutes
+        if (m <= 0) return
+        val app = ctx.applicationContext
+        handler.postDelayed({
+            if (app.getSystemService(android.os.PowerManager::class.java).isInteractive) return@postDelayed
+            LockPrefs.setAodOffByUs(app, true)
+            AodOverlay.hide()
+            Thread { dev.opencover.quick.ShizukuShell.run("settings", "put", "system", "aod_mode", "0") }.start()
+        }, m * 60_000L)
+    }
+
+    /** The phone woke: Samsung's AOD back on (for the next sleep), if this turned it off. */
+    fun stop(ctx: Context) {
+        handler.removeCallbacksAndMessages(null)
+        val app = ctx.applicationContext
+        if (!LockPrefs.aodOffByUs(app)) return
+        Thread {
+            if (dev.opencover.quick.ShizukuShell.run("settings", "put", "system", "aod_mode", "1")) LockPrefs.setAodOffByUs(app, false)
+        }.start()
+    }
+}

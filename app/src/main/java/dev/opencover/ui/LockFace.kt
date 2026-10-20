@@ -100,7 +100,8 @@ fun LockFace(
     val ctx = LocalContext.current
     BoxWithConstraints(modifier.fillMaxSize().background(Color.Black)) {
         // The lock screen's background (Home's unless set); the AOD shows the frame the lock screen stopped on, dimmed.
-        Background(
+        // The AOD on black (battery): only the clock and modules are lit.
+        if (!(dim && LockPrefs.aodBlack)) Background(
             Wallpaper.lockStill ?: Wallpaper.homeStill, Wallpaper.lockAnim, dev.opencover.look.Playheads.lock,
             playing = !dim, alpha = if (dim) 0.3f else 0.6f, crop = Wallpaper.lockAnimCrop, video = Wallpaper.lockVideo,
         )

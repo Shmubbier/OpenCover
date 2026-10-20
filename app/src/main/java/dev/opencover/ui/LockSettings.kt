@@ -83,6 +83,16 @@ fun LockSettings(onBack: () -> Unit) {
             }
         }
         Button(onClick = { editing = true }) { Text("Edit layout") }
+        SwitchRow("Black AOD", "The AOD shows only the clock and modules, without the wallpaper. Saves battery.", LockPrefs.aodBlack) {
+            LockPrefs.setAodBlack(ctx, it)
+        }
+        Text("Turn the AOD off after", color = Color.Gray, fontSize = 13.sp)
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(0 to "Never", 1 to "1 min", 5 to "5 min", 15 to "15 min", 30 to "30 min").forEach { (m, label) ->
+                FilterChip(selected = LockPrefs.aodMinutes == m, onClick = { LockPrefs.setAodMinutes(ctx, m) }, label = { Text(label) })
+            }
+        }
+        Text("Needs Shizuku. The cover goes fully dark after that long; it comes back on the next wake.", color = Color.Gray, fontSize = 11.sp)
         Text("Background (an image, or an animated GIF or WebP; the AOD shows the frame the lock screen stopped on)", color = Color.Gray, fontSize = 13.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { CoverActivity.current?.pickBackground(dev.opencover.home.Slot.LOCK) }) { Text("Pick image, GIF or WebP") }

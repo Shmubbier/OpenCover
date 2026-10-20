@@ -47,8 +47,13 @@ class CoverAccessibility : AccessibilityService() {
     private val dreams = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
             when (i.action) {
-                Intent.ACTION_DREAMING_STARTED -> if (LockPrefs.aod && aodReady(c)) AodOverlay.show(this@CoverAccessibility)
+                Intent.ACTION_DREAMING_STARTED -> if (LockPrefs.aod && aodReady(c)) {
+                    AodOverlay.show(this@CoverAccessibility)
+                    dev.opencover.lock.AodTimeout.start(c)
+                }
                 Intent.ACTION_DREAMING_STOPPED -> AodOverlay.hide()
+                // Only a real wake: turning the AOD off itself also ends the doze.
+                Intent.ACTION_SCREEN_ON -> dev.opencover.lock.AodTimeout.stop(c)
             }
             // Woken (from doze or fully off): let the windows settle, then maybe replace Samsung's lock screen.
             if (i.action != Intent.ACTION_DREAMING_STARTED) handler.postDelayed({ LockScreen.maybeShow(this@CoverAccessibility) }, 250)
@@ -67,7 +72,9 @@ class CoverAccessibility : AccessibilityService() {
         val cover = getSystemService(android.hardware.display.DisplayManager::class.java).getDisplay(dev.opencover.COVER_DISPLAY)
         if (LockPrefs.aod && aodReady(this) &&
             dozing(getSystemService(android.os.PowerManager::class.java).isInteractive, cover?.state ?: android.view.Display.STATE_OFF)
-        ) AodOverlay.show(this)
+        ) { AodOverlay.show(this); dev.opencover.lock.AodTimeout.start(this) }
+        // Restarted after the AOD timeout turned Samsung's AOD off: turn it back on once the phone is in use.
+        if (getSystemService(android.os.PowerManager::class.java).isInteractive) dev.opencover.lock.AodTimeout.stop(this)
         refreshScope()
         handler.post { updateNavBar() } // the window list is ready once connected
         // Shizuku state does not survive a reboot, and after one Shizuku starts later than this service: redo it
