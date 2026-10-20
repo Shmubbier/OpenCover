@@ -90,6 +90,7 @@
         <activity
             android:name=".mirror.MirrorActivity"
             android:exported="false"
+            android:taskAffinity="dev.opencover.mirror"
             android:excludeFromRecents="true"
             android:resizeableActivity="true"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density">

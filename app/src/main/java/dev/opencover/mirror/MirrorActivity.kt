@@ -39,6 +39,7 @@ class MirrorActivity : ComponentActivity(), TextureView.SurfaceTextureListener {
         super.onCreate(savedInstanceState)
         val svc = MirrorService.instance
         if (svc == null) { Toast.makeText(this, "Mirroring not running", Toast.LENGTH_SHORT).show(); finish(); return }
+        session = svc
 
         srcW = svc.captureWidth
         srcH = svc.captureHeight
@@ -199,8 +200,12 @@ class MirrorActivity : ComponentActivity(), TextureView.SurfaceTextureListener {
         MirrorInput.stroke(x1, y1, x2, y2, strokeDuration(t1, t2))
     }
 
+    /** The session this screen shows. Only it is stopped here, and only when the screen is really closed. */
+    private var session: MirrorService? = null
+
     override fun onDestroy() {
-        MirrorService.instance?.stop()
+        // A leftover screen from an earlier session, or one being recreated, must not end the session now running.
+        if (isFinishing && session != null && MirrorService.instance === session) session?.stop()
         super.onDestroy()
     }
 }
