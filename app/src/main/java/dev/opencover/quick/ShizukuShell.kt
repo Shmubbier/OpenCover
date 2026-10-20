@@ -70,4 +70,11 @@ object ShizukuShell {
 
     /** Blocking; call off the main thread. False if Shizuku isn't ready, the command fails or it times out. */
     fun run(vararg cmd: String): Boolean = exec(cmd)?.exit == 0
+
+    /** Starts a long-running command and hands it back to talk to; null if Shizuku isn't ready. */
+    fun spawn(vararg cmd: String): Process? = try {
+        if (!allowed()) null else newProcess.invoke(null, arrayOf(*cmd), null, null) as Process
+    } catch (e: Exception) {
+        null
+    }
 }

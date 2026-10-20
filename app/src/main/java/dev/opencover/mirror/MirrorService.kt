@@ -111,6 +111,7 @@ class MirrorService : Service() {
         Log.d(TAG, "projection ready ${captureWidth}x$captureHeight")
         // Launch only now: the device-state switch moves whatever is on the cover to display 0.
         AppLauncher.start(this, Intent(this, MirrorActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK))
+        MirrorInput.start(this) // live touch
         val app = applicationContext
         MirrorEnv.later { MirrorEnv.hideAccessibility(app) }
     }
@@ -133,6 +134,7 @@ class MirrorService : Service() {
     }
 
     fun stop() {
+        MirrorInput.stop()
         if (instance != null) MirrorEnv.leave(this)
         instance = null
         HeatGuard.evaluate()

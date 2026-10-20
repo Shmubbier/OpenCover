@@ -154,6 +154,18 @@ class MirrorActivity : ComponentActivity(), TextureView.SurfaceTextureListener {
             forwarding = !onControl(x, y) && x >= viewBox.left && x <= viewBox.right && y >= viewBox.top && y <= viewBox.bottom
         }
         if (!forwarding) return super.dispatchTouchEvent(ev) // touches on the controls or beside the mirror
+        if (MirrorInput.live) {
+            // As it happens; a finger that slides off the mirror is held at its edge.
+            val (sx, sy) = toSource(x.coerceIn(viewBox.left.toFloat(), viewBox.right - 1f), y.coerceIn(viewBox.top.toFloat(), viewBox.bottom - 1f),
+                viewBox, srcW, srcH, turns) ?: return true
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> MirrorInput.touch('D', sx, sy)
+                MotionEvent.ACTION_MOVE -> MirrorInput.touch('M', sx, sy)
+                MotionEvent.ACTION_UP -> MirrorInput.touch('U', sx, sy)
+                MotionEvent.ACTION_CANCEL -> MirrorInput.touch('C', sx, sy)
+            }
+            return true
+        }
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 points.clear()
