@@ -18,6 +18,17 @@ object AppLauncher {
     fun options(): Bundle =
         ActivityOptions.makeBasic().setLaunchDisplayId(COVER_DISPLAY).toBundle()
 
+    // Hidden API (as Z Flip Cover Power uses it): without it the launch keeps the system's default windowing mode.
+    private val setWindowingMode by lazy {
+        runCatching { ActivityOptions::class.java.getMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType) }.getOrNull()
+    }
+
+    /** Options for an app opened on the cover without Shizuku: fullscreen there, allowed to start from the background. */
+    private fun appOptions(): Bundle = ActivityOptions.makeBasic().setLaunchDisplayId(COVER_DISPLAY).apply {
+        runCatching { setWindowingMode?.invoke(this, 1) } // WINDOWING_MODE_FULLSCREEN
+        setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS)
+    }.toBundle()
+
     /**
      * Starts one of our own screens (or a Settings page) on the cover display. [animate] false: no system transition
      * (custom ones are ignored when we start from the background), the screen animates itself instead.
@@ -46,8 +57,19 @@ object AppLauncher {
             if (!shell) main.post {
                 try {
                     requireNotNull(handle) { "user $user gone" }
-                    ctx.getSystemService(LauncherApps::class.java)
-                        .startMainActivity(ComponentName(pkg, activity), handle, null, options())
+                    val service = CoverAccessibility.instance
+                    if (service != null && handle == android.os.Process.myUserHandle()) {
+                        // No Shizuku: start it from the accessibility service, which Samsung lets open apps on the
+                        // cover (a plain launcher start gets "Open phone to continue").
+                        service.startActivity(
+                            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(ComponentName(pkg, activity))
+                                .addFlags(LAUNCHER_FLAGS),
+                            appOptions(),
+                        )
+                    } else {
+                        ctx.getSystemService(LauncherApps::class.java)
+                            .startMainActivity(ComponentName(pkg, activity), handle, null, appOptions())
+                    }
                 } catch (e: Exception) {
                     Toast.makeText(ctx, "Couldn't open $pkg", Toast.LENGTH_SHORT).show()
                     onFail()
