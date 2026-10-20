@@ -103,7 +103,11 @@ fun HomeScreen(home: Home, a: LauncherActions, editing: Boolean, onEditing: (Boo
         if (editing) PlaceBar(draft, homeItemNames, onToggle = { k ->
             val s = draft.getValue(k)
             draft = draft + (k to s.copy(on = !s.on))
-        }, doneLabel = "Done") { HomePrefs.setLayout(ctx, draft); onEditing(false) }
+        }, doneLabel = "Done", onReset = { draft = DEFAULT_HOME; selected = null }) {
+            // The default layout is saved as "none", so the big and analog clocks stay centred.
+            if (draft == DEFAULT_HOME) HomePrefs.clearLayout(ctx) else HomePrefs.setLayout(ctx, draft)
+            onEditing(false)
+        }
     }
 }
 

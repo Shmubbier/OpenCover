@@ -155,15 +155,22 @@ class MirrorActivity : ComponentActivity(), TextureView.SurfaceTextureListener {
         }
         if (!forwarding) return super.dispatchTouchEvent(ev) // touches on the controls or beside the mirror
         if (MirrorInput.live) {
-            // As it happens; a finger that slides off the mirror is held at its edge.
-            val (sx, sy) = toSource(x.coerceIn(viewBox.left.toFloat(), viewBox.right - 1f), y.coerceIn(viewBox.top.toFloat(), viewBox.bottom - 1f),
-                viewBox, srcW, srcH, turns) ?: return true
-            when (ev.actionMasked) {
-                MotionEvent.ACTION_DOWN -> MirrorInput.touch('D', sx, sy)
-                MotionEvent.ACTION_MOVE -> MirrorInput.touch('M', sx, sy)
-                MotionEvent.ACTION_UP -> MirrorInput.touch('U', sx, sy)
-                MotionEvent.ACTION_CANCEL -> MirrorInput.touch('C', sx, sy)
+            // As it happens, every finger (pinch works); a finger that slides off the mirror is held at its edge.
+            val fingers = (0 until ev.pointerCount).map { i ->
+                val (sx, sy) = toSource(ev.getX(i).coerceIn(viewBox.left.toFloat(), viewBox.right - 1f),
+                    ev.getY(i).coerceIn(viewBox.top.toFloat(), viewBox.bottom - 1f), viewBox, srcW, srcH, turns) ?: (0f to 0f)
+                Triple(ev.getPointerId(i), sx, sy)
             }
+            val kind = when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> 'D'
+                MotionEvent.ACTION_MOVE -> 'M'
+                MotionEvent.ACTION_UP -> 'U'
+                MotionEvent.ACTION_CANCEL -> 'C'
+                MotionEvent.ACTION_POINTER_DOWN -> 'P'
+                MotionEvent.ACTION_POINTER_UP -> 'R'
+                else -> return true
+            }
+            MirrorInput.touch(touchLine(kind, ev.actionIndex, fingers))
             return true
         }
         when (ev.actionMasked) {

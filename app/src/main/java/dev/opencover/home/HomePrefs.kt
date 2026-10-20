@@ -90,6 +90,7 @@ object HomePrefs {
     fun setIconPack(ctx: Context, pkg: String?) { iconPack = pkg; prefs(ctx).edit().putString("icon_pack", pkg).apply() }
     fun setIconShape(ctx: Context, s: dev.opencover.apps.IconShape) { iconShape = s; prefs(ctx).edit().putString("icon_shape", s.name).apply() }
     fun setThemedIcons(ctx: Context, on: Boolean) { themedIcons = on; prefs(ctx).edit().putBoolean("themed_icons", on).apply() }
+    fun clearLayout(ctx: Context) { layout = null; prefs(ctx).edit().remove("layout").apply() }
     fun setLayout(ctx: Context, m: Map<HomeItem, Spot>) { layout = m; prefs(ctx).edit().putString("layout", formatLayout(m)).apply() }
     fun setFahrenheit(ctx: Context, f: Boolean) { fahrenheit = f; prefs(ctx).edit().putBoolean("fahrenheit", f).apply() }
 }

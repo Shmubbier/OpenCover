@@ -32,11 +32,11 @@ object MirrorInput {
         }
     }
 
-    /** Live touch: [action] is D (down), M (move), U (up) or C (cancel), at [x],[y] on the inner screen. */
-    fun touch(action: Char, x: Float, y: Float) {
+    /** Live touch: a line made by [touchLine] (every finger, in inner-screen pixels). */
+    fun touch(line: String) {
         worker.execute {
             val w = out ?: return@execute
-            runCatching { w.write("$action $x $y\n"); w.flush() }.onFailure { stopServer() }
+            runCatching { w.write(line); w.write("\n"); w.flush() }.onFailure { stopServer() }
         }
     }
 

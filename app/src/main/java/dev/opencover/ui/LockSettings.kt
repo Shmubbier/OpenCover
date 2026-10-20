@@ -107,6 +107,6 @@ private fun LayoutEditor(onDone: () -> Unit) {
             val s = draft.getValue(m)
             draft = draft + (m to s.copy(on = !s.on))
             if (!s.on) selected = m // just switched on: select it
-        }, doneLabel = "Lock") { LockPrefs.setLayout(ctx, draft); onDone() }
+        }, doneLabel = "Lock", onReset = { draft = dev.opencover.lock.DEFAULT_LAYOUT; selected = null }) { LockPrefs.setLayout(ctx, draft); onDone() }
     }
 }

@@ -4,7 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,7 +33,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -40,7 +40,6 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import dev.opencover.lock.Spot
 import dev.opencover.lock.clamp
-import dev.opencover.lock.dropped
 import dev.opencover.lock.resized
 
 /**
@@ -62,6 +61,7 @@ fun <K> BoxWithConstraintsScope.Placed(
     val wPx = constraints.maxWidth.toFloat()
     val hPx = constraints.maxHeight.toFloat()
     val density = LocalDensity.current
+    val shownSpots = mutableMapOf<K, Spot>()
     layout.forEach { (key, spot) ->
         if (!spot.on && onMove == null) return@forEach
         // Clamped as drawn too: an item can grow after it was placed (another clock style, more icons).
@@ -69,7 +69,7 @@ fun <K> BoxWithConstraintsScope.Placed(
         val w = size.width * spot.scale / wPx
         val h = size.height * spot.scale / hPx
         val shown = clamp(if (key in centered) spot.copy(x = (1f - w) / 2) else spot, w, h)
-        val current by rememberUpdatedState(shown)
+        shownSpots[key] = shown
         var m = Modifier
             .offset(with(density) { (shown.x * wPx).toDp() }, with(density) { (shown.y * hPx).toDp() })
             .onSizeChanged { sizes[key] = it }
@@ -78,25 +78,46 @@ fun <K> BoxWithConstraintsScope.Placed(
                 transformOrigin = TransformOrigin(0f, 0f)
                 alpha = if (!spot.on) 0.3f else onAlpha
             }
-        if (onMove != null) m = m
-            // The selected item is outlined until another one is touched.
-            .border(2.dp, if (selected == key) Color(0xFF8AB4F8) else Color.Transparent, RoundedCornerShape(6.dp))
-            .pointerInput(key) {
-                awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                    onSelect(key)
-                }
-            }
-            // Drag to move, pinch to resize; each step goes to the draft at once.
-            .pointerInput(key) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    val s = sizes[key] ?: IntSize.Zero
-                    val next = resized(current, zoom)
-                    onMove(key, dropped(next, pan.x, pan.y, wPx, hPx, s.width * next.scale / wPx, s.height * next.scale / hPx))
-                }
-            }
+        // Editor: the selected item is outlined until another one is touched.
+        if (onMove != null) m = m.border(2.dp, if (selected == key) Color(0xFF8AB4F8) else Color.Transparent, RoundedCornerShape(6.dp))
         Box(m) { content(key) }
     }
+    if (onMove == null) return
+    val spots by rememberUpdatedState(shownSpots.toMap())
+    val chosen by rememberUpdatedState(selected)
+    // Editor gestures, over the whole screen in screen pixels: touch an item to select it and drag it; pinch with
+    // fingers anywhere to resize the selected item about its centre (the fingers needn't be on it).
+    Box(Modifier.matchParentSize().pointerInput(Unit) {
+        fun rectOf(k: K): androidx.compose.ui.geometry.Rect? {
+            val s = spots[k] ?: return null
+            val sz = sizes[k] ?: return null
+            return androidx.compose.ui.geometry.Rect(s.x * wPx, s.y * hPx, s.x * wPx + sz.width * s.scale, s.y * hPx + sz.height * s.scale)
+        }
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            // Small items are hard to hit: a little slack around each.
+            val hit = spots.keys.reversed().firstOrNull { k -> rectOf(k)?.inflate(12.dp.toPx())?.contains(down.position) == true }
+            hit?.let(onSelect)
+            val target = hit ?: chosen ?: return@awaitEachGesture
+            var active = hit != null // one finger off every item does nothing; two fingers always resize
+            do {
+                val ev = awaitPointerEvent()
+                if (ev.changes.count { it.pressed } >= 2) active = true
+                val zoom = ev.calculateZoom()
+                val pan = ev.calculatePan()
+                if (active && (zoom != 1f || pan != androidx.compose.ui.geometry.Offset.Zero)) {
+                    val cur = spots[target] ?: break
+                    val sz = sizes[target] ?: IntSize.Zero
+                    val next = resized(cur, zoom)
+                    val dw = sz.width * (cur.scale - next.scale)
+                    val dh = sz.height * (cur.scale - next.scale)
+                    val moved = next.copy(x = cur.x + (dw / 2 + pan.x) / wPx, y = cur.y + (dh / 2 + pan.y) / hPx)
+                    onMove(target, clamp(moved, sz.width * next.scale / wPx, sz.height * next.scale / hPx))
+                    ev.changes.forEach { it.consume() }
+                }
+            } while (ev.changes.any { it.pressed })
+        }
+    })
 }
 
 /**
@@ -109,6 +130,7 @@ fun <K> BoxWithConstraintsScope.PlaceBar(
     names: Map<K, String>,
     onToggle: (K) -> Unit,
     doneLabel: String,
+    onReset: () -> Unit,
     onDone: () -> Unit,
 ) {
     var atBottom by remember { mutableStateOf(false) }
@@ -122,6 +144,7 @@ fun <K> BoxWithConstraintsScope.PlaceBar(
         draft.forEach { (k, s) ->
             FilterChip(selected = s.on, onClick = { onToggle(k) }, label = { Text(names.getValue(k)) })
         }
+        TextButton(onClick = onReset) { Text("Reset") } // back to the default layout (saved only with Done/Lock)
         Button(onClick = onDone) { Text(doneLabel) }
     }
 }
