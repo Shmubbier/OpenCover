@@ -60,7 +60,8 @@ class CoverWatcher : Service() {
                         if (coverActive()) openLauncher("unlock", unlocked = true)
                     }
                 }
-                Intent.ACTION_SCREEN_OFF -> { paused = false; LockScreen.pendingOpen = null }
+                Intent.ACTION_SCREEN_OFF -> { paused = false; LockScreen.pendingOpen = null; dev.opencover.phone.DeepSleep.screenOff(c) }
+                Intent.ACTION_SCREEN_ON, Intent.ACTION_POWER_CONNECTED -> dev.opencover.phone.DeepSleep.awake()
             }
             onCoverStateMaybeChanged()
         }
@@ -109,6 +110,8 @@ class CoverWatcher : Service() {
         registerReceiver(receiver, IntentFilter().apply {
             addAction(Intent.ACTION_USER_PRESENT)
             addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_POWER_CONNECTED)
         })
         onCoverStateMaybeChanged()
         HeatGuard.start(this)

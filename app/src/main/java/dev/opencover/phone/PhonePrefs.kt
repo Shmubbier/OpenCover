@@ -73,4 +73,9 @@ class PhonePrefs(ctx: Context) {
     var innerResetPending: Boolean
         get() = sp.getBoolean("inner_reset_pending", false)
         set(v) { sp.edit().putBoolean("inner_reset_pending", v).commit() }
+
+    /** Force deep doze shortly after the screen turns off (see DeepSleep). */
+    var deepSleep: Boolean
+        get() = sp.getBoolean("deep_sleep", true)
+        set(v) = sp.edit().putBoolean("deep_sleep", v).apply()
 }

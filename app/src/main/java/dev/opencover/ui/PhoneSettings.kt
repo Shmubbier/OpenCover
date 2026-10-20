@@ -66,6 +66,12 @@ fun PhoneSettings(onBack: () -> Unit) {
             "Only while the hotspot or mirroring is on. Warns at 42 °C, stops both at 45 °C.",
             heat,
         ) { heat = it; prefs.heatGuard = it; HeatGuard.evaluate() }
+        var deep by remember { mutableStateOf(prefs.deepSleep) }
+        SwitchRow(
+            "Deep sleep when idle",
+            "Needs Shizuku. Puts the phone into deep doze 30 s after the screen turns off (its motion sensors can't). Saves battery; some notifications may arrive a little later.",
+            deep,
+        ) { deep = it; prefs.deepSleep = it; if (!it) dev.opencover.phone.DeepSleep.awake() }
         DisplaySettings(prefs)
         InnerLauncherSettings()
         AppRotations(prefs)
