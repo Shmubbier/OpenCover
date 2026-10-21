@@ -175,12 +175,12 @@ object NavBar {
         // on the screen's bottom.
         var rot = barSide(over, size.x, size.y)
         var over = over
-        // Turned, with the system bar not on the camera-lip edge (Samsung's gestures): a black spacer along that edge
-        // instead, holding the bar where it is upright, so nothing important sits behind the lip.
-        val spacer = cover.rotation != 0 && rot != cover.rotation
-        if (spacer) {
+        // Turned, with the system bar not on the camera-lip edge (Samsung's gestures): the bar goes along that edge
+        // instead, where it is upright. The cover is shorter while turned (see coverSize), so the black margin beside
+        // the lip is outside the screen and this strip is as thin as Samsung's gesture bar.
+        if (cover.rotation != 0 && rot != cover.rotation) {
             val (natW, natH) = if (cover.rotation % 2 == 1) size.y to size.x else size.x to size.y
-            val thick = 66 // the camera lip's height on the 720 px cover (Samsung's upright bar is the same)
+            val thick = minOf(over.width(), over.height())
             val (l, t, r, b) = naturalToScreen(0, natH - thick, natW, natH, natW, natH, cover.rotation)
             over = Rect(l, t, r, b)
             rot = cover.rotation
@@ -191,7 +191,7 @@ object NavBar {
             .createWindowContext(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, null)
             .getSystemService(WindowManager::class.java)
         // On the physical bottom the camera lip takes the right part, so the pill sits left of it; elsewhere, centred.
-        add(wm, BarView(service, service, s, rot, keyboard, lip = rot == cover.rotation, spacer), over.left, over.top, over.width(), over.height())
+        add(wm, BarView(service, service, s, rot, keyboard, lip = rot == cover.rotation), over.left, over.top, over.width(), over.height())
         if (s == NavStyle.GESTURES) {
             // Back strips on the two edges beside the bar, between the top quarter (Samsung's panel pull-down) and the
             // bar, worked out as if the bar were at the bottom and then turned.
@@ -336,7 +336,7 @@ object NavBar {
     @SuppressLint("ViewConstructor")
     private class BarView(
         ctx: Context, private val service: AccessibilityService, private val style: NavStyle,
-        private val rotation: Int, private val keyboard: Boolean, private val lip: Boolean, private val spacer: Boolean = false,
+        private val rotation: Int, private val keyboard: Boolean, private val lip: Boolean,
     ) : View(ctx) {
         /** Where the pill and, with a keyboard up, the hide button sit along the bar (fractions of its length). */
         private val pillCenter = if (lip) LIP_CENTER else 0.5f
@@ -360,8 +360,7 @@ object NavBar {
 
         override fun onDraw(c: Canvas) {
             // Buttons sit on Samsung's grey bar; the gesture pill floats over the app with no background.
-            if (spacer) c.drawColor(Color.BLACK) // blends with the lip and the cover's black frame
-            else if (style == NavStyle.BUTTONS) c.drawColor(Color.rgb(0xC1, 0xC1, 0xC2))
+            if (style == NavStyle.BUTTONS) c.drawColor(Color.rgb(0xC1, 0xC1, 0xC2))
             // Turn the canvas so everything below is drawn upright, as at rotation 0.
             when (rotation and 3) {
                 1 -> { c.translate(0f, height.toFloat()); c.rotate(-90f) }
