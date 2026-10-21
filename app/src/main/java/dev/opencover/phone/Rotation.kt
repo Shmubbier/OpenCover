@@ -15,7 +15,7 @@ private const val COVER_W = 748
 private const val COVER_H = 720
 
 /** Black margin (px) along the camera-lip edge while an app is turned, so the app lays out clear of the lip and corners. */
-const val TURNED_MARGIN = 80
+const val TURNED_MARGIN = 100
 
 /**
  * Shell command sizing the cover for [rotation]: turned, the cover is made [TURNED_MARGIN] shorter, and the display
