@@ -57,8 +57,8 @@ needs.
 - Only the opt-in weather widget uses the internet: it sends rough coordinates (about 1 km) to
   Open-Meteo every 30 minutes at most, while the screen is on. Nothing else leaves your phone.
 
-## Shizuku
-Wi-Fi, Bluetooth, mobile data, airplane, NFC, battery saver, dark mode, Rotate, Mirror, keep cover on, the heat guard's hotspot stop and the cover brightness slider need [Shizuku](https://github.com/RikkaApps/Shizuku) (no root). Without it those tiles are grey and the slider only dims OpenCover.
+## Shizuku (optional)
+OpenCover works without [Shizuku](https://github.com/RikkaApps/Shizuku): apps open on the cover and mirroring works (one-finger live touch) through its accessibility service. Shizuku adds extras, gathered in Settings > Shizuku: keep cover on, deep sleep, 5G, display tweaks, the inner screen launcher, background restriction and per-app rotation, plus multi-finger mirror touch, the Wi-Fi, Bluetooth, mobile data, airplane, NFC, battery saver and dark mode tiles, the heat guard's hotspot stop and the cover brightness slider.
 1. Install the Shizuku APK from its GitHub releases: `adb install shizuku.apk`
 2. Start it (again after every reboot):
    `adb shell 'p=$(pm path moe.shizuku.privileged.api | cut -d: -f2); $(dirname $p)/lib/arm64/libshizuku.so'`

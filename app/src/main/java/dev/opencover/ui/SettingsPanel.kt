@@ -50,6 +50,7 @@ fun SettingsPanel(
     var experimental by remember { mutableStateOf(false) }
     var homeSettings by remember { mutableStateOf(false) }
     var phoneSettings by remember { mutableStateOf(false) }
+    var shizukuSettings by remember { mutableStateOf(false) }
     var lockSettings by remember { mutableStateOf(false) }
     var edgeSettings by remember { mutableStateOf(false) }
     if (edgeSettings) {
@@ -58,6 +59,10 @@ fun SettingsPanel(
     }
     if (lockSettings) {
         LockSettings(onBack = { lockSettings = false })
+        return
+    }
+    if (shizukuSettings) {
+        ShizukuSettings(onBack = { shizukuSettings = false })
         return
     }
     if (phoneSettings) {
@@ -132,6 +137,7 @@ fun SettingsPanel(
         }
         Button(onClick = { homeSettings = true }) { Text("Home") }
         Button(onClick = { phoneSettings = true }) { Text("Phone") }
+        Button(onClick = { shizukuSettings = true }) { Text("Shizuku (optional)") }
         Button(onClick = { lockSettings = true }) { Text("Lock screen") }
         Button(onClick = { edgeSettings = true }) { Text("Edge lighting") }
         Button(onClick = onSamsungWidgets) { Text("Open Samsung widgets") }

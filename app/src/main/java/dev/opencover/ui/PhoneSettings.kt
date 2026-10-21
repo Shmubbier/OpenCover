@@ -43,13 +43,12 @@ import dev.opencover.phone.nextTurns
 import dev.opencover.quick.ShizukuShell
 import dev.opencover.watcher.CoverAccessibility
 
-/** Settings > Phone: keep the cover on when opened, heat guard, display presets, rotation per app. */
+/** Settings > Phone: what works without Shizuku (heat guard, location scanning). */
 @Composable
 fun PhoneSettings(onBack: () -> Unit) {
     BackHandler(onBack = onBack)
     val ctx = LocalContext.current
     val prefs = remember { PhonePrefs(ctx) }
-    var keep by remember { mutableStateOf(prefs.keepCoverOn) }
     var heat by remember { mutableStateOf(prefs.heatGuard) }
     Column(
         Modifier.fillMaxSize().background(Color(0xF0101010)).verticalScroll(rememberScrollState()).padding(16.dp),
@@ -57,27 +56,13 @@ fun PhoneSettings(onBack: () -> Unit) {
     ) {
         Text("Phone", color = Color.White, fontSize = 20.sp)
         SwitchRow(
-            "Keep cover on when opened",
-            if (ShizukuShell.allowed()) "Needs Shizuku. Stops the cover turning off when the phone opens." else "Start Shizuku to apply.",
-            keep,
-        ) { keep = it; prefs.keepCoverOn = it; Fold.apply(ctx) }
-        SwitchRow(
             "Heat guard",
             "Only while the hotspot or mirroring is on. Warns at 42 °C, stops both at 45 °C.",
             heat,
         ) { heat = it; prefs.heatGuard = it; HeatGuard.evaluate() }
-        var deep by remember { mutableStateOf(prefs.deepSleep) }
-        SwitchRow(
-            "Deep sleep when idle",
-            "Needs Shizuku. Puts the phone into deep doze 30 s after the screen turns off (its motion sensors can't). Saves battery; some notifications may arrive a little later.",
-            deep,
-        ) { deep = it; prefs.deepSleep = it; if (!it) dev.opencover.phone.DeepSleep.awake() }
         LocationScanning()
-        FiveG()
-        DisplaySettings(prefs)
-        InnerLauncherSettings()
-        AppSleepList()
-        AppRotations(prefs)
+        Text("More phone settings (cover on when opened, deep sleep, 5G, display, rotation) are in Settings > Shizuku.",
+            color = Color.Gray, fontSize = 11.sp)
         TextButton(onClick = onBack) { Text("Back") }
     }
 }
@@ -300,5 +285,47 @@ private fun AppSleepList() {
             Text(app.label, color = Color.White, modifier = Modifier.weight(1f))
             Text(if (on) "Restricted" else "Allowed", color = if (on) Color(0xFFD0BCFF) else Color.Gray)
         }
+    }
+}
+
+/**
+ * Settings > Shizuku: the optional tweaks that need Shizuku (shell-level access). Everything else in OpenCover works
+ * without it; these show whether it is running.
+ */
+@Composable
+fun ShizukuSettings(onBack: () -> Unit) {
+    BackHandler(onBack = onBack)
+    val ctx = LocalContext.current
+    val prefs = remember { PhonePrefs(ctx) }
+    var keep by remember { mutableStateOf(prefs.keepCoverOn) }
+    var deep by remember { mutableStateOf(prefs.deepSleep) }
+    Column(
+        Modifier.fillMaxSize().background(Color(0xF0101010)).verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("Shizuku", color = Color.White, fontSize = 20.sp)
+        Text(
+            when {
+                ShizukuShell.allowed() -> "Shizuku is running. These tweaks are active."
+                ShizukuShell.running() -> "Shizuku is running but hasn't allowed OpenCover yet: allow it in the Shizuku app."
+                ShizukuShell.installed(ctx) -> "Shizuku isn't running: start it in the Shizuku app (needed again after each restart)."
+                else -> "Shizuku isn't installed. OpenCover works without it; these tweaks need it."
+            },
+            color = if (ShizukuShell.allowed()) Color(0xFF9CE6A0) else Color.Gray, fontSize = 13.sp,
+        )
+        SwitchRow("Keep cover on when opened", "Stops the cover turning off when the phone opens.", keep) {
+            keep = it; prefs.keepCoverOn = it; Fold.apply(ctx)
+        }
+        SwitchRow(
+            "Deep sleep when idle",
+            "Puts the phone into deep doze 30 s after the screen turns off (its motion sensors can't). Saves battery; some notifications may arrive a little later.",
+            deep,
+        ) { deep = it; prefs.deepSleep = it; if (!it) dev.opencover.phone.DeepSleep.awake() }
+        FiveG()
+        DisplaySettings(prefs)
+        InnerLauncherSettings()
+        AppSleepList()
+        AppRotations(prefs)
+        TextButton(onClick = onBack) { Text("Back") }
     }
 }
