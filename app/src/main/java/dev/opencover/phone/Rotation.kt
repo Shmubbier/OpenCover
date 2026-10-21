@@ -14,7 +14,10 @@ fun holdRotation(rotation: Int): String =
 private const val COVER_W = 748
 private const val COVER_H = 720
 
-/** Black margin (px) along the camera-lip edge while an app is turned, so the app lays out clear of the lip and corners. */
+/**
+ * Black margin (px) along the camera-lip edge while an app is turned, so the app lays out clear of the lip and corners.
+ * Seen on the Flip 5: at 100 the cover split the margin across both sides; at 110 all of it is on the lip edge.
+ */
 const val TURNED_MARGIN = 110
 
 /**
