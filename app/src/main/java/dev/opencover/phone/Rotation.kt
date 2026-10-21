@@ -15,14 +15,15 @@ private const val COVER_W = 748
 private const val COVER_H = 720
 
 /**
- * Black margin (px) along the camera-lip edge while an app is turned, so the app lays out clear of the lip and corners.
- * Seen on the Flip 5: at 100 the cover split the margin across both sides; at 110 all of it is on the lip edge.
+ * Black margin (px) while an app is turned, so the app lays out clear of the lip and the rounded corners. The cover
+ * centres the shorter picture, so half of it is on the lip edge (NavBar's black spacer covers the rest of the lip) and
+ * half on the opposite edge.
  */
-const val TURNED_MARGIN = 110
+const val TURNED_MARGIN = 40
 
 /**
- * Shell command sizing the cover for [rotation]: turned, the cover is made [TURNED_MARGIN] shorter, and the display
- * leaves the spare strip black along its bottom (the camera-lip edge) with the app laid out beside it; upright, full size.
+ * Shell command sizing the cover for [rotation]: turned, [TURNED_MARGIN] shorter, the app laid out inside the black
+ * margin; upright, full size.
  */
 fun coverSize(rotation: Int): String =
     "wm size ${if (rotation == 0) "reset" else "${COVER_W}x${COVER_H - TURNED_MARGIN}"} -d $COVER_DISPLAY"
