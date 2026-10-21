@@ -3,7 +3,6 @@ package dev.opencover.mirror
 import android.graphics.Color
 import android.graphics.SurfaceTexture
 import android.os.Bundle
-import android.os.SystemClock
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.Surface
@@ -31,9 +30,7 @@ class MirrorActivity : ComponentActivity(), TextureView.SurfaceTextureListener {
     private var lastH = 0
     private var controls = emptyList<Button>()
 
-    // gesture recording
     private var forwarding = false
-    private val points = mutableListOf<Triple<Float, Float, Long>>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -174,28 +171,17 @@ class MirrorActivity : ComponentActivity(), TextureView.SurfaceTextureListener {
             MirrorInput.touch(touchLine(kind, ev.actionIndex, fingers))
             return true
         }
+        // Without Shizuku: the first finger, live, through the accessibility service.
+        val (sx, sy) = toSource(x.coerceIn(viewBox.left.toFloat(), viewBox.right - 1f), y.coerceIn(viewBox.top.toFloat(), viewBox.bottom - 1f),
+            viewBox, srcW, srcH, turns) ?: return true
         when (ev.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                points.clear()
-                points += Triple(x, y, SystemClock.uptimeMillis())
-            }
-            MotionEvent.ACTION_MOVE -> points += Triple(x, y, SystemClock.uptimeMillis())
-            MotionEvent.ACTION_UP -> {
-                points += Triple(x, y, SystemClock.uptimeMillis())
-                dispatchStroke()
-            }
+            MotionEvent.ACTION_DOWN -> LiveGesture.down(sx, sy)
+            MotionEvent.ACTION_MOVE -> LiveGesture.move(sx, sy)
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> LiveGesture.up(sx, sy)
         }
         return true
     }
 
-    private fun dispatchStroke() {
-        val mapped = points.mapNotNull { (px, py, t) ->
-            // offset touch coords into the SurfaceView's box
-            toSource(px, py, viewBox, srcW, srcH, turns)?.let { (sx, sy) -> Triple(sx, sy, t) }
-        }
-        points.clear()
-        MirrorInput.stroke(mapped)
-    }
 
     /** The session this screen shows. Only it is stopped here, and only when the screen is really closed. */
     private var session: MirrorService? = null
