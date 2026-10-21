@@ -61,7 +61,7 @@ object RotationFeature {
     fun resetToDefault(ctx: Context) {
         val app = ctx.applicationContext
         PhonePrefs(app).rotationResetPending = true
-        run(holdRotation(0) + "; " + coverSize(0))
+        run(holdRotation(0))
         handler.postDelayed({
             PhonePrefs(app).rotationResetPending = false
             foreground?.let { onWindow(app, it) }
@@ -70,7 +70,7 @@ object RotationFeature {
 
     private fun pin(ctx: Context, turns: Int) {
         val now = ctx.getSystemService(DisplayManager::class.java).getDisplay(COVER_DISPLAY)?.rotation ?: 0
-        if (turns != now) run(holdRotation(turns) + "; " + coverSize(turns))
+        if (turns != now) run(holdRotation(turns))
     }
 
     /** The default launcher only: other packages (Settings has a fallback home) also answer a HOME query. */

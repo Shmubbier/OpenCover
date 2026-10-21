@@ -34,7 +34,6 @@ private const val RECENTS_L = 4f / 748; private const val RECENTS_R = 118f / 748
 private const val HOME_L = 128f / 748; private const val HOME_R = 242f / 748
 private const val BACK_L = 252f / 748; private const val BACK_R = 366f / 748
 private const val LIP_CENTER = 185f / 748 // middle of the part left of the lip, for the gesture pill
-private const val LIP = 66 // the camera lip's height on the 720 px cover (Samsung's upright bar is the same)
 
 /** The button under a touch at [x] on a bar [width] px wide, or null. */
 fun buttonAt(x: Float, width: Int): NavButton? {
@@ -177,12 +176,11 @@ object NavBar {
         var rot = barSide(over, size.x, size.y)
         var over = over
         // Turned, with the system bar not on the camera-lip edge (Samsung's gestures): a black spacer along that edge
-        // instead, holding the bar where it is upright, so nothing important sits behind the lip. The cover is shorter
-        // while turned (coverSize), leaving half that margin off-screen on this edge, so the spacer covers the rest.
+        // instead, holding the bar where it is upright, so nothing important sits behind the lip.
         val spacer = cover.rotation != 0 && rot != cover.rotation
         if (spacer) {
             val (natW, natH) = if (cover.rotation % 2 == 1) size.y to size.x else size.x to size.y
-            val thick = LIP - dev.opencover.phone.TURNED_MARGIN / 2
+            val thick = 66 // the camera lip's height on the 720 px cover (Samsung's upright bar is the same)
             val (l, t, r, b) = naturalToScreen(0, natH - thick, natW, natH, natW, natH, cover.rotation)
             over = Rect(l, t, r, b)
             rot = cover.rotation

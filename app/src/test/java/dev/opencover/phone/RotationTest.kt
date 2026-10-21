@@ -17,11 +17,6 @@ class RotationTest {
         assertTrue(script.indexOf("fixed-to-user-rotation -d 1 enabled") < script.indexOf("user-rotation -d 1 lock 2"))
     }
 
-    @Test fun turnedCoverIsShorterAndUprightIsReset() {
-        assertEquals("wm size 748x${720 - TURNED_MARGIN} -d 1", coverSize(1))
-        assertEquals("wm size reset -d 1", coverSize(0))
-    }
-
     @Test fun rotationsRoundTrip() {
         val m = mapOf("a.b" to 1, "c.d" to 3)
         assertEquals(m, parseRotations(encodeRotations(m)))
