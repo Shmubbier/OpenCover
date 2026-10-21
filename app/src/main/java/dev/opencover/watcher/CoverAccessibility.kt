@@ -121,7 +121,7 @@ class CoverAccessibility : AccessibilityService() {
         serviceInfo = serviceInfo.apply {
             // A turned app needs its windows seen from every app; screen content is still never read.
             // Window-change events (top edge, our navigation bar) only arrive with every app in scope.
-            packageNames = if (topEdge || nav || PhonePrefs(this@CoverAccessibility).hasRotations) null
+            packageNames = if (topEdge || nav || KeepOnCover.enabled(this@CoverAccessibility) || PhonePrefs(this@CoverAccessibility).hasRotations) null
             else (setOf("com.android.systemui") + BankingMode.apps(this@CoverAccessibility)).toTypedArray()
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
                 (if (topEdge || nav) AccessibilityEvent.TYPE_WINDOWS_CHANGED else 0)
@@ -175,6 +175,7 @@ class CoverAccessibility : AccessibilityService() {
         }
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString()
+        if (pkg != null && KeepOnCover.onWindow(this, event.displayId, pkg, event.className?.toString().orEmpty())) return
         if (event.displayId == COVER_DISPLAY && pkg != null) when (pkg) {
             packageName -> {} // OpenCover's overlays; CoverActivity uprights itself
             "com.android.systemui" -> if (event.className?.toString() == SAMSUNG_COVER_HOME) RotationFeature.upright(this)

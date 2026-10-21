@@ -40,6 +40,18 @@ object AppLauncher {
     }
 
     /**
+     * Moves [pkg] to the cover, its task as it is (`am start` as the shell). Needs Shizuku: without it Samsung only lets
+     * apps on Good Lock MultiStar's cover list open there, and it keeps those on the cover itself. Off the main thread.
+     */
+    fun moveToCover(ctx: Context, pkg: String): Boolean {
+        val component = ctx.packageManager.getLaunchIntentForPackage(pkg)?.component ?: return false
+        return ShizukuShell.allowed() && ShizukuShell.run(
+            "am", "start", "--display", "$COVER_DISPLAY", "-a", Intent.ACTION_MAIN, "-c", Intent.CATEGORY_LAUNCHER,
+            "-f", "$LAUNCHER_FLAGS", "-n", component.flattenToShortString(),
+        )
+    }
+
+    /**
      * Launches an installed app on the cover display as the given user (serial number); [onFail] runs on the main
      * thread if it didn't open. Samsung answers many apps launched by another app with "Open phone to continue", but
      * lets the same launch from the shell through, so Shizuku goes first.

@@ -316,6 +316,12 @@ fun ShizukuSettings(onBack: () -> Unit) {
         SwitchRow("Keep cover on when opened", "Stops the cover turning off when the phone opens.", keep) {
             keep = it; prefs.keepCoverOn = it; Fold.apply(ctx)
         }
+        var keepOn by remember { mutableStateOf(dev.opencover.watcher.KeepOnCover.enabled(ctx)) }
+        SwitchRow(
+            "Keep apps on the cover",
+            "While folded: an app that opens itself on the inner screen is moved to the cover.",
+            keepOn,
+        ) { keepOn = it; dev.opencover.watcher.KeepOnCover.setEnabled(ctx, it); CoverAccessibility.instance?.refreshScope() }
         SwitchRow(
             "Deep sleep when idle",
             "Puts the phone into deep doze 30 s after the screen turns off (its motion sensors can't). Saves battery; some notifications may arrive a little later.",
