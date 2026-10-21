@@ -52,9 +52,23 @@ object MirrorInput {
         server = null
     }
 
-    // Fallback: a stroke replayed as one straight swipe after the finger lifts.
-    fun stroke(x1: Float, y1: Float, x2: Float, y2: Float, ms: Long) {
-        val args = inputArgs(x1, y1, x2, y2, ms).toTypedArray()
-        worker.execute { ShizukuShell.run(*args) }
+    /**
+     * Fallback when the touch server can't run (no Shizuku): the stroke, with its curve, replayed on the inner screen
+     * as an accessibility gesture after the finger lifts. [points] are inner-screen pixels with their times.
+     */
+    // ponytail: replayed after lifting, one finger; a live gesture needs stroke continuation (Z Flip Cover Power's engine).
+    fun stroke(points: List<Triple<Float, Float, Long>>) {
+        val service = dev.opencover.watcher.CoverAccessibility.instance ?: return
+        if (points.isEmpty()) return
+        val path = android.graphics.Path().apply {
+            moveTo(points[0].first, points[0].second)
+            points.drop(1).forEach { (x, y, _) -> lineTo(x, y) }
+        }
+        val ms = strokeDuration(points.first().third, points.last().third)
+        val gesture = android.accessibilityservice.GestureDescription.Builder()
+            .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, ms))
+            .setDisplayId(android.view.Display.DEFAULT_DISPLAY)
+            .build()
+        service.dispatchGesture(gesture, null, null)
     }
 }

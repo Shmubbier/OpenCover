@@ -187,6 +187,8 @@ class CoverAccessibility : AccessibilityService() {
         }
         if (event.displayId != COVER_DISPLAY || CoverWatcher.paused) return
         if (event.className?.toString() != SAMSUNG_COVER_HOME) return
+        // Mirroring brings Samsung's cover home up while it switches the phone open; the mirror goes on top of it.
+        if (dev.opencover.mirror.MirrorService.instance != null) return
         // Samsung's cover home also sits behind the lock screen; redirecting there fights the
         // PIN/face unlock UI (flicker). CoverWatcher opens the launcher on unlock instead.
         if (getSystemService(KeyguardManager::class.java).isKeyguardLocked) {

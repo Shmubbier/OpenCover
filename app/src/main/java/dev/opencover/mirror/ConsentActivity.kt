@@ -15,12 +15,6 @@ class ConsentActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Without Shizuku the inner screen can't be woken while folded, and the mirror would show only the cover (an endless loop).
-        if (!ShizukuShell.allowed()) {
-            Toast.makeText(this, "Start Shizuku and allow OpenCover first", Toast.LENGTH_LONG).show()
-            finish()
-            return
-        }
         val mpm = getSystemService(MediaProjectionManager::class.java)
         val captureIntent = mpm.createScreenCaptureIntent()
         startActivityForResult(captureIntent, RC)

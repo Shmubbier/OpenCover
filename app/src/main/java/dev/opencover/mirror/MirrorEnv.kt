@@ -32,7 +32,6 @@ object MirrorEnv {
     private const val UNFOLDED_STATE = "4"
     private const val SECURE_NON_MARKET = "install_non_market_apps"
     private const val A11Y = "enabled_accessibility_services"
-    private const val HIDE = "settings put global development_settings_enabled 0; settings put secure $SECURE_NON_MARKET 0"
 
     /** Blocking; call off the main thread. Returns the shell output, null if Shizuku isn't ready. */
     fun enter(ctx: Context): String? {
@@ -47,16 +46,38 @@ object MirrorEnv {
         }
         // Optional: a shorter inner screen fits the near-square cover better. Before the state change, so the capture
         // size read once the display settles already has it.
-        val resize = if (prefs.mirrorResize) innerScreenScript(prefs.mirrorSize, prefs.mirrorDensity) else null
+        // wm size needs the shell user: only with Shizuku.
+        val resize = if (prefs.mirrorResize && ShizukuShell.allowed()) innerScreenScript(prefs.mirrorSize, prefs.mirrorDensity) else null
         if (resize != null) prefs.innerResetPending = true
-        // Opening moves OpenCover's Home from the cover to the inner screen; put the phone's own home in front of it.
+        // OpenCover holds WRITE_SECURE_SETTINGS, so it hides these itself (no Shizuku needed).
+        runCatching {
+            Settings.Global.putInt(ctx.contentResolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0)
+            Settings.Secure.putInt(ctx.contentResolver, SECURE_NON_MARKET, 0)
+        }
+        val out = ShizukuShell.output("sh", "-c", "${resize.orEmpty()}cmd device_state state $UNFOLDED_STATE; cmd device_state print-state")
+        showPhoneHome(ctx)
+        return out
+    }
+
+    /**
+     * Opening moves OpenCover's Home from the cover to the inner screen; put the phone's own home in front of it there.
+     * Started from the accessibility service (an `am start` without Shizuku runs as OpenCover and is ignored).
+     */
+    private fun showPhoneHome(ctx: Context) {
         val home = ctx.packageManager.resolveActivity(
-            android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME),
-            android.content.pm.PackageManager.MATCH_DEFAULT_ONLY,
-        )?.activityInfo?.takeIf { it.packageName != "android" } // "android": no default home, it would ask
-            ?.let { "${it.packageName}/${it.name}" }
-        val showHome = home?.let { "; sleep 0.5; am start --display 0 -a android.intent.action.MAIN -c android.intent.category.HOME -n '$it'" }.orEmpty()
-        return ShizukuShell.output("sh", "-c", "${resize.orEmpty()}cmd device_state state $UNFOLDED_STATE; $HIDE$showHome; cmd device_state print-state")
+            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), android.content.pm.PackageManager.MATCH_DEFAULT_ONLY,
+        )?.activityInfo?.takeIf { it.packageName != "android" } ?: return // "android": no default home, it would ask
+        Thread.sleep(500) // let the inner screen come on first
+        Handler(Looper.getMainLooper()).post {
+            val starter: Context = CoverAccessibility.instance ?: ctx
+            runCatching {
+                starter.startActivity(
+                    Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+                        .setComponent(android.content.ComponentName(home.packageName, home.name)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    android.app.ActivityOptions.makeBasic().setLaunchDisplayId(android.view.Display.DEFAULT_DISPLAY).toBundle(),
+                )
+            }
+        }
     }
 
     /**
@@ -66,6 +87,9 @@ object MirrorEnv {
      */
     fun hideAccessibility(ctx: Context) {
         if (MirrorService.instance == null) return // the session already ended; leave() has restored it
+        // Without Shizuku, touch on the mirror goes through this service, so it has to stay on (banking apps that
+        // reject it then won't run while mirroring).
+        if (!ShizukuShell.allowed()) return
         val now = Settings.Secure.getString(ctx.contentResolver, A11Y)
         val me = me(ctx)
         if (me !in now.orEmpty().split(":")) return // wasn't on (banking mode may have it off)
@@ -106,13 +130,17 @@ object MirrorEnv {
 
     private fun restoreInnerScreen(app: Context) {
         val prefs = PhonePrefs(app)
-        if (prefs.innerResetPending && ShizukuShell.run("sh", "-c", INNER_SCREEN_RESET)) prefs.innerResetPending = false
+        if (!prefs.innerResetPending) return
+        // Resized only with Shizuku; without it there is nothing to put back (and no way to).
+        if (!ShizukuShell.allowed() || ShizukuShell.run("sh", "-c", INNER_SCREEN_RESET)) prefs.innerResetPending = false
     }
 
     private fun restoreSettings(app: Context) {
         val prefs = PhonePrefs(app)
-        val (dev, nm) = prefs.restoreSettings?.split(",")?.takeIf { it.size == 2 } ?: return
-        if (ShizukuShell.run("sh", "-c", "settings put global development_settings_enabled $dev; settings put secure $SECURE_NON_MARKET $nm")) {
+        val (dev, nm) = prefs.restoreSettings?.split(",")?.mapNotNull { it.toIntOrNull() }?.takeIf { it.size == 2 } ?: return
+        runCatching {
+            Settings.Global.putInt(app.contentResolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, dev)
+            Settings.Secure.putInt(app.contentResolver, SECURE_NON_MARKET, nm)
             prefs.restoreSettings = null
         }
     }

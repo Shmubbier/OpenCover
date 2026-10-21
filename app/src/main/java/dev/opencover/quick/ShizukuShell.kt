@@ -58,9 +58,12 @@ object ShizukuShell {
     // ponytail: fixed 30 s ceiling for every command; make it a parameter if a slow command needs more.
     private const val TIMEOUT_SECONDS = 30L
 
-    // Output drained and the wait bounded, so a chatty or stuck command can't hang the caller.
+    // Output drained and the wait bounded, so a chatty or stuck command can't hang the caller. Without Shizuku the
+    // command runs as OpenCover itself: enough for `settings put` (OpenCover holds WRITE_SECURE_SETTINGS) and for
+    // `cmd device_state` while OpenCover is the top app; anything needing the shell user just fails, as before.
     private fun exec(cmd: Array<out String>): Finished? = try {
-        if (!allowed()) null else await(newProcess.invoke(null, arrayOf(*cmd), null, null) as Process, TIMEOUT_SECONDS)
+        val p = if (allowed()) newProcess.invoke(null, arrayOf(*cmd), null, null) as Process else Runtime.getRuntime().exec(cmd)
+        await(p, TIMEOUT_SECONDS)
     } catch (e: Exception) {
         null
     }

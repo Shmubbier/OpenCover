@@ -194,10 +194,7 @@ class MirrorActivity : ComponentActivity(), TextureView.SurfaceTextureListener {
             toSource(px, py, viewBox, srcW, srcH, turns)?.let { (sx, sy) -> Triple(sx, sy, t) }
         }
         points.clear()
-        if (mapped.isEmpty()) return
-        val (x1, y1, t1) = mapped.first()
-        val (x2, y2, t2) = mapped.last()
-        MirrorInput.stroke(x1, y1, x2, y2, strokeDuration(t1, t2))
+        MirrorInput.stroke(mapped)
     }
 
     /** The session this screen shows. Only it is stopped here, and only when the screen is really closed. */
