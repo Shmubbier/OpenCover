@@ -39,6 +39,7 @@ import dev.opencover.apps.AppRepository
 import dev.opencover.phone.Fold
 import dev.opencover.phone.HeatGuard
 import dev.opencover.phone.PhonePrefs
+import dev.opencover.phone.nextDensity
 import dev.opencover.phone.nextTurns
 import dev.opencover.quick.ShizukuShell
 import dev.opencover.watcher.CoverAccessibility
@@ -83,14 +84,17 @@ internal fun SwitchRow(title: String, note: String, on: Boolean, onChange: (Bool
 private fun AppRotations(prefs: PhonePrefs) {
     val ctx = LocalContext.current
     var turns by remember { mutableStateOf(prefs.rotations) }
-    val apps = remember { AppRepository(ctx).load().distinctBy { it.pkg }.sortedBy { it.label.lowercase() } }
+    // Set apps first, as they were on opening: re-sorting on a tap would move the row under the finger.
+    val apps = remember {
+        AppRepository(ctx).load().distinctBy { it.pkg }.sortedBy { it.label.lowercase() }.sortedBy { (turns[it.pkg] ?: 0) == 0 }
+    }
     Text("App rotation", color = Color.White)
     Text(
         if (ShizukuShell.allowed()) "Tap an app to turn it on the cover. Apps not listed as turned stay upright."
         else "Start Shizuku to apply.",
         color = Color.Gray, fontSize = 11.sp,
     )
-    apps.sortedBy { (turns[it.pkg] ?: 0) == 0 }.forEach { app ->
+    apps.forEach { app ->
         val t = turns[app.pkg] ?: 0
         Row(
             Modifier.fillMaxWidth().clickable {
@@ -102,6 +106,34 @@ private fun AppRotations(prefs: PhonePrefs) {
         ) {
             Text(app.label, color = Color.White, modifier = Modifier.weight(1f))
             Text(if (t == 0) "Upright" else "${t * 90}°", color = if (t == 0) Color.Gray else Color(0xFFD0BCFF))
+        }
+    }
+}
+
+/** Cover density per app: tap steps through the presets. */
+@Composable
+private fun AppDensities(prefs: PhonePrefs) {
+    val ctx = LocalContext.current
+    var dpis by remember { mutableStateOf(prefs.densities) }
+    val apps = remember { AppRepository(ctx).load().distinctBy { it.pkg }.sortedBy { it.label.lowercase() }.sortedBy { it.pkg !in dpis } }
+    Text("App density", color = Color.White)
+    Text(
+        if (ShizukuShell.allowed()) "Tap an app to change its size on the cover. Lower fits more; the cover's own is 340."
+        else "Start Shizuku to apply.",
+        color = Color.Gray, fontSize = 11.sp,
+    )
+    apps.forEach { app ->
+        val d = dpis[app.pkg]
+        Row(
+            Modifier.fillMaxWidth().clickable {
+                prefs.setDensity(app.pkg, nextDensity(d))
+                dpis = prefs.densities
+                CoverAccessibility.instance?.refreshScope() // the first such app widens what the service watches
+            }.padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(app.label, color = Color.White, modifier = Modifier.weight(1f))
+            Text(d?.toString() ?: "Default", color = if (d == null) Color.Gray else Color(0xFFD0BCFF))
         }
     }
 }
@@ -332,6 +364,7 @@ fun ShizukuSettings(onBack: () -> Unit) {
         InnerLauncherSettings()
         AppSleepList()
         AppRotations(prefs)
+        AppDensities(prefs)
         TextButton(onClick = onBack) { Text("Back") }
     }
 }

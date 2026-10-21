@@ -16,6 +16,10 @@ object DisplayTweaks {
     /** The cover's density now (the override if set). Blocking. */
     fun coverDensity(): Int? = ShizukuShell.output("wm", "density", "-d", "$COVER_DISPLAY")?.let(::parseDensity)
 
+    /** The user's override, null when the cover runs at its own density. Blocking. */
+    fun coverOverride(): Int? = ShizukuShell.output("wm", "density", "-d", "$COVER_DISPLAY")
+        ?.let { Regex("Override density: (\\d+)").find(it)?.groupValues?.get(1)?.toIntOrNull() }
+
     /** null resets to the cover's own density. Blocking. */
     fun setCoverDensity(dpi: Int?): Boolean =
         ShizukuShell.run("wm", "density", dpi?.coerceIn(MIN_DENSITY, MAX_DENSITY)?.toString() ?: "reset", "-d", "$COVER_DISPLAY")

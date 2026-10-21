@@ -29,12 +29,14 @@ object RotationFeature {
     fun onWindow(ctx: Context, pkg: String) {
         foreground = pkg
         pin(ctx, PhonePrefs(ctx).turnsFor(pkg))
+        AppDensity.onWindow(ctx, pkg)
     }
 
     /** OpenCover or Samsung's cover home is in front: upright. */
     fun upright(ctx: Context) {
         foreground = null
         pin(ctx, 0)
+        AppDensity.onWindow(ctx, null)
     }
 
     /**

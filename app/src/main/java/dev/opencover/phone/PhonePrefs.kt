@@ -18,8 +18,28 @@ class PhonePrefs(ctx: Context) {
     /** Every turned app and its quarter turns. */
     val rotations: Map<String, Int> get() = parseRotations(sp.getString("app_rotations", null))
 
-    /** At least one app is turned: the accessibility service then has to see every app's windows. */
-    val hasRotations: Boolean get() = parseRotations(sp.getString("app_rotations", null)).isNotEmpty()
+    /** At least one app is turned or has its own density: the accessibility service then has to see every app's windows. */
+    val hasRotations: Boolean get() = parseRotations(sp.getString("app_rotations", null)).isNotEmpty() || densities.isNotEmpty()
+
+    /** Cover density per app ("pkg=dpi;..."); apps not listed use the cover's. */
+    val densities: Map<String, Int>
+        get() = sp.getString("app_densities", null).orEmpty().split(';').mapNotNull {
+            val (pkg, dpi) = it.split('=', limit = 2).takeIf { p -> p.size == 2 } ?: return@mapNotNull null
+            dpi.toIntOrNull()?.let { d -> pkg to d }
+        }.toMap()
+
+    fun densityFor(pkg: String): Int? = densities[pkg]
+
+    fun setDensity(pkg: String, dpi: Int?) {
+        val all = densities.toMutableMap()
+        if (dpi == null) all.remove(pkg) else all[pkg] = dpi
+        sp.edit().putString("app_densities", all.entries.joinToString(";") { "${it.key}=${it.value}" }).commit()
+    }
+
+    /** The cover density to put back (0 = the cover's own) while an app's own is applied; null when none is. */
+    var densityBase: Int?
+        get() = sp.getInt("density_base", -1).takeIf { it >= 0 }
+        set(v) { sp.edit().putInt("density_base", v ?: -1).commit() }
 
     /** Clockwise quarter turns applied to the mirror view, 0..3. */
     var mirrorTurns: Int

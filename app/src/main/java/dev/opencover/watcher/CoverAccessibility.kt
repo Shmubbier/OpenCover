@@ -180,7 +180,11 @@ class CoverAccessibility : AccessibilityService() {
             packageName -> {} // OpenCover's overlays; CoverActivity uprights itself
             "com.android.systemui" -> if (event.className?.toString() == SAMSUNG_COVER_HOME) RotationFeature.upright(this)
             imePackage() -> {} // the keyboard opens over the app; it must not turn the cover back upright
-            else -> { RotationFeature.onWindow(this, pkg); CallStore.otherWindow(this, pkg) }
+            else -> {
+                // An app in the background still reports its window when the cover's density changes: only one in front counts.
+                if (dev.opencover.ui.CoverActivity.current == null) RotationFeature.onWindow(this, pkg)
+                CallStore.otherWindow(this, pkg)
+            }
         }
         if (pkg != null && pkg in BankingMode.apps(this)) {
             BankingMode.pause(this, pkg) // opened some other way than from OpenCover
