@@ -20,6 +20,7 @@ import android.util.Log
  */
 object CoverAllowList {
     private const val KEY = "multistar_setting_repository"
+    private const val RECENTS = "com.sec.android.app.launcher"
 
     private val handler = Handler(Looper.getMainLooper())
 
@@ -43,7 +44,8 @@ object CoverAllowList {
         val entries = ctx.getSystemService(UserManager::class.java).userProfiles.flatMap { user ->
             launcher.getActivityList(null, user).map { "${it.componentName.packageName},${userId(user)}" }
         }
-        add(ctx, entries)
+        // Samsung's launcher too: on the cover it shows One UI's recents, which the navigation bar opens.
+        add(ctx, entries + "$RECENTS,0")
     }
 
     /**

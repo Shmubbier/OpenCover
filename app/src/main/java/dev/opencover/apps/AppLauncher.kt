@@ -29,6 +29,10 @@ object AppLauncher {
         setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS)
     }.toBundle()
 
+    /** Starts another app's screen on the cover from the accessibility service, as an app launch without Shizuku. */
+    fun startApp(ctx: Context, intent: Intent) =
+        (CoverAccessibility.instance ?: ctx).startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), appOptions())
+
     /**
      * Starts one of our own screens (or a Settings page) on the cover display. [animate] false: no system transition
      * (custom ones are ignored when we start from the background), the screen animates itself instead.

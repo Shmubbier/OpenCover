@@ -324,7 +324,17 @@ object NavBar {
                     "--ez", "com.android.systemui.recents.extra.RESET_RECENTS", "true",
                     "--ez", "com.android.launcher3.intent.extra.FORCE_OVERVIEW", "true",
                 )
-                if (!ok) service.mainExecutor.execute { service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS) }
+                // Without Shizuku: the same start from the accessibility service (Samsung's launcher is on the cover list).
+                if (!ok) service.mainExecutor.execute {
+                    runCatching {
+                        AppLauncher.startApp(service, Intent().setComponent(android.content.ComponentName.unflattenFromString(RECENTS_COMPONENT))
+                            .putExtra("com.samsung.android.activity.displayid", 0)
+                            .putExtra("com.samsung.android.activity.recent.displayId", 0)
+                            .putExtra("com.android.systemui.recents.extra.RESET_RECENTS", true)
+                            .putExtra("com.android.launcher3.intent.extra.FORCE_OVERVIEW", true)
+                            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
+                    }.onFailure { service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS) }
+                }
             }.start()
         }
     }
