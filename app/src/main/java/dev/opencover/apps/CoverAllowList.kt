@@ -1,6 +1,8 @@
 package dev.opencover.apps
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.pm.LauncherApps
 import android.os.Handler
 import android.os.Looper
@@ -17,6 +19,19 @@ import android.util.Log
  */
 object CoverAllowList {
     private const val KEY = "multistar_setting_repository"
+
+    private val handler = Handler(Looper.getMainLooper())
+
+    /**
+     * Fills the list now, or, without the secure settings permission yet (it's granted over adb, which no callback
+     * reports), checks every 5 s and fills it the moment the permission arrives.
+     */
+    fun start(ctx: Context) {
+        val app = ctx.applicationContext
+        if (app.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) == PackageManager.PERMISSION_GRANTED) {
+            Thread { sync(app) }.start()
+        } else handler.postDelayed({ start(app) }, 5_000)
+    }
 
     /** Adds every launchable app, for every profile. */
     fun sync(ctx: Context) {

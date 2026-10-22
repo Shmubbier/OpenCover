@@ -12,7 +12,7 @@ class OpenCoverApp : Application() {
         // hands this process its binder, for the parts that need it.
         MirrorEnv.recover(this)
         // Every app allowed on the cover, without Shizuku (see CoverAllowList).
-        Thread { CoverAllowList.sync(this) }.start()
+        CoverAllowList.start(this)
         CoverAllowList.watch(this)
         Shizuku.addBinderReceivedListenerSticky(object : Shizuku.OnBinderReceivedListener {
             override fun onBinderReceived() {
