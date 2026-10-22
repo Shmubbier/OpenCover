@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.pm.LauncherApps
+import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
 import android.os.UserHandle
@@ -28,10 +29,13 @@ object CoverAllowList {
      */
     fun start(ctx: Context) {
         val app = ctx.applicationContext
-        if (app.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) == PackageManager.PERMISSION_GRANTED) {
+        if (granted(app)) {
             Thread { sync(app) }.start()
         } else handler.postDelayed({ start(app) }, 5_000)
     }
+
+    private fun granted(ctx: Context) =
+        ctx.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) == PackageManager.PERMISSION_GRANTED
 
     /** Adds every launchable app, for every profile. */
     fun sync(ctx: Context) {
@@ -42,9 +46,17 @@ object CoverAllowList {
         add(ctx, entries)
     }
 
-    /** Keeps the list up to date while OpenCover runs. */
+    /**
+     * Keeps the list up to date while OpenCover runs: new apps are added as they install, and MultiStar rewriting the
+     * setting from its own copy (it does at boot, after OpenCover has started) puts them back a moment later.
+     */
     fun watch(ctx: Context) {
         val app = ctx.applicationContext
+        val again = Runnable { if (granted(app)) Thread { sync(app) }.start() }
+        app.contentResolver.registerContentObserver(Settings.Secure.getUriFor(KEY), false, object : ContentObserver(handler) {
+            // After a short wait, so MultiStar's own writes are done; a rewrite that leaves nothing missing writes nothing.
+            override fun onChange(selfChange: Boolean) { handler.removeCallbacks(again); handler.postDelayed(again, 2_000) }
+        })
         app.getSystemService(LauncherApps::class.java).registerCallback(object : LauncherApps.Callback() {
             override fun onPackageAdded(pkg: String, user: UserHandle) = add(app, listOf("$pkg,${userId(user)}"))
             override fun onPackageRemoved(pkg: String, user: UserHandle) {}
