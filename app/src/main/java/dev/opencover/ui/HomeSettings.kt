@@ -48,73 +48,77 @@ internal val styleNames = mapOf(
 )
 private val widgetNames = mapOf(HomeWidget.BATTERY to "Battery", HomeWidget.ALARM to "Next alarm", HomeWidget.WEATHER to "Weather")
 
-/** Settings > Home: clock style and widgets. */
+/** Settings > Home screen: wallpaper, clock, widgets, icons and panels. */
 @Composable
-fun HomeSettings(onBack: () -> Unit) {
-    BackHandler(onBack = onBack)
+fun HomeSettings(onBack: () -> Unit, onWallpaper: () -> Unit) {
     val ctx = LocalContext.current
     var note by remember { mutableStateOf<String?>(null) }
     val askLocation = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) { HomePrefs.setShown(ctx, HomeWidget.WEATHER, true); note = null }
         else note = "Weather needs location; it stays off."
     }
-    Column(
-        Modifier.fillMaxSize().background(Color(0xF0101010)).verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text("Home", color = Color.White, fontSize = 20.sp)
-        Text("Clock style", color = Color.Gray, fontSize = 13.sp)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ClockStyle.entries.forEach { s ->
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    // A live preview, scaled down.
-                    Box(
-                        Modifier.size(150.dp, 100.dp).clipToBounds()
-                            .border(2.dp, if (s == HomePrefs.clock) Color(0xFF8AB4F8) else Color.DarkGray, RoundedCornerShape(10.dp))
-                            .clickable { HomePrefs.setClock(ctx, s) },
-                    ) {
-                        // Full Home size, drawn at a third: requiredSize ignores the 150x100 box it sits in.
-                        Box(Modifier.wrapContentSize(Alignment.TopStart, unbounded = true).requiredSize(450.dp, 300.dp).graphicsLayer {
-                            scaleX = 1 / 3f; scaleY = 1 / 3f
-                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
-                        }) { ClockFace(s, Modifier.padding(16.dp)) }
+    SettingsPage("Home screen", onBack) {
+        Group("Wallpaper") {
+            NavRow(null, "Set wallpaper", "An image, GIF or WebP, for Home and the lock screen", onWallpaper)
+            if (dev.opencover.home.Wallpaper.source(ctx, dev.opencover.home.Slot.HOME) != null)
+                NavRow(null, "Adjust position", "Drag and pinch to choose the part the cover shows") {
+                    CoverActivity.current?.adjustBackground(dev.opencover.home.Slot.HOME)
+                }
+            Text("Animated wallpaper", color = Color.White, fontSize = 15.sp)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                dev.opencover.home.AnimPlay.entries.forEach { a ->
+                    androidx.compose.material3.FilterChip(selected = HomePrefs.animPlay == a, onClick = { HomePrefs.setAnimPlay(ctx, a) },
+                        label = { Text(a.label) })
+                }
+            }
+            Note("Plays on Home and the lock screen. First 10 s or Still only save battery.")
+        }
+        Group("Clock") {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ClockStyle.entries.forEach { s ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        // A live preview, scaled down.
+                        Box(
+                            Modifier.size(150.dp, 100.dp).clipToBounds()
+                                .border(2.dp, if (s == HomePrefs.clock) Accent else Color.DarkGray, RoundedCornerShape(10.dp))
+                                .clickable { HomePrefs.setClock(ctx, s) },
+                        ) {
+                            // Full Home size, drawn at a third: requiredSize ignores the 150x100 box it sits in.
+                            Box(Modifier.wrapContentSize(Alignment.TopStart, unbounded = true).requiredSize(450.dp, 300.dp).graphicsLayer {
+                                scaleX = 1 / 3f; scaleY = 1 / 3f
+                                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
+                            }) { ClockFace(s, Modifier.padding(16.dp)) }
+                        }
+                        Text(styleNames.getValue(s), color = Color.White, fontSize = 12.sp)
                     }
-                    Text(styleNames.getValue(s), color = Color.White, fontSize = 12.sp)
                 }
             }
         }
-        Text("Widgets", color = Color.Gray, fontSize = 13.sp)
-        HomePrefs.order.forEach { w ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(widgetNames.getValue(w), color = Color.White, modifier = Modifier.weight(1f))
-                TextButton(onClick = { HomePrefs.setOrder(ctx, HomePrefs.order.movedBy(w, -1)) }) { Text("▲") }
-                TextButton(onClick = { HomePrefs.setOrder(ctx, HomePrefs.order.movedBy(w, 1)) }) { Text("▼") }
-                Switch(checked = w !in HomePrefs.off, onCheckedChange = { on ->
-                    val needsLocation = w == HomeWidget.WEATHER && on &&
-                        ctx.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
-                    if (needsLocation) askLocation.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
-                    else HomePrefs.setShown(ctx, w, on)
-                })
+        Group("Widgets") {
+            HomePrefs.order.forEach { w ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(widgetNames.getValue(w), color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { HomePrefs.setOrder(ctx, HomePrefs.order.movedBy(w, -1)) }) { Text("▲") }
+                    TextButton(onClick = { HomePrefs.setOrder(ctx, HomePrefs.order.movedBy(w, 1)) }) { Text("▼") }
+                    Switch(checked = w !in HomePrefs.off, onCheckedChange = { on ->
+                        val needsLocation = w == HomeWidget.WEATHER && on &&
+                            ctx.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                        if (needsLocation) askLocation.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                        else HomePrefs.setShown(ctx, w, on)
+                    })
+                }
+                if (w == HomeWidget.WEATHER && w !in HomePrefs.off) Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Fahrenheit", color = Color.White, modifier = Modifier.weight(1f).padding(start = 16.dp))
+                    Switch(checked = HomePrefs.fahrenheit, onCheckedChange = { HomePrefs.setFahrenheit(ctx, it) })
+                }
             }
-            if (w == HomeWidget.WEATHER && w !in HomePrefs.off) Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Fahrenheit", color = Color.White, modifier = Modifier.weight(1f).padding(start = 16.dp))
-                Switch(checked = HomePrefs.fahrenheit, onCheckedChange = { HomePrefs.setFahrenheit(ctx, it) })
-            }
+            Note(note ?: "Weather is the only feature that uses the internet: it sends rough coordinates to Open-Meteo.")
         }
-        Text(note ?: "Weather is the only feature that uses the internet: it sends rough coordinates to Open-Meteo.",
-            color = Color.Gray, fontSize = 11.sp)
-        Text("Animated wallpaper", color = Color.Gray, fontSize = 13.sp)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            dev.opencover.home.AnimPlay.entries.forEach { a ->
-                androidx.compose.material3.FilterChip(selected = HomePrefs.animPlay == a, onClick = { HomePrefs.setAnimPlay(ctx, a) },
-                    label = { Text(a.label) })
-            }
+        Group("Icons") { IconPackSettings() }
+        Group("Panels") {
+            Note("Notifications, apps, drawer and quick settings.")
+            PanelStyleSettings()
         }
-        Text("Plays on Home and the lock screen. First 10 s or Still only save battery.", color = Color.Gray, fontSize = 11.sp)
-        IconPackSettings()
-        Text("Panel style (notifications, apps, drawer, quick settings)", color = Color.Gray, fontSize = 13.sp)
-        PanelStyleSettings()
-        TextButton(onClick = onBack) { Text("Back") }
     }
 }
 
@@ -143,7 +147,6 @@ private fun PanelStyleSettings() {
 private fun IconPackSettings() {
     val ctx = LocalContext.current
     val packs = remember { dev.opencover.apps.IconPack.installed(ctx) }
-    Text("Icons", color = Color.Gray, fontSize = 13.sp)
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         androidx.compose.material3.FilterChip(selected = HomePrefs.iconPack == null, onClick = { HomePrefs.setIconPack(ctx, null) },
             label = { Text("App icons") })
@@ -165,7 +168,7 @@ private fun IconPackSettings() {
         "One colour, taken from the Home wallpaper. Uses Lawnicons or the app's own themed icon; other apps keep theirs.",
         HomePrefs.themedIcons,
     ) { HomePrefs.setThemedIcons(ctx, it) }
-    Text("Icon shape", color = Color.Gray, fontSize = 13.sp)
+    Text("Icon shape", color = Color.White, fontSize = 15.sp)
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         dev.opencover.apps.IconShape.entries.forEach { sh ->
             androidx.compose.material3.FilterChip(selected = HomePrefs.iconShape == sh, onClick = { HomePrefs.setIconShape(ctx, sh) },

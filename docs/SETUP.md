@@ -43,10 +43,10 @@ The list belongs to MultiStar: open Good Lock > MultiStar > Galaxy Foldable > La
 
 ## 5. Samsung settings
 - Settings > Notifications > Cover screen: turn off Samsung's cover pop-ups, so you don't get each one twice.
-- For OpenCover's AOD: Settings > Lock screen > Always On Display set to **Always**, with **Tap to show** off. OpenCover draws its clock over Samsung's, so Samsung's must stay on. Change OpenCover's AOD and lock screen later in OpenCover's Settings > Lock screen.
+- For OpenCover's AOD: Settings > Lock screen > Always On Display set to **Always**, with **Tap to show** off. OpenCover draws its clock over Samsung's, so Samsung's must stay on. Change OpenCover's AOD and lock screen later in OpenCover's Settings > Lock screen & AOD.
 
 ## 6. Shizuku (optional, after every reboot)
-Shizuku adds the extras in OpenCover's Settings > Shizuku: keep the cover on when opened, deep sleep, 5G, cover density and per-app density, per-app rotation, multi-finger mirror touch, and the Wi-Fi, Bluetooth, data and similar tiles.
+Shizuku adds the extras in the Shizuku group of OpenCover's Settings > Phone & display: keep the cover on when opened, deep sleep, 5G, cover density and per-app density, per-app rotation, multi-finger mirror touch, and the Wi-Fi, Bluetooth, data and similar tiles.
 
 Android ends Shizuku on every reboot, and without root it can't start itself. Start it again in one of two ways:
 - On the phone: open Shizuku on the cover (it's on MultiStar's cover list) and tap **Start via Wireless debugging**. Needs Wi-Fi, and Shizuku paired once with Wireless debugging.

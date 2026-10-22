@@ -1,35 +1,38 @@
 package dev.opencover.ui
 
-import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.Switch
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Science
+import androidx.compose.material.icons.filled.Widgets
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import dev.opencover.keyboard.KeyboardPrefs
 import dev.opencover.media.MediaPrefs
 import dev.opencover.nav.NavPrefs
 import dev.opencover.nav.NavStyle
-import androidx.compose.material3.FilterChip
 import dev.opencover.watcher.CoverAccessibility
+
+/** The pages under Settings, as in Lawnchair: one list of categories, each opening its own page. */
+private enum class Page { HOME, LOCK, NOTIFICATIONS, NAVIGATION, PHONE, EXPERIMENTAL }
 
 @Composable
 fun SettingsPanel(
@@ -45,164 +48,123 @@ fun SettingsPanel(
     onTopEdge: (Boolean) -> Unit,
     onClose: () -> Unit,
 ) {
-    BackHandler(onBack = onClose)
     val ctx = LocalContext.current
-    var experimental by remember { mutableStateOf(false) }
-    var homeSettings by remember { mutableStateOf(false) }
-    var phoneSettings by remember { mutableStateOf(false) }
-    var shizukuSettings by remember { mutableStateOf(false) }
-    var lockSettings by remember { mutableStateOf(false) }
-    var edgeSettings by remember { mutableStateOf(false) }
-    if (edgeSettings) {
-        EdgeSettings(onBack = { edgeSettings = false })
-        return
+    var page by rememberSaveable { mutableStateOf<Page?>(null) }
+    val back = { page = null }
+    when (page) {
+        Page.HOME -> return HomeSettings(onBack = back, onWallpaper = onWallpaper)
+        Page.LOCK -> return LockSettings(onBack = back)
+        Page.NOTIFICATIONS -> return NotificationSettings(popups, onPopups, onBack = back)
+        Page.NAVIGATION -> return NavigationSettings(onBack = back)
+        Page.PHONE -> return PhoneSettings(keepAwake, onKeepAwake, onBack = back)
+        Page.EXPERIMENTAL -> return ExperimentalPanel(topEdge, onTopEdge, onBack = back)
+        null -> {}
     }
-    if (lockSettings) {
-        LockSettings(onBack = { lockSettings = false })
-        return
+    SettingsPage("Settings", onBack = onClose) {
+        Group {
+            NavRow(Icons.Filled.Home, "Home screen", "Wallpaper, clock, widgets, icons, panels") { page = Page.HOME }
+            NavRow(Icons.Filled.Lock, "Lock screen & AOD", "Always on display, lock screen, layout") { page = Page.LOCK }
+            NavRow(Icons.Filled.Notifications, "Notifications", "Pop-ups and edge lighting") { page = Page.NOTIFICATIONS }
+            NavRow(Icons.Filled.Navigation, "Navigation & media", "Navigation bar, gestures, media player") { page = Page.NAVIGATION }
+            NavRow(Icons.Filled.PhoneAndroid, "Phone & display", "Keep awake, battery, Shizuku tweaks") { page = Page.PHONE }
+        }
+        Group("Setup") {
+            NavRow(Icons.Filled.Checklist, "Setup & permissions", "What OpenCover needs, and what's missing", onSetup)
+            NavRow(Icons.Filled.AccountBalance, "Banking apps", "Apps OpenCover steps aside for", onBanking)
+            NavRow(Icons.Filled.Widgets, "Samsung widgets", "Open Samsung's own cover widgets", onSamsungWidgets)
+        }
+        Group("More") {
+            NavRow(Icons.Filled.Science, "Experimental", "Keyboard, top edge, internet calls") { page = Page.EXPERIMENTAL }
+            // The inner screen is broken: answer Android's debugging prompt, which only shows there.
+            NavRow(Icons.Filled.BugReport, "Approve debugging prompt", "Allows the USB or wireless debugging prompt on the inner screen") {
+                val r = CoverAccessibility.instance?.approveInnerPrompt() ?: "Turn on OpenCover's accessibility first"
+                android.widget.Toast.makeText(ctx, r, android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
     }
-    if (shizukuSettings) {
-        ShizukuSettings(onBack = { shizukuSettings = false })
-        return
+}
+
+/** Settings > Notifications: pop-ups, and edge lighting (its colours on their own page). */
+@Composable
+private fun NotificationSettings(popups: Boolean, onPopups: (Boolean) -> Unit, onBack: () -> Unit) {
+    var edge by remember { mutableStateOf(false) }
+    if (edge) return EdgeSettings(onBack = { edge = false })
+    SettingsPage("Notifications", onBack) {
+        Group {
+            SwitchRow("Notification pop-ups", "New notifications pop up over any app on the cover.", popups, onPopups)
+        }
+        Group {
+            NavRow(null, "Edge lighting", "The edges glow in the app's colour for new notifications") { edge = true }
+        }
     }
-    if (phoneSettings) {
-        PhoneSettings(onBack = { phoneSettings = false })
-        return
-    }
-    if (homeSettings) {
-        HomeSettings(onBack = { homeSettings = false })
-        return
-    }
-    if (experimental) {
-        ExperimentalPanel(topEdge, onTopEdge, onBack = { experimental = false })
-        return
-    }
+}
+
+/** Settings > Navigation & media: OpenCover's navigation bar and the media player's gestures. */
+@Composable
+private fun NavigationSettings(onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    var nav by remember { mutableStateOf(NavPrefs.enabled(ctx)) }
+    var style by remember { mutableStateOf(NavPrefs.style(ctx)) }
     var classic by remember { mutableStateOf(MediaPrefs.classic(ctx)) }
     var graded by remember { mutableStateOf(MediaPrefs.graded(ctx)) }
-    Column(
-        Modifier.fillMaxSize().background(Color(0xF0101010)).verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text("Settings", color = Color.White, fontSize = 20.sp)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Keep cover screen awake", color = Color.White, modifier = Modifier.weight(1f))
-            Switch(checked = keepAwake, onCheckedChange = onKeepAwake)
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Notification pop-ups", color = Color.White, modifier = Modifier.weight(1f))
-            Switch(checked = popups, onCheckedChange = onPopups)
-        }
-        var nav by remember { mutableStateOf(NavPrefs.enabled(ctx)) }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("OpenCover navigation bar", color = Color.White)
-                Text("Home goes straight to OpenCover instead of Samsung's cover home.", color = Color.Gray, fontSize = 11.sp)
-            }
-            Switch(checked = nav, onCheckedChange = {
+    SettingsPage("Navigation & media", onBack) {
+        Group("Navigation bar") {
+            SwitchRow("OpenCover navigation bar", "Home goes straight to OpenCover instead of Samsung's cover home.", nav) {
                 nav = it
                 NavPrefs.setEnabled(ctx, it)
                 CoverAccessibility.instance?.apply { refreshScope(); updateNavBar() }
-            })
-        }
-        if (nav) {
-            var style by remember { mutableStateOf(NavPrefs.style(ctx)) }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Style", color = Color.White, modifier = Modifier.weight(1f))
-                listOf(NavStyle.BUTTONS to "Buttons", NavStyle.GESTURES to "Gestures").forEach { (s, label) ->
-                    FilterChip(selected = style == s, onClick = {
-                        style = s
-                        NavPrefs.setStyle(ctx, s)
-                        CoverAccessibility.instance?.updateNavBar()
-                    }, label = { Text(label) })
+            }
+            if (nav) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Style", color = Color.White, modifier = androidx.compose.ui.Modifier.weight(1f))
+                    listOf(NavStyle.BUTTONS to "Buttons", NavStyle.GESTURES to "Gestures").forEach { (s, label) ->
+                        FilterChip(selected = style == s, onClick = {
+                            style = s
+                            NavPrefs.setStyle(ctx, s)
+                            CoverAccessibility.instance?.updateNavBar()
+                        }, label = { Text(label) })
+                    }
                 }
+                if (style == NavStyle.GESTURES) Note("Swipe up: Home. Long-press the pill (or swipe up and hold, with Samsung's buttons): Recents. Swipe in from a side edge: Back.")
             }
-            if (style == NavStyle.GESTURES) Text("Swipe up: Home. Long-press the pill (or swipe up and hold, with Samsung's buttons): Recents. Swipe in from a side edge: Back.",
-                color = Color.Gray, fontSize = 11.sp)
         }
-        Text("Media player", color = Color.Gray, fontSize = 13.sp)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Classic layout", color = Color.White)
-                Text("Buttons and an app pill, shown on tap, instead of gestures.", color = Color.Gray, fontSize = 11.sp)
+        Group("Media player") {
+            SwitchRow("Classic layout", "Buttons and an app pill, shown on tap, instead of gestures.", classic) { classic = it; MediaPrefs.setClassic(ctx, it) }
+            if (!classic) SwitchRow("Swipe up for shuffle and repeat",
+                "Off: corner buttons. On: short swipe up switches app, further shuffles, all the way repeats.", graded) {
+                graded = it; MediaPrefs.setGraded(ctx, it)
             }
-            Switch(checked = classic, onCheckedChange = { classic = it; MediaPrefs.setClassic(ctx, it) })
         }
-        if (!classic) Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Swipe up for shuffle and repeat", color = Color.White)
-                Text("Off: corner buttons. On: short swipe up switches app, further shuffles, all the way repeats.",
-                    color = Color.Gray, fontSize = 11.sp)
-            }
-            Switch(checked = graded, onCheckedChange = { graded = it; MediaPrefs.setGraded(ctx, it) })
-        }
-        Button(onClick = { homeSettings = true }) { Text("Home") }
-        Button(onClick = { phoneSettings = true }) { Text("Phone") }
-        Button(onClick = { shizukuSettings = true }) { Text("Shizuku (optional)") }
-        Button(onClick = { lockSettings = true }) { Text("Lock screen") }
-        Button(onClick = { edgeSettings = true }) { Text("Edge lighting") }
-        Button(onClick = onSamsungWidgets) { Text("Open Samsung widgets") }
-        Button(onClick = onSetup) { Text("Setup & permissions") }
-        val ctxP = androidx.compose.ui.platform.LocalContext.current
-        // The inner screen is broken: answer Android's debugging prompt, which only shows there.
-        TextButton(onClick = {
-            val r = dev.opencover.watcher.CoverAccessibility.instance?.approveInnerPrompt() ?: "Turn on OpenCover's accessibility first"
-            android.widget.Toast.makeText(ctxP, r, android.widget.Toast.LENGTH_LONG).show()
-        }) { Text("Approve debugging prompt (inner screen)") }
-        Button(onClick = onWallpaper) { Text("Set wallpaper (image, GIF or WebP)") }
-        val ctx = androidx.compose.ui.platform.LocalContext.current
-        if (dev.opencover.home.Wallpaper.source(ctx, dev.opencover.home.Slot.HOME) != null)
-            TextButton(onClick = { CoverActivity.current?.adjustBackground(dev.opencover.home.Slot.HOME) }) { Text("Adjust wallpaper position") }
-        Button(onClick = onBanking) { Text("Banking apps") }
-        Button(onClick = { experimental = true }) { Text("Experimental") }
-        TextButton(onClick = onClose) { Text("Close") }
     }
 }
 
 /** Features that work but have known rough edges; all off by default. */
 @Composable
 private fun ExperimentalPanel(topEdge: Boolean, onTopEdge: (Boolean) -> Unit, onBack: () -> Unit) {
-    BackHandler(onBack = onBack)
     val ctx = LocalContext.current
     var typing by remember { mutableStateOf(KeyboardPrefs.enabled(ctx)) }
     var suggest by remember { mutableStateOf(KeyboardPrefs.suggestions(ctx)) }
-    Column(
-        Modifier.fillMaxSize().background(Color(0xF0101010)).verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text("Experimental", color = Color.White, fontSize = 20.sp)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("OpenCover keyboard", color = Color.White)
-                Text("Replaces Samsung's keyboard on the cover. Known issues: chat boxes don't move up for it, and it can stay open after swiping back.",
-                    color = Color.Gray, fontSize = 11.sp)
-            }
-            Switch(checked = typing, onCheckedChange = {
+    var voip by remember { mutableStateOf(dev.opencover.call.CallStore.voip(ctx)) }
+    SettingsPage("Experimental", onBack) {
+        Group {
+            SwitchRow("OpenCover keyboard",
+                "Replaces Samsung's keyboard on the cover. Known issues: chat boxes don't move up for it, and it can stay open after swiping back.",
+                typing) {
                 typing = it
                 KeyboardPrefs.setEnabled(ctx, it)
                 CoverAccessibility.instance?.refreshScope()
-            })
-        }
-        if (typing) Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Show suggestions", color = Color.White, modifier = Modifier.weight(1f))
-            Switch(checked = suggest, onCheckedChange = { suggest = it; KeyboardPrefs.setSuggestions(ctx, it) })
-        }
-        var voip by remember { mutableStateOf(dev.opencover.call.CallStore.voip(ctx)) }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Internet calls on the cover", color = Color.White)
-                Text("Messenger, Discord, Viber and other apps' calls get the cover call screen, like phone calls. Answering hands over to the app's own call screen.",
-                    color = Color.Gray, fontSize = 11.sp)
             }
-            Switch(checked = voip, onCheckedChange = { voip = it; dev.opencover.call.CallStore.setVoip(ctx, it) })
+            if (typing) SwitchRow("Show suggestions", "", suggest) { suggest = it; KeyboardPrefs.setSuggestions(ctx, it) }
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Top-edge priority", color = Color.White)
-                Text("Replaces Samsung's pull-down panel with ours. Its panel still flashes and blocks touches for ~2 s. Lets OpenCover read the window list.",
-                    color = Color.Gray, fontSize = 11.sp)
-            }
-            Switch(checked = topEdge, onCheckedChange = onTopEdge)
+        Group {
+            SwitchRow("Internet calls on the cover",
+                "Messenger, Discord, Viber and other apps' calls get the cover call screen, like phone calls. Answering hands over to the app's own call screen.",
+                voip) { voip = it; dev.opencover.call.CallStore.setVoip(ctx, it) }
         }
-        TextButton(onClick = onBack) { Text("Back") }
+        Group {
+            SwitchRow("Top-edge priority",
+                "Replaces Samsung's pull-down panel with ours. Its panel still flashes and blocks touches for ~2 s. Lets OpenCover read the window list.",
+                topEdge, onTopEdge)
+        }
     }
 }

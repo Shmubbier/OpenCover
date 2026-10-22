@@ -44,38 +44,64 @@ import dev.opencover.phone.nextTurns
 import dev.opencover.quick.ShizukuShell
 import dev.opencover.watcher.CoverAccessibility
 
-/** Settings > Phone: what works without Shizuku (heat guard, location scanning). */
+private enum class PhonePage { ROTATION, DENSITY, BACKGROUND }
+
+/**
+ * Settings > Phone & display: what works without Shizuku first, then a Shizuku group with its status and every tweak
+ * that needs it. The per-app lists open on their own pages.
+ */
 @Composable
-fun PhoneSettings(onBack: () -> Unit) {
-    BackHandler(onBack = onBack)
+fun PhoneSettings(keepAwake: Boolean, onKeepAwake: (Boolean) -> Unit, onBack: () -> Unit) {
     val ctx = LocalContext.current
     val prefs = remember { PhonePrefs(ctx) }
-    var heat by remember { mutableStateOf(prefs.heatGuard) }
-    Column(
-        Modifier.fillMaxSize().background(Color(0xF0101010)).verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text("Phone", color = Color.White, fontSize = 20.sp)
-        SwitchRow(
-            "Heat guard",
-            "Only while the hotspot or mirroring is on. Warns at 42 °C, stops both at 45 °C.",
-            heat,
-        ) { heat = it; prefs.heatGuard = it; HeatGuard.evaluate() }
-        LocationScanning()
-        Text("More phone settings (cover on when opened, deep sleep, 5G, display, rotation) are in Settings > Shizuku.",
-            color = Color.Gray, fontSize = 11.sp)
-        TextButton(onClick = onBack) { Text("Back") }
+    var sub by remember { mutableStateOf<PhonePage?>(null) }
+    when (sub) {
+        PhonePage.ROTATION -> return SettingsPage("App rotation", { sub = null }) { Group { AppRotations(prefs) } }
+        PhonePage.DENSITY -> return SettingsPage("App density", { sub = null }) { Group { AppDensities(prefs) } }
+        PhonePage.BACKGROUND -> return SettingsPage("Restrict in background", { sub = null }) { Group { AppSleepList() } }
+        null -> {}
     }
-}
-
-@Composable
-internal fun SwitchRow(title: String, note: String, on: Boolean, onChange: (Boolean) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(title, color = Color.White)
-            Text(note, color = Color.Gray, fontSize = 11.sp)
+    var heat by remember { mutableStateOf(prefs.heatGuard) }
+    var keep by remember { mutableStateOf(prefs.keepCoverOn) }
+    var deep by remember { mutableStateOf(prefs.deepSleep) }
+    var keepOn by remember { mutableStateOf(dev.opencover.watcher.KeepOnCover.enabled(ctx)) }
+    val shizuku = ShizukuShell.allowed()
+    SettingsPage("Phone & display", onBack) {
+        Group {
+            SwitchRow("Keep cover screen awake", "The cover stays on in any app, until you turn this off.", keepAwake, onKeepAwake)
+            SwitchRow("Heat guard", "Only while the hotspot or mirroring is on. Warns at 42 °C, stops both at 45 °C.", heat) {
+                heat = it; prefs.heatGuard = it; HeatGuard.evaluate()
+            }
         }
-        Switch(checked = on, onCheckedChange = onChange)
+        Group("Battery") { LocationScanning() }
+        Group("Shizuku") {
+            Text(
+                when {
+                    shizuku -> "Running. These tweaks are active."
+                    ShizukuShell.running() -> "Running, but OpenCover isn't allowed yet: allow it in the Shizuku app."
+                    ShizukuShell.installed(ctx) -> "Not running: start it in the Shizuku app (again after each restart)."
+                    else -> "Not installed. OpenCover works without it; these tweaks need it."
+                },
+                color = if (shizuku) Color(0xFF9CE6A0) else Color.Gray, fontSize = 13.sp,
+            )
+            SwitchRow("Keep cover on when opened", "Stops the cover turning off when the phone opens.", keep) {
+                keep = it; prefs.keepCoverOn = it; Fold.apply(ctx)
+            }
+            SwitchRow("Keep apps on the cover", "While folded: an app that opens itself on the inner screen is moved to the cover.", keepOn) {
+                keepOn = it; dev.opencover.watcher.KeepOnCover.setEnabled(ctx, it); CoverAccessibility.instance?.refreshScope()
+            }
+            SwitchRow("Deep sleep when idle",
+                "Deep doze 30 s after the screen turns off (its motion sensors can't). Saves battery; some notifications may arrive a little later.",
+                deep) { deep = it; prefs.deepSleep = it; if (!it) dev.opencover.phone.DeepSleep.awake() }
+            FiveG()
+        }
+        Group("Display (Shizuku)") { DisplaySettings(prefs) }
+        Group("Per app (Shizuku)") {
+            NavRow(null, "App rotation", "${prefs.rotations.size} turned") { sub = PhonePage.ROTATION }
+            NavRow(null, "App density", "${prefs.densities.size} with their own size") { sub = PhonePage.DENSITY }
+            if (shizuku) NavRow(null, "Restrict in background", "Stop apps working in the background") { sub = PhonePage.BACKGROUND }
+        }
+        Group("Inner screen (Shizuku)") { InnerLauncherSettings() }
     }
 }
 
@@ -88,7 +114,6 @@ private fun AppRotations(prefs: PhonePrefs) {
     val apps = remember {
         AppRepository(ctx).load().distinctBy { it.pkg }.sortedBy { it.label.lowercase() }.sortedBy { (turns[it.pkg] ?: 0) == 0 }
     }
-    Text("App rotation", color = Color.White)
     Text(
         if (ShizukuShell.allowed()) "Tap an app to turn it on the cover. Apps not listed as turned stay upright."
         else "Start Shizuku to apply.",
@@ -116,7 +141,6 @@ private fun AppDensities(prefs: PhonePrefs) {
     val ctx = LocalContext.current
     var dpis by remember { mutableStateOf(prefs.densities) }
     val apps = remember { AppRepository(ctx).load().distinctBy { it.pkg }.sortedBy { it.label.lowercase() }.sortedBy { it.pkg !in dpis } }
-    Text("App density", color = Color.White)
     Text(
         if (ShizukuShell.allowed()) "Tap an app to change its size on the cover. Lower fits more; the cover's own is 340."
         else "Start Shizuku to apply.",
@@ -152,7 +176,6 @@ private fun DisplaySettings(prefs: PhonePrefs) {
     }
     fun apply(block: () -> Unit) = scope.launch { withContext(Dispatchers.IO) { block() }; tick++ }
 
-    Text("Display", color = Color.White)
     if (!ShizukuShell.allowed()) { Text("Start Shizuku to change these.", color = Color.Gray, fontSize = 11.sp); return }
     Stepper("Cover density", density?.toString() ?: "…",
         onMinus = { density = (density ?: 280) - 10 }, onPlus = { density = (density ?: 280) + 10 },
@@ -289,7 +312,7 @@ private fun AppSleepList() {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     if (!ShizukuShell.allowed()) return
-    var open by remember { mutableStateOf(false) }
+    val open = true // its own page now: load the restricted apps at once
     val heavy = listOf("com.discord", "com.instagram.android", "com.facebook.katana", "com.facebook.orca")
     val apps = remember {
         AppRepository(ctx).load().distinctBy { it.pkg }.filter { it.pkg != ctx.packageName }
@@ -299,10 +322,8 @@ private fun AppSleepList() {
     LaunchedEffect(open) {
         if (open) restricted = withContext(Dispatchers.IO) { apps.filter { dev.opencover.phone.AppSleep.restricted(it.pkg) }.map { it.pkg }.toSet() }
     }
-    Text("Restrict in background", color = Color.White)
     Text("Stops an app working in the background. Saves battery; its notifications can arrive later, so keep chat apps you rely on unrestricted.",
         color = Color.Gray, fontSize = 11.sp)
-    TextButton(onClick = { open = !open }) { Text(if (open) "Hide apps" else "Choose apps") }
     if (open) apps.forEach { app ->
         val on = app.pkg in restricted
         Row(
@@ -317,54 +338,5 @@ private fun AppSleepList() {
             Text(app.label, color = Color.White, modifier = Modifier.weight(1f))
             Text(if (on) "Restricted" else "Allowed", color = if (on) Color(0xFFD0BCFF) else Color.Gray)
         }
-    }
-}
-
-/**
- * Settings > Shizuku: the optional tweaks that need Shizuku (shell-level access). Everything else in OpenCover works
- * without it; these show whether it is running.
- */
-@Composable
-fun ShizukuSettings(onBack: () -> Unit) {
-    BackHandler(onBack = onBack)
-    val ctx = LocalContext.current
-    val prefs = remember { PhonePrefs(ctx) }
-    var keep by remember { mutableStateOf(prefs.keepCoverOn) }
-    var deep by remember { mutableStateOf(prefs.deepSleep) }
-    Column(
-        Modifier.fillMaxSize().background(Color(0xF0101010)).verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text("Shizuku", color = Color.White, fontSize = 20.sp)
-        Text(
-            when {
-                ShizukuShell.allowed() -> "Shizuku is running. These tweaks are active."
-                ShizukuShell.running() -> "Shizuku is running but hasn't allowed OpenCover yet: allow it in the Shizuku app."
-                ShizukuShell.installed(ctx) -> "Shizuku isn't running: start it in the Shizuku app (needed again after each restart)."
-                else -> "Shizuku isn't installed. OpenCover works without it; these tweaks need it."
-            },
-            color = if (ShizukuShell.allowed()) Color(0xFF9CE6A0) else Color.Gray, fontSize = 13.sp,
-        )
-        SwitchRow("Keep cover on when opened", "Stops the cover turning off when the phone opens.", keep) {
-            keep = it; prefs.keepCoverOn = it; Fold.apply(ctx)
-        }
-        var keepOn by remember { mutableStateOf(dev.opencover.watcher.KeepOnCover.enabled(ctx)) }
-        SwitchRow(
-            "Keep apps on the cover",
-            "While folded: an app that opens itself on the inner screen is moved to the cover.",
-            keepOn,
-        ) { keepOn = it; dev.opencover.watcher.KeepOnCover.setEnabled(ctx, it); CoverAccessibility.instance?.refreshScope() }
-        SwitchRow(
-            "Deep sleep when idle",
-            "Puts the phone into deep doze 30 s after the screen turns off (its motion sensors can't). Saves battery; some notifications may arrive a little later.",
-            deep,
-        ) { deep = it; prefs.deepSleep = it; if (!it) dev.opencover.phone.DeepSleep.awake() }
-        FiveG()
-        DisplaySettings(prefs)
-        InnerLauncherSettings()
-        AppSleepList()
-        AppRotations(prefs)
-        AppDensities(prefs)
-        TextButton(onClick = onBack) { Text("Back") }
     }
 }

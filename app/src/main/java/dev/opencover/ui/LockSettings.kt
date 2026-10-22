@@ -51,56 +51,56 @@ fun LockSettings(onBack: () -> Unit) {
     val ctx = LocalContext.current
     var editing by remember { mutableStateOf(false) }
     if (editing) { LayoutEditor(onDone = { editing = false }); return }
-    BackHandler(onBack = onBack)
-    Column(
-        Modifier.fillMaxSize().background(Color(0xF0101010)).verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text("Lock screen", color = Color.White, fontSize = 20.sp)
-        SwitchRow("OpenCover AOD",
-            if (aodReady(ctx)) "Shown while the phone sleeps." else "Needs Samsung's Always On Display set to Always, tap to show off. See Setup.",
-            LockPrefs.aod) { LockPrefs.setAod(ctx, it) }
-        SwitchRow("OpenCover lock screen", "Swipe up for Samsung's PIN. Samsung's quick panel still pulls down.",
-            LockPrefs.lockScreen) { LockPrefs.setLockScreen(ctx, it); CoverAccessibility.instance?.refreshScope(); CoverActivity.current?.applyLockScreen() }
-        // Samsung's "Stay on Lock screen" for fingerprints, inverted: off means a fingerprint on the power key keeps you on
-        // the lock screen (swipe up then opens without the PIN). A secure setting, so it goes through Shizuku.
-        var straightHome by remember {
-            mutableStateOf(Settings.Secure.getInt(ctx.contentResolver, "fingerprint_stay_on_lock_screen", 0) == 0)
+    val scope = rememberCoroutineScope()
+    // Samsung's "Stay on Lock screen" for fingerprints, inverted: off means a fingerprint on the power key keeps you on
+    // the lock screen (swipe up then opens without the PIN). A secure setting, so it goes through Shizuku.
+    var straightHome by remember {
+        mutableStateOf(Settings.Secure.getInt(ctx.contentResolver, "fingerprint_stay_on_lock_screen", 0) == 0)
+    }
+    SettingsPage("Lock screen & AOD", onBack) {
+        Group("Always on display") {
+            SwitchRow("OpenCover AOD",
+                if (aodReady(ctx)) "Shown while the phone sleeps." else "Needs Samsung's Always On Display set to Always, tap to show off. See Setup.",
+                LockPrefs.aod) { LockPrefs.setAod(ctx, it) }
+            SwitchRow("Black AOD", "Only the clock and modules, without the wallpaper. Saves battery.", LockPrefs.aodBlack) {
+                LockPrefs.setAodBlack(ctx, it)
+            }
+            Text("Turn the AOD off after", color = Color.White, fontSize = 15.sp)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(0 to "Never", 1 to "1 min", 5 to "5 min", 15 to "15 min", 30 to "30 min").forEach { (m, label) ->
+                    FilterChip(selected = LockPrefs.aodMinutes == m, onClick = { LockPrefs.setAodMinutes(ctx, m) }, label = { Text(label) })
+                }
+            }
+            Note("Needs Shizuku. The cover goes fully dark after that long; it comes back on the next wake.")
         }
-        val scope = rememberCoroutineScope()
-        SwitchRow("Fingerprint opens Home",
-            if (!ShizukuShell.allowed()) "Needs Shizuku." else if (straightHome) "Power key with your fingerprint goes straight to Home."
-            else "Power key with your fingerprint stays on the lock screen; swipe up to open, no PIN.",
-            straightHome) { on ->
-            scope.launch(Dispatchers.IO) {
-                if (ShizukuShell.run("settings", "put", "secure", "fingerprint_stay_on_lock_screen", if (on) "0" else "1")) straightHome = on
+        Group("Lock screen") {
+            SwitchRow("OpenCover lock screen", "Swipe up for Samsung's PIN. Samsung's quick panel still pulls down.",
+                LockPrefs.lockScreen) { LockPrefs.setLockScreen(ctx, it); CoverAccessibility.instance?.refreshScope(); CoverActivity.current?.applyLockScreen() }
+            SwitchRow("Fingerprint opens Home",
+                if (!ShizukuShell.allowed()) "Needs Shizuku." else if (straightHome) "Power key with your fingerprint goes straight to Home."
+                else "Power key with your fingerprint stays on the lock screen; swipe up to open, no PIN.",
+                straightHome) { on ->
+                scope.launch(Dispatchers.IO) {
+                    if (ShizukuShell.run("settings", "put", "secure", "fingerprint_stay_on_lock_screen", if (on) "0" else "1")) straightHome = on
+                }
             }
         }
-        Text("Clock style", color = Color.Gray, fontSize = 13.sp)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ClockStyle.entries.forEach { s ->
-                FilterChip(selected = s == LockPrefs.clock, onClick = { LockPrefs.setClock(ctx, s) }, label = { Text(styleNames.getValue(s)) })
+        Group("Layout") {
+            Text("Clock style", color = Color.White, fontSize = 15.sp)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ClockStyle.entries.forEach { s ->
+                    FilterChip(selected = s == LockPrefs.clock, onClick = { LockPrefs.setClock(ctx, s) }, label = { Text(styleNames.getValue(s)) })
+                }
             }
+            NavRow(null, "Edit layout", "Drag modules anywhere and switch each on or off") { editing = true }
         }
-        Button(onClick = { editing = true }) { Text("Edit layout") }
-        SwitchRow("Black AOD", "The AOD shows only the clock and modules, without the wallpaper. Saves battery.", LockPrefs.aodBlack) {
-            LockPrefs.setAodBlack(ctx, it)
-        }
-        Text("Turn the AOD off after", color = Color.Gray, fontSize = 13.sp)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(0 to "Never", 1 to "1 min", 5 to "5 min", 15 to "15 min", 30 to "30 min").forEach { (m, label) ->
-                FilterChip(selected = LockPrefs.aodMinutes == m, onClick = { LockPrefs.setAodMinutes(ctx, m) }, label = { Text(label) })
-            }
-        }
-        Text("Needs Shizuku. The cover goes fully dark after that long; it comes back on the next wake.", color = Color.Gray, fontSize = 11.sp)
-        Text("Background (an image, or an animated GIF or WebP; the AOD shows the frame the lock screen stopped on)", color = Color.Gray, fontSize = 13.sp)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { CoverActivity.current?.pickBackground(dev.opencover.home.Slot.LOCK) }) { Text("Pick image, GIF or WebP") }
-            if (dev.opencover.home.Wallpaper.lockStill != null) TextButton(onClick = { dev.opencover.home.Wallpaper.clearLock(ctx) }) { Text("Use Home's") }
+        Group("Background") {
+            Note("An image, or an animated GIF or WebP. The AOD shows the frame the lock screen stopped on.")
+            NavRow(null, "Pick a background", "Otherwise the lock screen uses Home's") { CoverActivity.current?.pickBackground(dev.opencover.home.Slot.LOCK) }
             if (dev.opencover.home.Wallpaper.source(ctx, dev.opencover.home.Slot.LOCK) != null)
-                TextButton(onClick = { CoverActivity.current?.adjustBackground(dev.opencover.home.Slot.LOCK) }) { Text("Adjust") }
+                NavRow(null, "Adjust position", null) { CoverActivity.current?.adjustBackground(dev.opencover.home.Slot.LOCK) }
+            if (dev.opencover.home.Wallpaper.lockStill != null) NavRow(null, "Use Home's wallpaper", null) { dev.opencover.home.Wallpaper.clearLock(ctx) }
         }
-        TextButton(onClick = onBack) { Text("Back") }
     }
 }
 
