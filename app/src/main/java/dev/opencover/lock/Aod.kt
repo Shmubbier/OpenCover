@@ -123,7 +123,7 @@ object AodOverlay {
             fitInsetsTypes = 0
             layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
         }
-        runCatching { wm.addView(v, lp); view = v; o.resume() }.onFailure { owner = null }
+        runCatching { wm.addView(v, lp); view = v; o.resume() }.onFailure { owner = null; android.util.Log.w("OpenCoverAod", "couldn't add the AOD", it) }
     }
 
     fun hide() {

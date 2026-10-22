@@ -8,7 +8,7 @@ import dev.opencover.home.ClockStyle
 
 /** AOD and lock screen settings (Compose state), SharedPreferences "lock". */
 object LockPrefs {
-    var aod by mutableStateOf(false)
+    var aod by mutableStateOf(true)
         private set
     var lockScreen by mutableStateOf(false)
         private set
@@ -27,7 +27,7 @@ object LockPrefs {
 
     fun load(ctx: Context) {
         val p = prefs(ctx)
-        aod = p.getBoolean("aod", false)
+        aod = p.getBoolean("aod", true)
         lockScreen = p.getBoolean("lock_screen", false)
         clock = ClockStyle.entries.find { it.name == p.getString("clock", null) } ?: ClockStyle.CURRENT
         layout = parseLayout(p.getString("layout", null))

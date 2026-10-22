@@ -186,6 +186,15 @@ private fun ExperimentalPanel(topEdge: Boolean, onTopEdge: (Boolean) -> Unit, on
             Text("Show suggestions", color = Color.White, modifier = Modifier.weight(1f))
             Switch(checked = suggest, onCheckedChange = { suggest = it; KeyboardPrefs.setSuggestions(ctx, it) })
         }
+        var voip by remember { mutableStateOf(dev.opencover.call.CallStore.voip(ctx)) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Internet calls on the cover", color = Color.White)
+                Text("Messenger, Discord, Viber and other apps' calls get the cover call screen, like phone calls. Answering hands over to the app's own call screen.",
+                    color = Color.Gray, fontSize = 11.sp)
+            }
+            Switch(checked = voip, onCheckedChange = { voip = it; dev.opencover.call.CallStore.setVoip(ctx, it) })
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Top-edge priority", color = Color.White)

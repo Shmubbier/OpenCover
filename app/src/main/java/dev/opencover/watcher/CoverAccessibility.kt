@@ -48,9 +48,10 @@ class CoverAccessibility : AccessibilityService() {
         override fun onReceive(c: Context, i: Intent) {
             when (i.action) {
                 Intent.ACTION_DREAMING_STARTED -> if (LockPrefs.aod && aodReady(c)) {
+                    android.util.Log.i("OpenCoverAod", "doze started: showing the AOD")
                     AodOverlay.show(this@CoverAccessibility)
                     dev.opencover.lock.AodTimeout.start(c)
-                }
+                } else android.util.Log.i("OpenCoverAod", "doze started: no AOD (on=${LockPrefs.aod}, Samsung AOD ready=${aodReady(c)})")
                 Intent.ACTION_DREAMING_STOPPED -> AodOverlay.hide()
                 // Only a real wake: turning the AOD off itself also ends the doze.
                 Intent.ACTION_SCREEN_ON -> dev.opencover.lock.AodTimeout.stop(c)
