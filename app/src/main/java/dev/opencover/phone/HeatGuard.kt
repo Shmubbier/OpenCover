@@ -25,7 +25,9 @@ object HeatGuard {
     private var app: Context? = null
     private var status = 0
     private var tenths = 0
-    private var hotspot = false
+    /** Whether the Wi-Fi hotspot is on, as last broadcast (the quick settings tile reads it too). */
+    var hotspot = false
+        private set
     private var level = Heat.OK // follows the temperature whether or not anything is shown
     private var told = Heat.OK // what the notification says
 

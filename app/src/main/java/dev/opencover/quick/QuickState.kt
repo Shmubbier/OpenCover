@@ -28,6 +28,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import dev.opencover.phone.RotationFeature
+import dev.opencover.phone.START_HOTSPOT
+import dev.opencover.phone.STOP_HOTSPOT
 import dev.opencover.apps.AppLauncher
 import dev.opencover.mirror.ConsentActivity
 import dev.opencover.mirror.MirrorService
@@ -48,6 +50,7 @@ object QuickState {
         override fun onTorchModeChanged(id: String, on: Boolean) { if (id == flashId) { torchOn = on; bump() } }
     }
 
+    private const val AP_STATE_CHANGED = "android.net.wifi.WIFI_AP_STATE_CHANGED"
     private const val COVER_BRIGHTNESS = "sub_screen_brightness" // Samsung: the cover screen's own level, 1..255
 
     fun start(ctx: Context) {
@@ -60,7 +63,7 @@ object QuickState {
                 Intent.ACTION_AIRPLANE_MODE_CHANGED, NfcAdapter.ACTION_ADAPTER_STATE_CHANGED,
                 PowerManager.ACTION_POWER_SAVE_MODE_CHANGED, LocationManager.MODE_CHANGED_ACTION,
                 AudioManager.RINGER_MODE_CHANGED_ACTION, NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED,
-                Intent.ACTION_BATTERY_CHANGED, Intent.ACTION_CONFIGURATION_CHANGED,
+                Intent.ACTION_BATTERY_CHANGED, Intent.ACTION_CONFIGURATION_CHANGED, AP_STATE_CHANGED,
             ).forEach(::addAction)
         }
         ctx.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
@@ -108,6 +111,8 @@ object QuickState {
             Tile.DARK_MODE -> ctx.getSystemService(UiModeManager::class.java).nightMode == UiModeManager.MODE_NIGHT_YES
             Tile.KEEP_AWAKE -> KeepAwake.isOn
             Tile.MIRROR -> MirrorService.instance != null
+            // Not sticky on Android 16: the heat guard follows its broadcast all the time.
+            Tile.HOTSPOT -> dev.opencover.phone.HeatGuard.hotspot
         }
     }
 
@@ -170,6 +175,8 @@ object QuickState {
                     true
                 }
                 Tile.KEEP_AWAKE -> { KeepAwake.set(ctx, !on); true }
+                // Both calls exit with an error after doing their job (their null listener), so trust the state instead.
+                Tile.HOTSPOT -> { ShizukuShell.run(*(if (on) STOP_HOTSPOT else START_HOTSPOT).toTypedArray()); true }
                 Tile.MIRROR -> {
                     if (on) handler.post { MirrorService.instance?.stop() }
                     else AppLauncher.start(ctx, Intent(ctx, ConsentActivity::class.java))

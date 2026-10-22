@@ -9,7 +9,7 @@ class TilesTest {
     @Test fun missingSaveGivesDefault() = assertEquals(Tile.entries.toList(), parseTiles(null))
     @Test fun emptySaveStaysEmpty() = assertEquals(emptyList<Tile>(), parseTiles(""))
     @Test fun unknownAndDuplicateIdsDropped() =
-        assertEquals(listOf(Tile.WIFI, Tile.NFC), parseTiles("WIFI,HOTSPOT,NFC,WIFI"))
+        assertEquals(listOf(Tile.WIFI, Tile.NFC), parseTiles("WIFI,TELEPORT,NFC,WIFI"))
     @Test fun roundTrip() {
         val t = listOf(Tile.SOUND, Tile.WIFI, Tile.DND)
         assertEquals(t, parseTiles(formatTiles(t)))
@@ -53,5 +53,11 @@ class TilesTest {
         assertTrue(usable(Need.NONE, emptySet()))
         assertFalse(usable(Need.SHIZUKU, setOf(Need.SECURE_SETTINGS)))
         assertTrue(usable(Need.SHIZUKU, setOf(Need.SHIZUKU)))
+    }
+
+    @Test fun holdingATileOpensItsSettingsPage() {
+        assertEquals("android.settings.TETHER_SETTINGS", settingsAction(Tile.HOTSPOT))
+        assertEquals("android.settings.WIFI_SETTINGS", settingsAction(Tile.WIFI))
+        assertEquals(null, settingsAction(Tile.MIRROR)) // OpenCover's own: nothing to open
     }
 }

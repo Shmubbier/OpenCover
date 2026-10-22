@@ -27,6 +27,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -65,14 +66,17 @@ import dev.opencover.quick.hiddenTiles
 import dev.opencover.quick.inEditMode
 import dev.opencover.quick.moved
 import dev.opencover.quick.pageCount
+import dev.opencover.quick.settingsAction
 import dev.opencover.quick.usable
+import dev.opencover.apps.AppLauncher
+import android.content.Intent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
-/** Swipe-down quick settings. Long-press a tile to edit; swipe up or Back closes (Shell). */
+/** Swipe-down quick settings. Hold a tile for its settings page; the pencil edits tiles; swipe up or Back closes (Shell). */
 @Composable
 fun QuickPanel() {
     val ctx = LocalContext.current
@@ -133,6 +137,7 @@ fun QuickPanel() {
                     onValueChangeFinished = { if (cover) scope.launch(Dispatchers.IO) { QuickState.setBrightness(level) } },
                 )
                 Text("${remember(v) { QuickState.battery(ctx) }}%", color = Color.White, fontSize = 14.sp)
+                IconButton(onClick = { editRequested = true }) { Icon(Icons.Filled.Edit, "Edit tiles", tint = Color.White) }
             }
         }
 
@@ -171,7 +176,12 @@ fun QuickPanel() {
                                 enabled = usable(t.need, has),
                                 label = if (t == Tile.SOUND) remember(v) { QuickState.ringer(ctx) }.label() else t.label,
                                 icon = if (t == Tile.SOUND) remember(v) { QuickState.ringer(ctx) }.icon() else t.icon(),
-                                onTap = { tap(t) }, onLongPress = { editRequested = true },
+                                onTap = { tap(t) },
+                                onLongPress = {
+                                    val page = settingsAction(t)
+                                    if (page == null) hint = "${t.label} has no settings page"
+                                    else runCatching { AppLauncher.start(ctx, Intent(page)) }.onFailure { hint = "Couldn't open ${t.label} settings" }
+                                },
                             )
                         }
                     }
@@ -238,6 +248,7 @@ private fun Tile.icon(): ImageVector = when (this) {
     Tile.DARK_MODE -> Icons.Filled.DarkMode
     Tile.KEEP_AWAKE -> Icons.Filled.Coffee
     Tile.MIRROR -> Icons.Filled.ScreenShare
+    Tile.HOTSPOT -> Icons.Filled.WifiTethering
 }
 
 private fun Ringer.label() = when (this) { Ringer.RING -> "Ring"; Ringer.VIBRATE -> "Vibrate"; Ringer.MUTE -> "Mute" }
