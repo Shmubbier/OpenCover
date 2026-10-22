@@ -27,6 +27,7 @@ Open OpenCover on the cover screen. The checklist turns each item green once it'
 | Display over other apps (required) | Keeping the cover awake, pop-ups |
 | Ignore battery optimization (recommended) | Stops Android from putting OpenCover to sleep |
 | Notification access (recommended) | Notifications, pop-ups, media player, edge lighting |
+| OpenCover AOD and lock screen (recommended) | OpenCover's clock while the phone sleeps, and its lock screen. One tap turns both on; then the checklist asks for Samsung's AOD to be set to Always (step 5) |
 | Secure settings (recommended) | Step 4 |
 | Usage access, Phone calls, Microphone, Notifications (optional) | Drawer sorting, cover call screen, voice replies, the running notification |
 
@@ -42,7 +43,7 @@ The list belongs to MultiStar: open Good Lock > MultiStar > Galaxy Foldable > La
 
 ## 5. Samsung settings
 - Settings > Notifications > Cover screen: turn off Samsung's cover pop-ups, so you don't get each one twice.
-- For OpenCover's AOD (Settings > Lock screen in OpenCover): Always On Display set to **Always**, with tap to show off.
+- For OpenCover's AOD: Settings > Lock screen > Always On Display set to **Always**, with **Tap to show** off. OpenCover draws its clock over Samsung's, so Samsung's must stay on. Change OpenCover's AOD and lock screen later in OpenCover's Settings > Lock screen.
 
 ## 6. Shizuku (optional, after every reboot)
 Shizuku adds the extras in OpenCover's Settings > Shizuku: keep the cover on when opened, deep sleep, 5G, cover density and per-app density, per-app rotation, multi-finger mirror touch, and the Wi-Fi, Bluetooth, data and similar tiles.

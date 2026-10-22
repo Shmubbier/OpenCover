@@ -232,6 +232,14 @@ class CoverActivity : ComponentActivity() {
             Permissions.accessibility(this)) { openSettings(Settings.ACTION_ACCESSIBILITY_SETTINGS) },
         SetupStep("Display over other apps (required)", "Keeps the cover screen awake when you ask",
             Permissions.overlay(this)) { openSettings(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, withPackage = true) },
+        // Off on a fresh install (the AOD keeps the cover dimly lit); one tap turns both on, then Samsung's step shows.
+        SetupStep("OpenCover AOD and lock screen (recommended)", "OpenCover's clock while the phone sleeps, and its lock screen. Tap to turn both on; change them in Settings > Lock screen",
+            LockPrefs.aod && LockPrefs.lockScreen) {
+            LockPrefs.setAod(this, true)
+            LockPrefs.setLockScreen(this, true)
+            dev.opencover.watcher.CoverAccessibility.instance?.refreshScope()
+            applyLockScreen()
+        },
         if (!LockPrefs.aod) null else SetupStep("Samsung AOD set to Always (for OpenCover AOD)",
             "Always On Display: Always, with tap to show off. OpenCover draws over it.", aodReady(this)) {
             val tries = listOf("com.samsung.android.app.aodservice.settings.AODDisplayMode",
