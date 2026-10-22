@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -12,6 +14,21 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1"
+    }
+    // Release signing from keystore.properties (not in git); without it the release build is left unsigned.
+    val keys = rootProject.file("keystore.properties").takeIf { it.exists() }
+        ?.let { f -> Properties().apply { f.inputStream().use { load(it) } } }
+    signingConfigs {
+        if (keys != null) create("release") {
+            storeFile = file(keys.getProperty("storeFile"))
+            storePassword = keys.getProperty("storePassword")
+            keyAlias = keys.getProperty("keyAlias")
+            keyPassword = keys.getProperty("keyPassword")
+        }
+    }
+    buildTypes {
+        // ponytail: no R8. Much of OpenCover reaches hidden APIs by reflection; shrinking would need keep rules for each.
+        release { signingConfig = signingConfigs.findByName("release") }
     }
     buildFeatures { compose = true }
 }

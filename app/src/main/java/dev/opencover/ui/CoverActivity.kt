@@ -242,15 +242,15 @@ class CoverActivity : ComponentActivity() {
             Permissions.battery(this)) { openSettings(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, withPackage = true) },
         SetupStep("Usage access (optional)", "Sorts the app drawer by recently used",
             Permissions.usage(this)) { openSettings(Settings.ACTION_USAGE_ACCESS_SETTINGS, withPackage = true) },
-        SetupStep("Notification access (optional)", "For cover-screen notifications, coming in a later update",
+        SetupStep("Notification access (recommended)", "Cover notifications, pop-ups, media player and edge lighting",
             Permissions.notificationAccess(this)) {
             AppLauncher.start(this, Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS).putExtra(
                 Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
                 ComponentName(this, NotificationAccess::class.java).flattenToString(),
             ))
         },
-        SetupStep("Banking apps auto-resume (optional)",
-            "Run once on a computer: adb shell pm grant dev.opencover android.permission.WRITE_SECURE_SETTINGS",
+        SetupStep("Secure settings (recommended)",
+            "Lets every app open on the cover without Shizuku, and banking apps resume. Run once on a computer: adb shell pm grant dev.opencover android.permission.WRITE_SECURE_SETTINGS",
             BankingMode.canResume(this)) {},
         SetupStep("Shizuku (optional)",
             if (!ShizukuShell.installed(this)) "Wi-Fi, Bluetooth, data and other tiles. Install Shizuku, see README"

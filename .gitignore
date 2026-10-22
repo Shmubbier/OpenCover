@@ -10,3 +10,6 @@ local.properties
 FreeFlip_handoff/
 RE_handoff/
 IJP_handoff/
+
+# Release signing (passwords); the keystore itself lives outside the repo
+keystore.properties

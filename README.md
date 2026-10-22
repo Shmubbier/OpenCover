@@ -24,12 +24,11 @@ A free, open-source (GPL-3.0) launcher for the Galaxy Z Flip 5 cover screen. No 
 - "Open Samsung widgets" in settings to reach Samsung's own cover widgets.
 
 ## Install
-1. Build: `.\gradlew.bat :app:assembleDebug` (JDK: Android Studio's `jbr`).
-2. `adb install -r app\build\outputs\apk\debug\app-debug.apk`
-3. Open OpenCover on the cover screen and follow the setup checklist. Because the app is
-   sideloaded, Android first needs App info → ⋮ → **Allow restricted settings** before the
-   Accessibility and Notification access switches can be turned on.
-4. Turn off Samsung's own cover notification pop-ups to avoid doubles: Settings > Notifications > Cover screen.
+Download the APK from the releases and follow the [setup guide](docs/SETUP.md).
+
+To build it yourself (JDK: Android Studio's `jbr`):
+- Debug: `.\gradlew.bat :app:assembleDebug`, then `adb install -r app\build\outputs\apk\debug\app-debug.apk`.
+- Release: put `storeFile`, `storePassword`, `keyAlias` and `keyPassword` in `keystore.properties` at the project root (not in git), then `.\gradlew.bat :app:assembleRelease`. Without that file the release APK is unsigned.
 
 ## Why Accessibility?
 On Android 16, only apps with a system-bound service such as an accessibility service may
@@ -58,9 +57,9 @@ needs.
   Open-Meteo every 30 minutes at most, while the screen is on. Nothing else leaves your phone.
 
 ## Shizuku (optional)
-OpenCover works without [Shizuku](https://github.com/RikkaApps/Shizuku): apps open on the cover and mirroring works (one-finger live touch) through its accessibility service. Shizuku adds extras, gathered in Settings > Shizuku: keep cover on, deep sleep, 5G, display tweaks, the inner screen launcher, background restriction and per-app rotation, plus multi-finger mirror touch, the Wi-Fi, Bluetooth, mobile data, airplane, NFC, battery saver and dark mode tiles, the heat guard's hotspot stop and the cover brightness slider.
+OpenCover works without [Shizuku](https://github.com/RikkaApps/Shizuku): apps open on the cover (once it can write secure settings, see the [setup guide](docs/SETUP.md#4-let-every-app-open-on-the-cover-computer-once)) and mirroring works (one-finger live touch) through its accessibility service. Shizuku adds extras, gathered in Settings > Shizuku: keep cover on, deep sleep, 5G, display tweaks, the inner screen launcher, background restriction and per-app rotation, plus multi-finger mirror touch, the Wi-Fi, Bluetooth, mobile data, airplane, NFC, battery saver and dark mode tiles, the heat guard's hotspot stop and the cover brightness slider.
 1. Install the Shizuku APK from its GitHub releases: `adb install shizuku.apk`
-2. Start it (again after every reboot):
+2. Start it (again after every reboot), from Shizuku on the cover with Start via Wireless debugging, or from a computer:
    `adb shell 'p=$(pm path moe.shizuku.privileged.api | cut -d: -f2); $(dirname $p)/lib/arm64/libshizuku.so'`
 3. Shizuku's permission dialog opens on the main screen, so allow OpenCover from the cover instead:
    `adb shell am start --display 1 -n moe.shizuku.privileged.api/moe.shizuku.manager.MainActivity`,
