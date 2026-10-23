@@ -269,7 +269,7 @@ class CoverActivity : ComponentActivity() {
                 ComponentName(this, NotificationAccess::class.java).flattenToString(),
             ))
         },
-        SetupStep("Banking apps (recommended)", "Banking apps like GCash refuse to run while OpenCover's accessibility is on: pick them and OpenCover steps aside while they're open. GCash is ticked already",
+        SetupStep("Banking apps (recommended)", "Banking apps and other apps that refuse to run while accessibility is on: pick them and OpenCover steps aside while they're open",
             BankingMode.apps(this).isNotEmpty()) { pickingBanking = true },
         SetupStep("Secure settings (recommended)",
             "Lets every app open on the cover without Shizuku, and banking apps resume. Run once on a computer: adb shell pm grant dev.opencover android.permission.WRITE_SECURE_SETTINGS",
