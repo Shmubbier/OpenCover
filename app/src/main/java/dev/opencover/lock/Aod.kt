@@ -91,6 +91,11 @@ object AodOverlay {
 
     fun show(service: AccessibilityService) {
         if (view != null) return
+        // Started while the phone sleeps (an update, low memory): Home never opened, so its wallpapers aren't loaded.
+        if (dev.opencover.home.Wallpaper.homeStill == null && dev.opencover.home.Wallpaper.lockStill == null) {
+            dev.opencover.home.Wallpaper.loadAll(service)
+            dev.opencover.home.HomePrefs.load(service)
+        }
         val cover = service.getSystemService(android.hardware.display.DisplayManager::class.java).getDisplay(COVER_DISPLAY) ?: return
         // The cover's own context: its density (340 dpi), not the inner screen's, so the face matches the lock screen.
         val wctx = service.createDisplayContext(cover).createWindowContext(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, null)
@@ -160,9 +165,12 @@ object AodTimeout {
         val app = ctx.applicationContext
         handler.postDelayed({
             if (app.getSystemService(android.os.PowerManager::class.java).isInteractive) return@postDelayed
-            LockPrefs.setAodOffByUs(app, true)
-            AodOverlay.hide()
-            Thread { dev.opencover.quick.ShizukuShell.run("settings", "put", "system", "aod_mode", "0") }.start()
+            Thread {
+                // Only once Samsung's AOD is really off (it needs Shizuku): hiding ours alone would leave Samsung's showing.
+                if (!dev.opencover.quick.ShizukuShell.run("settings", "put", "system", "aod_mode", "0")) return@Thread
+                LockPrefs.setAodOffByUs(app, true)
+                handler.post { AodOverlay.hide() }
+            }.start()
         }, m * 60_000L)
     }
 

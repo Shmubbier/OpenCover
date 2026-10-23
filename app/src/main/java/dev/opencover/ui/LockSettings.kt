@@ -71,7 +71,7 @@ fun LockSettings(onBack: () -> Unit) {
                     FilterChip(selected = LockPrefs.aodMinutes == m, onClick = { LockPrefs.setAodMinutes(ctx, m) }, label = { Text(label) })
                 }
             }
-            Note("Needs Shizuku. The cover goes fully dark after that long; it comes back on the next wake.")
+            Note("Needs Shizuku running; without it the AOD stays on. The cover goes fully dark after that long; it comes back on the next wake.")
         }
         Group("Lock screen") {
             SwitchRow("OpenCover lock screen", "Swipe up for Samsung's PIN. Samsung's quick panel still pulls down.",
