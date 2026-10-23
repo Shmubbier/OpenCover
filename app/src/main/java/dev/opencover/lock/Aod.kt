@@ -108,7 +108,7 @@ object AodOverlay {
                 val d = LocalDensity.current
                 val same = CoverScale.density(service) ?: Density(d.density * DP_SCALE, d.fontScale * SP_SCALE / DP_SCALE)
                 CompositionLocalProvider(LocalDensity provides same) {
-                    LockFace(LockPrefs.layout, dim = true, locked = false, modifier = Modifier.offset(dx.dp, dy.dp))
+                    LockFace(LockPrefs.layout, dim = true, locked = false, shift = androidx.compose.ui.unit.DpOffset(dx.dp, dy.dp))
                 }
             }
         }

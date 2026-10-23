@@ -253,10 +253,17 @@ class CoverActivity : ComponentActivity() {
             applyLockScreen()
         },
         if (!LockPrefs.aod) null else SetupStep("Samsung AOD set to Always (for OpenCover AOD)",
-            "Always On Display: Always, with tap to show off. OpenCover draws over it.", aodReady(this)) {
-            val tries = listOf("com.samsung.android.app.aodservice.settings.AODDisplayMode",
+            "Always On Display: Always, with tap to show off. OpenCover draws over it. Tap to set it.", aodReady(this)) {
+            // With secure settings granted OpenCover sets both itself; otherwise Samsung's AOD settings, on the cover
+            // (its app is on the cover list, see CoverAllowList).
+            runCatching {
+                Settings.System.putInt(contentResolver, "aod_mode", 1)
+                Settings.System.putInt(contentResolver, "aod_tap_to_show_mode", 0)
+            }
+            if (!aodReady(this)) listOf("com.samsung.android.app.aodservice.settings.AODDisplayMode",
                 "com.samsung.android.app.aodservice.settings.AODSettingsMain", Settings.ACTION_DISPLAY_SETTINGS)
-            tries.firstOrNull { runCatching { AppLauncher.start(this, Intent(it)) }.isSuccess }
+                .firstOrNull { runCatching { AppLauncher.startApp(this, Intent(it)) }.isSuccess }
+            resumeTick++
         },
         SetupStep("Ignore battery optimization (recommended)", "Stops Android from putting OpenCover to sleep",
             Permissions.battery(this)) { openSettings(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, withPackage = true) },

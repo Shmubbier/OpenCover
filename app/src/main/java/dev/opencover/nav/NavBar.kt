@@ -108,9 +108,29 @@ private const val RECENTS_COMPONENT = "$RECENTS_PACKAGE/com.android.quickstep.Re
 object NavPrefs {
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("nav", Context.MODE_PRIVATE)
     fun enabled(ctx: Context) = prefs(ctx).getBoolean("enabled", true)
-    fun setEnabled(ctx: Context, on: Boolean) = prefs(ctx).edit().putBoolean("enabled", on).apply()
+    fun setEnabled(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean("enabled", on).apply(); syncHint(ctx) }
     fun style(ctx: Context) = NavStyle.entries.find { it.name == prefs(ctx).getString("style", null) } ?: NavStyle.BUTTONS
-    fun setStyle(ctx: Context, s: NavStyle) = prefs(ctx).edit().putString("style", s.name).apply()
+    fun setStyle(ctx: Context, s: NavStyle) { prefs(ctx).edit().putString("style", s.name).apply(); syncHint(ctx) }
+
+    private const val HINT = "navigation_bar_gesture_hint" // Samsung's gesture handle (the phone's, inner screen too)
+
+    /**
+     * OpenCover's gesture pill sits mid-bar, clear of the screen's edge, so Samsung's handle under it is turned off
+     * while that bar is in use, and put back as it was otherwise. Needs secure settings; without it nothing changes.
+     */
+    fun syncHint(ctx: Context) = runCatching {
+        val cr = ctx.contentResolver
+        val p = prefs(ctx)
+        val ours = enabled(ctx) && style(ctx) == NavStyle.GESTURES
+        val now = android.provider.Settings.Global.getInt(cr, HINT, 1)
+        if (ours && now != 0) {
+            p.edit().putInt("hint_before", now).apply()
+            android.provider.Settings.Global.putInt(cr, HINT, 0)
+        } else if (!ours && p.contains("hint_before")) {
+            android.provider.Settings.Global.putInt(cr, HINT, p.getInt("hint_before", 1))
+            p.edit().remove("hint_before").apply()
+        }
+    }
 }
 
 /**
@@ -392,8 +412,8 @@ object NavBar {
                 // A light pill with a faint dark edge, so it shows on light and dark apps alike.
                 val half = width * 0.12f
                 val px = width * pillCenter
-                // Where Samsung draws its own gesture handle (about 10 px from the outer edge), so this one covers it.
-                val cy = maxOf(height / 2f, height - 10f)
+                // Mid-bar, clear of the rounded edge so it's easy to reach (Samsung's own handle is off, see syncHint).
+                val cy = height / 2f
                 c.drawLine(px - half, cy, px + half, cy, pill.apply { strokeWidth = 12f; color = Color.argb(0x50, 0, 0, 0) })
                 c.drawLine(px - half, cy, px + half, cy, pill.apply { strokeWidth = 8f; color = Color.argb(0xF0, 0xE6, 0xE6, 0xE8) })
                 if (keyboard) {

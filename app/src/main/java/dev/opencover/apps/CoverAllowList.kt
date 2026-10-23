@@ -21,6 +21,7 @@ import android.util.Log
 object CoverAllowList {
     private const val KEY = "multistar_setting_repository"
     private const val RECENTS = "com.sec.android.app.launcher"
+    private const val AOD_SETTINGS = "com.samsung.android.app.aodservice"
 
     private val handler = Handler(Looper.getMainLooper())
 
@@ -44,8 +45,9 @@ object CoverAllowList {
         val entries = ctx.getSystemService(UserManager::class.java).userProfiles.flatMap { user ->
             launcher.getActivityList(null, user).map { "${it.componentName.packageName},${userId(user)}" }
         }
-        // Samsung's launcher too: on the cover it shows One UI's recents, which the navigation bar opens.
-        add(ctx, entries + "$RECENTS,0")
+        // Samsung's launcher too (on the cover it shows One UI's recents, which the navigation bar opens), and its AOD
+        // settings (the setup checklist opens them).
+        add(ctx, entries + "$RECENTS,0" + "$AOD_SETTINGS,0")
     }
 
     /**

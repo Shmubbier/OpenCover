@@ -57,7 +57,12 @@ class CoverAccessibility : AccessibilityService() {
                 Intent.ACTION_SCREEN_ON -> dev.opencover.lock.AodTimeout.stop(c)
             }
             // Woken (from doze or fully off): let the windows settle, then maybe replace Samsung's lock screen.
-            if (i.action != Intent.ACTION_DREAMING_STARTED) handler.postDelayed({ LockScreen.maybeShow(this@CoverAccessibility) }, 250)
+            if (i.action != Intent.ACTION_DREAMING_STARTED && i.action != Intent.ACTION_USER_PRESENT)
+                handler.postDelayed({ LockScreen.maybeShow(this@CoverAccessibility) }, 250)
+            // The navigation bar hides while locked and is redrawn on window changes, but unlocking can finish after the
+            // last one: redraw it once things have settled, so it doesn't stay hidden until the next change.
+            if (i.action == Intent.ACTION_USER_PRESENT || i.action == Intent.ACTION_SCREEN_ON)
+                listOf(300L, 1_000L).forEach { handler.postDelayed({ updateNavBar() }, it) }
         }
     }
 
@@ -68,6 +73,7 @@ class CoverAccessibility : AccessibilityService() {
             addAction(Intent.ACTION_DREAMING_STARTED)
             addAction(Intent.ACTION_DREAMING_STOPPED)
             addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_USER_PRESENT)
         }, RECEIVER_NOT_EXPORTED)
         // Restarted while the phone sleeps (update, low memory): the doze began before we were listening.
         val cover = getSystemService(android.hardware.display.DisplayManager::class.java).getDisplay(dev.opencover.COVER_DISPLAY)
@@ -77,6 +83,7 @@ class CoverAccessibility : AccessibilityService() {
         // Restarted after the AOD timeout turned Samsung's AOD off: turn it back on once the phone is in use.
         if (getSystemService(android.os.PowerManager::class.java).isInteractive) dev.opencover.lock.AodTimeout.stop(this)
         refreshScope()
+        dev.opencover.nav.NavPrefs.syncHint(this)
         handler.post { updateNavBar() } // the window list is ready once connected
         // Shizuku state does not survive a reboot, and after one Shizuku starts later than this service: redo it
         // whenever Shizuku comes up (sticky: also right now if it already is).

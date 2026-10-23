@@ -107,7 +107,8 @@ private fun VideoBackground(
     if (live) Box(Modifier.fillMaxSize().clipToBounds()) {
         val holder = remember(video) { VideoHolder(video, playhead) }
         holder.onStarted = { started = true }
-        holder.onStopped = { live = false; started = false }
+        // Back to playing before the paused frame was captured (a swipe that didn't finish): stay live, it plays on.
+        holder.onStopped = { if (!holder.playing) { live = false; started = false } }
         holder.playing = playing
         DisposableEffect(holder) { onDispose { holder.release(); started = false } }
         AndroidView(
@@ -141,7 +142,9 @@ private fun VideoBackground(
 private class VideoHolder(val video: File, val playhead: Playhead) : SurfaceHolder.Callback {
     var view: SurfaceView? = null
     var player: MediaPlayer? = null
+    /** Set on every recomposition; a change starts or pauses the player at once. */
     var playing = false
+        set(v) { val changed = field != v; field = v; if (changed) apply() }
     var onStarted: () -> Unit = {}
     var onStopped: () -> Unit = {}
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
