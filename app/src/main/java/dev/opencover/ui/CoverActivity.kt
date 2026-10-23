@@ -29,6 +29,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -78,6 +79,7 @@ class CoverActivity : ComponentActivity() {
     private var loaded = false
     private var resumeTick by mutableIntStateOf(0)
     private var showSetup by mutableStateOf(false)
+    private var pickingBanking by mutableStateOf(false) // the Banking apps step of the checklist
     private var homeRequests by mutableIntStateOf(0)
     /** Keyguard locked: only the lock layer is drawn (the activity shows over the keyguard while OpenCover's lock screen is on). */
     private var locked by mutableStateOf(false)
@@ -193,6 +195,16 @@ class CoverActivity : ComponentActivity() {
                         isLocked && LockPrefs.lockScreen -> LockLayer(this@CoverActivity)
                         isLocked -> Box(Modifier.fillMaxSize().background(Color.Black)) // not shown over the keyguard then
                         required && !showSetup -> Entrance(entrances) { Shell(layout, apps, actions, prompt, Wallpaper.homeStill, homeRequests, quickSettingsRequests) }
+                        pickingBanking -> {
+                            var selected by remember { mutableStateOf(BankingMode.apps(this@CoverActivity)) }
+                            BankingPicker(
+                                apps = apps, selected = selected,
+                                onChange = { selected = it; BankingMode.setApps(this@CoverActivity, it) },
+                                onClose = { pickingBanking = false },
+                                needsUsageAccess = selected.isNotEmpty() && !Permissions.usage(this@CoverActivity),
+                                onGrantUsage = { openSettings(Settings.ACTION_USAGE_ACCESS_SETTINGS, withPackage = true) },
+                            )
+                        }
                         else -> Checklist(
                             steps = setupSteps(),
                             onAppInfo = { openSettings(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, withPackage = true) },
@@ -257,6 +269,8 @@ class CoverActivity : ComponentActivity() {
                 ComponentName(this, NotificationAccess::class.java).flattenToString(),
             ))
         },
+        SetupStep("Banking apps (recommended)", "Banking apps like GCash refuse to run while OpenCover's accessibility is on: pick them and OpenCover steps aside while they're open. GCash is ticked already",
+            BankingMode.apps(this).isNotEmpty()) { pickingBanking = true },
         SetupStep("Secure settings (recommended)",
             "Lets every app open on the cover without Shizuku, and banking apps resume. Run once on a computer: adb shell pm grant dev.opencover android.permission.WRITE_SECURE_SETTINGS",
             BankingMode.canResume(this)) {},

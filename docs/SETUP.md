@@ -28,6 +28,7 @@ Open OpenCover on the cover screen. The checklist turns each item green once it'
 | Ignore battery optimization (recommended) | Stops Android from putting OpenCover to sleep |
 | Notification access (recommended) | Notifications, pop-ups, media player, edge lighting |
 | OpenCover AOD and lock screen (recommended) | OpenCover's clock while the phone sleeps, and its lock screen. One tap turns both on; then the checklist asks for Samsung's AOD to be set to Always (step 5) |
+| Banking apps (recommended) | Apps that refuse to run while an accessibility service is on (GCash, ticked already when installed). OpenCover turns its service off while they're open and back on after; needs step 4 and Usage access |
 | Secure settings (recommended) | Step 4 |
 | Usage access, Phone calls, Microphone, Notifications (optional) | Drawer sorting, cover call screen, voice replies, the running notification |
 

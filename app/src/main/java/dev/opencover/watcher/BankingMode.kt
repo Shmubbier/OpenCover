@@ -21,12 +21,23 @@ import dev.opencover.mirror.MirrorService
 object BankingMode {
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("banking", Context.MODE_PRIVATE)
 
-    fun apps(ctx: Context): Set<String> = prefs(ctx).getStringSet("apps", emptySet())!!.toSet()
+    /** Apps known to refuse accessibility services: ticked once installed, unless the user unticked them. */
+    private val KNOWN = setOf("com.globe.gcash.android")
+
+    fun apps(ctx: Context): Set<String> {
+        val p = prefs(ctx)
+        val declined = p.getStringSet("declined", emptySet())!!
+        val known = KNOWN.filter { it !in declined && installed(ctx, it) }
+        return p.getStringSet("apps", emptySet())!! + known
+    }
 
     fun setApps(ctx: Context, apps: Set<String>) {
-        prefs(ctx).edit().putStringSet("apps", apps).apply()
+        prefs(ctx).edit().putStringSet("apps", apps).putStringSet("declined", KNOWN - apps).apply()
         CoverAccessibility.instance?.refreshScope()
     }
+
+    private fun installed(ctx: Context, pkg: String) =
+        runCatching { ctx.packageManager.getPackageInfo(pkg, 0) }.isSuccess
 
     fun pausedFor(ctx: Context): String? = prefs(ctx).getString("paused", null)
 
