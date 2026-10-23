@@ -352,7 +352,9 @@ object NavBar {
                             .putExtra("com.samsung.android.activity.recent.displayId", 0)
                             .putExtra("com.android.systemui.recents.extra.RESET_RECENTS", true)
                             .putExtra("com.android.launcher3.intent.extra.FORCE_OVERVIEW", true)
-                            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
+                            // A fresh recents screen each time, as the shell start's flags give: reusing the one left in
+                            // the background shows its old list (no current app, blank cards).
+                            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK))
                     }.onFailure { service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS) }
                 }
             }.start()
