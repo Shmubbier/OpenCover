@@ -20,7 +20,9 @@ import dev.opencover.quick.ShizukuShell
 /**
  * What the phone must look like while mirroring a folded phone:
  *  - device state 4 (both displays render), otherwise the inner screen draws nothing;
- *  - developer options and unknown sources off, because banking apps like GCash refuse to run with them on.
+ *  - with Shizuku, developer options and unknown sources off, because banking apps refuse to run with them on and
+ *    OpenCover's accessibility (which would notice a banking app and hide them then) is off for the session. Without
+ *    Shizuku they stay on (adb keeps working); banking mode hides them only while a banking app is open.
  * Everything is put back when mirroring stops (see [resetState] for the lock that costs).
  */
 object MirrorEnv {
@@ -38,8 +40,9 @@ object MirrorEnv {
         if (MirrorService.instance == null) return null // the session already ended
         val prefs = PhonePrefs(ctx)
         prefs.resetPending = true // until leave() finishes the job; if we die mid-session, recover() resets
+        val hideDev = ShizukuShell.allowed()
         // A crashed earlier run may have left our zeros behind; its saved originals win.
-        if (prefs.restoreSettings == null) {
+        if (hideDev && prefs.restoreSettings == null) {
             val r = ctx.contentResolver
             prefs.restoreSettings = "${Settings.Global.getInt(r, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0)}," +
                 Settings.Secure.getInt(r, SECURE_NON_MARKET, 0)
@@ -49,8 +52,8 @@ object MirrorEnv {
         // wm size needs the shell user: only with Shizuku.
         val resize = if (prefs.mirrorResize && ShizukuShell.allowed()) innerScreenScript(prefs.mirrorSize, prefs.mirrorDensity) else null
         if (resize != null) prefs.innerResetPending = true
-        // OpenCover holds WRITE_SECURE_SETTINGS, so it hides these itself (no Shizuku needed).
-        runCatching {
+        // OpenCover holds WRITE_SECURE_SETTINGS, so it hides these itself.
+        if (hideDev) runCatching {
             Settings.Global.putInt(ctx.contentResolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0)
             Settings.Secure.putInt(ctx.contentResolver, SECURE_NON_MARKET, 0)
         }
