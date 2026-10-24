@@ -57,7 +57,13 @@ fun LockSettings(onBack: () -> Unit) {
     var straightHome by remember {
         mutableStateOf(Settings.Secure.getInt(ctx.contentResolver, "fingerprint_stay_on_lock_screen", 0) == 0)
     }
+    var saving by remember { mutableStateOf(dev.opencover.lock.PowerSaving.on(ctx)) }
     SettingsPage("Lock screen & AOD", onBack) {
+        if (saving) Group {
+            SwitchRow("Power saving is on", "It turns off the always on display, OpenCover's included. Switch it off here or with the Battery saver tile.", true) {
+                if (dev.opencover.lock.PowerSaving.set(ctx, false)) saving = false
+            }
+        }
         Group("Always on display") {
             SwitchRow("OpenCover AOD",
                 if (aodReady(ctx)) "Shown while the phone sleeps." else "Needs Samsung's Always On Display set to Always, tap to show off. See Setup.",

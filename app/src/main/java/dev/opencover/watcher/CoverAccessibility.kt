@@ -55,6 +55,8 @@ class CoverAccessibility : AccessibilityService() {
                 Intent.ACTION_DREAMING_STOPPED -> AodOverlay.hide()
                 // Only a real wake: turning the AOD off itself also ends the doze.
                 Intent.ACTION_SCREEN_ON -> dev.opencover.lock.AodTimeout.stop(c)
+                android.os.PowerManager.ACTION_POWER_SAVE_MODE_CHANGED -> { dev.opencover.lock.PowerSaving.changed(c); return }
+                dev.opencover.lock.PowerSaving.TURN_OFF -> { dev.opencover.lock.PowerSaving.set(c, false); return }
             }
             // Woken (from doze or fully off): let the windows settle, then maybe replace Samsung's lock screen.
             if (i.action != Intent.ACTION_DREAMING_STARTED && i.action != Intent.ACTION_USER_PRESENT)
@@ -74,7 +76,10 @@ class CoverAccessibility : AccessibilityService() {
             addAction(Intent.ACTION_DREAMING_STOPPED)
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_USER_PRESENT)
+            addAction(android.os.PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
+            addAction(dev.opencover.lock.PowerSaving.TURN_OFF)
         }, RECEIVER_NOT_EXPORTED)
+        dev.opencover.lock.PowerSaving.changed(this) // already on when the service starts
         // Restarted while the phone sleeps (update, low memory): the doze began before we were listening.
         val cover = getSystemService(android.hardware.display.DisplayManager::class.java).getDisplay(dev.opencover.COVER_DISPLAY)
         if (LockPrefs.aod && aodReady(this) &&

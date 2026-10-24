@@ -153,7 +153,7 @@ object QuickState {
                 Tile.MOBILE_DATA -> ShizukuShell.run("cmd", "phone", "data", if (on) "disable" else "enable")
                 Tile.AIRPLANE -> ShizukuShell.run("cmd", "connectivity", "airplane-mode", if (on) "disable" else "enable")
                 Tile.NFC -> if (on) ShizukuShell.run("cmd", "nfc", "disable-nfc", "persist") else ShizukuShell.run("cmd", "nfc", "enable-nfc")
-                Tile.BATTERY_SAVER -> ShizukuShell.run("cmd", "power", "set-mode", if (on) "0" else "1")
+                Tile.BATTERY_SAVER -> Settings.Global.putInt(r, "low_power", if (on) 0 else 1) // the system follows it
                 Tile.DARK_MODE -> ShizukuShell.run("cmd", "uimode", "night", if (on) "no" else "yes")
                 Tile.FLASHLIGHT -> { ctx.getSystemService(CameraManager::class.java).setTorchMode(flashId!!, !on); true }
                 Tile.ROTATION -> false // handled above

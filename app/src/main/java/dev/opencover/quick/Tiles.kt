@@ -15,7 +15,7 @@ enum class Tile(val label: String, val need: Need) {
     ROTATION("Rotate", Need.SHIZUKU), // an action: turns the last cover app a quarter turn
     SOUND("Sound", Need.NONE),
     DND("Do not disturb", Need.NOTIFICATION_ACCESS),
-    BATTERY_SAVER("Battery saver", Need.SHIZUKU),
+    BATTERY_SAVER("Battery saver", Need.SECURE_SETTINGS), // "low_power", which OpenCover may write
     LOCATION("Location", Need.SECURE_SETTINGS),
     MOBILE_DATA("Mobile data", Need.SHIZUKU),
     AIRPLANE("Airplane", Need.SHIZUKU),
