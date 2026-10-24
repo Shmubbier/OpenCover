@@ -14,17 +14,30 @@ import dev.opencover.mirror.MirrorService
 
 /**
  * Turns OpenCover's accessibility service off while a chosen banking app is in front (some refuse
- * to run while any third-party service is on), and back on when you leave it.
+ * to run while any third-party service is on), and back on when you leave it. Developer options and
+ * "Unknown sources" are hidden for the same time (GCash refuses to run with them on); USB debugging
+ * and Shizuku keep running, since only the switches are flipped.
  */
 object BankingMode {
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("banking", Context.MODE_PRIVATE)
 
-    fun apps(ctx: Context): Set<String> = prefs(ctx).getStringSet("apps", emptySet())!!.toSet()
+    /** Apps known to refuse accessibility services: ticked once installed, unless the user unticked them. */
+    private val KNOWN = setOf("com.globe.gcash.android")
+
+    fun apps(ctx: Context): Set<String> {
+        val p = prefs(ctx)
+        val declined = p.getStringSet("declined", emptySet())!!
+        val known = KNOWN.filter { it !in declined && installed(ctx, it) }
+        return p.getStringSet("apps", emptySet())!! + known
+    }
 
     fun setApps(ctx: Context, apps: Set<String>) {
-        prefs(ctx).edit().putStringSet("apps", apps).apply()
+        prefs(ctx).edit().putStringSet("apps", apps).putStringSet("declined", KNOWN - apps).apply()
         CoverAccessibility.instance?.refreshScope()
     }
+
+    private fun installed(ctx: Context, pkg: String) =
+        runCatching { ctx.packageManager.getPackageInfo(pkg, 0) }.isSuccess
 
     fun pausedFor(ctx: Context): String? = prefs(ctx).getString("paused", null)
 
@@ -35,7 +48,7 @@ object BankingMode {
     fun pause(ctx: Context, pkg: String) {
         if (pausedFor(ctx) != null) return
         prefs(ctx).edit().putString("paused", pkg).commit()
-        if (canResume(ctx)) setService(ctx, on = false) else CoverAccessibility.instance?.disableSelf()
+        if (canResume(ctx)) { hideDevSettings(ctx); setService(ctx, on = false) } else CoverAccessibility.instance?.disableSelf()
         CoverWatcher.instance?.watchForResume()
     }
 
@@ -43,7 +56,30 @@ object BankingMode {
         if (pausedFor(ctx) == null) return
         if (MirrorService.instance != null) return // mirroring owns the switch; unlocking after it ends resumes
         prefs(ctx).edit().remove("paused").commit()
-        if (canResume(ctx)) setService(ctx, on = true) else askToReEnable(ctx)
+        if (canResume(ctx)) { restoreDevSettings(ctx); setService(ctx, on = true) } else askToReEnable(ctx)
+    }
+
+    private const val NON_MARKET = "install_non_market_apps"
+
+    /** Saves both switches (where mirroring saves them too, so a crash in either is put right) and turns them off. */
+    private fun hideDevSettings(ctx: Context) = runCatching {
+        val cr = ctx.contentResolver
+        val prefs = dev.opencover.phone.PhonePrefs(ctx)
+        if (prefs.restoreSettings == null) {
+            prefs.restoreSettings = "${Settings.Global.getInt(cr, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0)}," +
+                Settings.Secure.getInt(cr, NON_MARKET, 0)
+        }
+        Settings.Global.putInt(cr, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0)
+        Settings.Secure.putInt(cr, NON_MARKET, 0)
+    }
+
+    private fun restoreDevSettings(ctx: Context) = runCatching {
+        val prefs = dev.opencover.phone.PhonePrefs(ctx)
+        val (dev, nm) = prefs.restoreSettings?.split(",")?.mapNotNull { it.toIntOrNull() }?.takeIf { it.size == 2 } ?: return@runCatching
+        val cr = ctx.contentResolver
+        Settings.Global.putInt(cr, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, dev)
+        Settings.Secure.putInt(cr, NON_MARKET, nm)
+        prefs.restoreSettings = null
     }
 
     /** Without WRITE_SECURE_SETTINGS we can't turn ourselves back on: say so, with a tap to Settings. */

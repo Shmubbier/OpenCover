@@ -8,9 +8,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.displayCutout
-import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.activity.compose.BackHandler
+import dev.opencover.home.HomeItem
+import dev.opencover.home.DEFAULT_HOME
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -20,15 +21,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
@@ -69,38 +68,62 @@ import kotlinx.coroutines.delay
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
+/**
+ * Home: the clock and the quick apps, each where the user put them. Long-press to customize ([editing]): move, resize
+ * or hide them, and tap a quick app spot to choose its app. Empty spots only show while customizing, so an empty Home
+ * is all wallpaper. Done saves, Back drops the changes.
+ */
 @Composable
-fun HomeScreen(home: Home, wallpaper: ImageBitmap?, a: LauncherActions, onEditSlot: (Int) -> Unit) {
-    Box(Modifier.fillMaxSize()) {
-        if (wallpaper != null) {
-            Image(wallpaper, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+fun HomeScreen(home: Home, a: LauncherActions, editing: Boolean, onEditing: (Boolean) -> Unit, onEditSlot: (Int) -> Unit) {
+    val ctx = LocalContext.current
+    val style = HomePrefs.clock
+    var draft by remember(editing) { mutableStateOf(HomePrefs.layout ?: DEFAULT_HOME) }
+    var selected by remember(editing) { mutableStateOf<HomeItem?>(null) }
+    BackHandler(enabled = editing) { onEditing(false) }
+    WeatherUpdates()
+    // The wallpaper is behind the whole pager (see Shell), so it stays put while the pages slide over it.
+    BoxWithConstraints(
+        Modifier.fillMaxSize().pointerInput(editing) { if (!editing) detectTapGestures(onLongPress = { onEditing(true) }) },
+    ) {
+        Placed(
+            if (editing) draft else HomePrefs.layout ?: DEFAULT_HOME,
+            onMove = if (editing) { k, s -> draft = draft + (k to s) } else null,
+            selected = selected,
+            onSelect = { selected = it },
+            // Not moved yet: the big and analog clocks stay centred, as they always were.
+            centered = if (HomePrefs.layout == null && !editing && (style == ClockStyle.BIG || style == ClockStyle.ANALOG))
+                setOf(HomeItem.CLOCK) else emptySet(),
+        ) { item ->
+            when (item) {
+                HomeItem.CLOCK -> ClockFace(style, Modifier.padding(20.dp))
+                HomeItem.APPS -> Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    home.quick.forEachIndexed { slot, q ->
+                        if (q != null || editing) QuickSlot(q, a, editing, onEdit = { onEditSlot(slot) }, onCustomize = { onEditing(true) })
+                    }
+                }
+            }
         }
-        val style = HomePrefs.clock
-        ClockFace(
-            style,
-            if (style == ClockStyle.BIG || style == ClockStyle.ANALOG) Modifier.align(Alignment.TopCenter).padding(top = 20.dp)
-            else Modifier.align(Alignment.TopStart).padding(20.dp),
-        )
-        WeatherUpdates()
-        // Bottom left, lifted above the camera cutout (bottom right) so slots 3 and 4 aren't hidden.
-        Row(
-            Modifier.align(Alignment.BottomStart).windowInsetsPadding(WindowInsets.displayCutout).padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            home.quick.forEachIndexed { slot, q -> QuickSlot(q, a) { onEditSlot(slot) } }
+        if (editing) PlaceBar(draft, homeItemNames, onToggle = { k ->
+            val s = draft.getValue(k)
+            draft = draft + (k to s.copy(on = !s.on))
+        }, doneLabel = "Done", onReset = { draft = DEFAULT_HOME; selected = null }) {
+            // The default layout is saved as "none", so the big and analog clocks stay centred.
+            if (draft == DEFAULT_HOME) HomePrefs.clearLayout(ctx) else HomePrefs.setLayout(ctx, draft)
+            onEditing(false)
         }
     }
 }
 
+private val homeItemNames = mapOf(HomeItem.CLOCK to "Clock", HomeItem.APPS to "Quick apps")
+
 @Composable
-private fun QuickSlot(q: QuickApp?, a: LauncherActions, onEdit: () -> Unit) {
+private fun QuickSlot(q: QuickApp?, a: LauncherActions, editing: Boolean, onEdit: () -> Unit, onCustomize: () -> Unit) {
     val icon = q?.let { a.repo.icon(it.pkg, it.activity, it.user) }
     Box(
-        Modifier.size(52.dp).pointerInput(q) {
-            detectTapGestures(
-                onTap = { if (q == null) onEdit() else a.launch(q.pkg, q.activity, q.user) },
-                onLongPress = { onEdit() },
-            )
+        Modifier.size(52.dp).pointerInput(q, editing) {
+            // Customizing: a tap chooses or changes the app. Otherwise a tap opens it and a hold starts customizing.
+            if (editing) detectTapGestures(onTap = { onEdit() })
+            else detectTapGestures(onTap = { q?.let { a.launch(it.pkg, it.activity, it.user) } }, onLongPress = { onCustomize() })
         },
         contentAlignment = Alignment.Center,
     ) {

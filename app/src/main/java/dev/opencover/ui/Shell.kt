@@ -5,6 +5,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import dev.opencover.look.opensOnRelease
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +35,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
@@ -109,6 +115,7 @@ fun Shell(
     quickSettingsRequests: Int,
 ) {
     var editing by remember { mutableStateOf(false) }
+    var homeEditing by remember { mutableStateOf(false) }
     var overlay by remember { mutableStateOf<Overlay?>(null) }
     var panel by remember { mutableStateOf<Panel?>(null) }
     var slotMenu by remember { mutableStateOf<Int?>(null) }
@@ -128,6 +135,7 @@ fun Shell(
     // Home gesture, unlock or fold: back to a clean Home.
     LaunchedEffect(homeRequests) {
         editing = false
+        homeEditing = false
         overlay = null
         slotMenu = null
         panel = null
@@ -149,7 +157,19 @@ fun Shell(
 
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         val heightPx = constraints.maxHeight.toFloat()
-        Column(Modifier.fillMaxSize()) {
+        // How far a page or panel covers Home, 0..1: the wallpaper blurs by as much as it is covered.
+        val pageAway = minOf(1f, kotlin.math.abs(pager.currentPage + pager.currentPageOffsetFraction - HOME_PAGE))
+        val panelOver = if (panel != null && panel != Panel.MEDIA) reveal.value else 0f
+        val covered = maxOf(pageAway, panelOver)
+        // One wallpaper for every page: it plays on Home and holds its frame elsewhere.
+        Background(
+            wallpaper, dev.opencover.home.Wallpaper.homeAnim, dev.opencover.look.Playheads.home,
+            playing = covered == 0f, // a video can't be blurred: it pauses (on a captured frame) as soon as anything covers Home
+            crop = dev.opencover.home.Wallpaper.homeCrop, video = dev.opencover.home.Wallpaper.homeVideo,
+            modifier = Modifier.blur((dev.opencover.look.LookPrefs.current.blur * covered).dp, BlurredEdgeTreatment.Rectangle),
+        )
+        // A panel slides in over the wallpaper, not over the page under it: fade the page out as it comes.
+        Column(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - panelOver }) {
             if (editing) {
                 val removed = layoutPageFor(pager.currentPage)?.let { layout.removePage(it) }
                 EditBar(
@@ -169,16 +189,24 @@ fun Shell(
             }
             HorizontalPager(
                 state = pager,
-                modifier = Modifier.weight(1f).pointerInput(editing) {
-                    if (editing) return@pointerInput
+                userScrollEnabled = !homeEditing, // dragging Home's items must not turn the page
+                modifier = Modifier.weight(1f).pointerInput(editing, homeEditing) {
+                    if (editing || homeEditing) return@pointerInput
                     var total = 0f
-                    // Pull a panel in: fully shown after PULL of the screen height, snaps open past 15%.
+                    val velocity = VelocityTracker()
+                    // Pull a panel in: fully shown after PULL of the screen height. It snaps open past 15%; the app
+                    // drawer opens on a short pull or a quick flick up.
                     detectVerticalDragGestures(
-                        onDragStart = { total = 0f },
-                        onDragEnd = { if (reveal.value > 0.15f) scope.launch { reveal.animateTo(1f) } else closePanel() },
+                        onDragStart = { total = 0f; velocity.resetTracking() },
+                        onDragEnd = {
+                            val flingUp = velocity.calculateVelocity().y < -800f // px/s
+                            if (opensOnRelease(reveal.value, flingUp, drawer = panel == Panel.DRAWER)) scope.launch { reveal.animateTo(1f) }
+                            else closePanel()
+                        },
                         onDragCancel = { closePanel() },
                     ) { change, dy ->
                         total += dy
+                        velocity.addPosition(change.uptimeMillis, change.position)
                         val p = panel ?: panelFor(pager.currentPage, up = total < 0)?.also { panel = it }
                             ?: return@detectVerticalDragGestures
                         change.consume()
@@ -187,12 +215,21 @@ fun Shell(
                     }
                 },
             ) { i ->
-                when (i) {
-                    NOTIFICATIONS_PAGE -> NotificationsPage(NotificationStore.notes)
-                    HOME_PAGE -> HomeScreen(layout.home, wallpaper, a) { slot ->
-                        if (layout.home.quick[slot] == null) overlay = Overlay.PickSlot(slot) else slotMenu = slot
+                // As a page slides away it fades, and Home also sinks back a little; the page coming in rises to meet you.
+                // (The other pages only fade: shrinking would show the edges of their backdrop.)
+                Box(Modifier.fillMaxSize().graphicsLayer {
+                    val away = kotlin.math.abs(pager.currentPage - i + pager.currentPageOffsetFraction).coerceIn(0f, 1f)
+                    val eased = androidx.compose.animation.core.FastOutSlowInEasing.transform(away)
+                    alpha = 1f - 0.45f * eased
+                    if (i == HOME_PAGE) { scaleX = 1f - 0.08f * eased; scaleY = scaleX }
+                }) {
+                    when (i) {
+                        NOTIFICATIONS_PAGE -> PanelBackdrop { NotificationsPage(NotificationStore.notes) }
+                        HOME_PAGE -> HomeScreen(layout.home, a, homeEditing, { homeEditing = it }) { slot ->
+                            if (layout.home.quick[slot] == null) overlay = Overlay.PickSlot(slot) else slotMenu = slot
+                        }
+                        else -> PanelBackdrop { GridPage(layout, layoutPageFor(i)!!, editing, labels, a, onLongPress = { editing = true }) }
                     }
-                    else -> GridPage(layout, layoutPageFor(i)!!, editing, labels, a, onLongPress = { editing = true })
                 }
             }
         }
@@ -202,7 +239,6 @@ fun Shell(
             Box(
                 Modifier.fillMaxSize()
                     .offset { IntOffset(0, ((1f - reveal.value) * heightPx * sign).roundToInt()) }
-                    .background(Color(0xF0101010))
                     // Drag back toward the edge to close, wherever the content doesn't scroll itself.
                     .pointerInput(p) {
                         var total = 0f
@@ -219,7 +255,8 @@ fun Shell(
                         }
                     }
             ) {
-                when (p) {
+                if (p == Panel.MEDIA) MediaPanel() // album art is its own backdrop; close by swiping down or Back
+                else PanelBackdrop { when (p) {
                     Panel.DRAWER -> AppDrawer(
                         apps = apps,
                         icon = { a.repo.icon(it.pkg, it.activity, it.user) },
@@ -228,9 +265,9 @@ fun Shell(
                         onClose = { closePanel() },
                         hint = "Long-press an app to add it to this page",
                     )
-                    Panel.MEDIA -> MediaPanel() // close by swiping down or Back
                     Panel.QUICK_SETTINGS -> QuickPanel() // close by swiping up or Back
-                }
+                    Panel.MEDIA -> {}
+                } }
             }
         }
 

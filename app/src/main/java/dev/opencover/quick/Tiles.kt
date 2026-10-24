@@ -1,6 +1,7 @@
 package dev.opencover.quick
 
 import android.content.Context
+import android.provider.Settings
 import kotlin.math.max
 
 /** What a tile needs before it can switch. LATER: not working yet, shown grey. */
@@ -14,14 +15,15 @@ enum class Tile(val label: String, val need: Need) {
     ROTATION("Rotate", Need.SHIZUKU), // an action: turns the last cover app a quarter turn
     SOUND("Sound", Need.NONE),
     DND("Do not disturb", Need.NOTIFICATION_ACCESS),
-    BATTERY_SAVER("Battery saver", Need.SHIZUKU),
+    BATTERY_SAVER("Battery saver", Need.SECURE_SETTINGS), // "low_power", which OpenCover may write
     LOCATION("Location", Need.SECURE_SETTINGS),
     MOBILE_DATA("Mobile data", Need.SHIZUKU),
     AIRPLANE("Airplane", Need.SHIZUKU),
     NFC("NFC", Need.SHIZUKU),
     DARK_MODE("Dark mode", Need.SHIZUKU),
     KEEP_AWAKE("Keep awake", Need.NONE),
-    MIRROR("Mirror", Need.SHIZUKU),
+    MIRROR("Mirror", Need.NONE), // Shizuku adds live touch and hides OpenCover for banking apps; not needed
+    HOTSPOT("Hotspot", Need.SHIZUKU),
 }
 
 const val COLS = 4
@@ -61,7 +63,7 @@ enum class Ringer {
     }
 }
 
-/** With no tiles left there is nothing to long-press, so stay in edit mode. */
+/** With no tiles left there is nothing to show, so stay in edit mode. */
 fun inEditMode(editing: Boolean, shown: Int) = editing || shown == 0
 
 fun usable(need: Need, has: Set<Need>) = need == Need.NONE || need != Need.LATER && need in has
@@ -70,4 +72,20 @@ object QuickPrefs {
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("quick", Context.MODE_PRIVATE)
     fun tiles(ctx: Context) = parseTiles(prefs(ctx).getString("tiles", null))
     fun setTiles(ctx: Context, tiles: List<Tile>) = prefs(ctx).edit().putString("tiles", formatTiles(tiles)).apply()
+}
+
+/** The system settings page a long-press on [tile] opens; null when it has none (OpenCover's own tiles). */
+fun settingsAction(tile: Tile): String? = when (tile) {
+    Tile.WIFI -> Settings.ACTION_WIFI_SETTINGS
+    Tile.BLUETOOTH -> Settings.ACTION_BLUETOOTH_SETTINGS
+    Tile.SOUND -> Settings.ACTION_SOUND_SETTINGS
+    Tile.DND -> "android.settings.ZEN_MODE_SETTINGS"
+    Tile.BATTERY_SAVER -> Settings.ACTION_BATTERY_SAVER_SETTINGS
+    Tile.LOCATION -> Settings.ACTION_LOCATION_SOURCE_SETTINGS
+    Tile.MOBILE_DATA -> "android.settings.DATA_USAGE_SETTINGS"
+    Tile.AIRPLANE -> Settings.ACTION_AIRPLANE_MODE_SETTINGS
+    Tile.NFC -> Settings.ACTION_NFC_SETTINGS
+    Tile.DARK_MODE -> Settings.ACTION_DISPLAY_SETTINGS
+    Tile.HOTSPOT -> "android.settings.TETHER_SETTINGS"
+    Tile.FLASHLIGHT, Tile.ROTATION, Tile.KEEP_AWAKE, Tile.MIRROR -> null
 }

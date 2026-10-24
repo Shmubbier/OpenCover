@@ -3,7 +3,6 @@ package dev.opencover.mirror
 import android.graphics.Color
 import android.graphics.SurfaceTexture
 import android.os.Bundle
-import android.os.SystemClock
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.Surface
@@ -31,14 +30,13 @@ class MirrorActivity : ComponentActivity(), TextureView.SurfaceTextureListener {
     private var lastH = 0
     private var controls = emptyList<Button>()
 
-    // gesture recording
     private var forwarding = false
-    private val points = mutableListOf<Triple<Float, Float, Long>>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val svc = MirrorService.instance
         if (svc == null) { Toast.makeText(this, "Mirroring not running", Toast.LENGTH_SHORT).show(); finish(); return }
+        session = svc
 
         srcW = svc.captureWidth
         srcH = svc.captureHeight
@@ -94,6 +92,35 @@ class MirrorActivity : ComponentActivity(), TextureView.SurfaceTextureListener {
         lp.topMargin = viewBox.top + (boxH - lp.height) / 2
         surfaceView.layoutParams = lp
         surfaceView.rotation = turns * 90f
+        placeControls(dw, dh)
+    }
+
+    /**
+     * The controls sit at the mirrored screen's own top-left, in the margin beside it, and turn with it, so they stay
+     * where they'd be if the cover itself were turned that way.
+     */
+    private fun placeControls(dw: Int, dh: Int) {
+        val density = resources.displayMetrics.density
+        // A point as seen upright from the mirror's side, mapped back to the cover.
+        fun toScreen(u: Int, v: Int): Pair<Int, Int> = when (turns) {
+            1 -> (dw - v) to u
+            2 -> (dw - u) to (dh - v)
+            3 -> v to (dh - u)
+            else -> u to v
+        }
+        controls.forEachIndexed { i, b ->
+            val size = b.layoutParams.width
+            val u = (8 * density).toInt()
+            val v = ((24 + i * 64) * density).toInt()
+            val (x1, y1) = toScreen(u, v)
+            val (x2, y2) = toScreen(u + size, v + size)
+            val lp = b.layoutParams as FrameLayout.LayoutParams
+            lp.gravity = Gravity.TOP or Gravity.START
+            lp.leftMargin = minOf(x1, x2).coerceIn(0, dw - size)
+            lp.topMargin = minOf(y1, y2).coerceIn(0, dh - size)
+            b.layoutParams = lp
+            b.rotation = turns * 90f
+        }
     }
 
     private fun onControl(x: Float, y: Float): Boolean = controls.any { b ->
@@ -125,34 +152,43 @@ class MirrorActivity : ComponentActivity(), TextureView.SurfaceTextureListener {
             forwarding = !onControl(x, y) && x >= viewBox.left && x <= viewBox.right && y >= viewBox.top && y <= viewBox.bottom
         }
         if (!forwarding) return super.dispatchTouchEvent(ev) // touches on the controls or beside the mirror
+        if (MirrorInput.live) {
+            // As it happens, every finger (pinch works); a finger that slides off the mirror is held at its edge.
+            val fingers = (0 until ev.pointerCount).map { i ->
+                val (sx, sy) = toSource(ev.getX(i).coerceIn(viewBox.left.toFloat(), viewBox.right - 1f),
+                    ev.getY(i).coerceIn(viewBox.top.toFloat(), viewBox.bottom - 1f), viewBox, srcW, srcH, turns) ?: (0f to 0f)
+                Triple(ev.getPointerId(i), sx, sy)
+            }
+            val kind = when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> 'D'
+                MotionEvent.ACTION_MOVE -> 'M'
+                MotionEvent.ACTION_UP -> 'U'
+                MotionEvent.ACTION_CANCEL -> 'C'
+                MotionEvent.ACTION_POINTER_DOWN -> 'P'
+                MotionEvent.ACTION_POINTER_UP -> 'R'
+                else -> return true
+            }
+            MirrorInput.touch(touchLine(kind, ev.actionIndex, fingers))
+            return true
+        }
+        // Without Shizuku: the first finger, live, through the accessibility service.
+        val (sx, sy) = toSource(x.coerceIn(viewBox.left.toFloat(), viewBox.right - 1f), y.coerceIn(viewBox.top.toFloat(), viewBox.bottom - 1f),
+            viewBox, srcW, srcH, turns) ?: return true
         when (ev.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                points.clear()
-                points += Triple(x, y, SystemClock.uptimeMillis())
-            }
-            MotionEvent.ACTION_MOVE -> points += Triple(x, y, SystemClock.uptimeMillis())
-            MotionEvent.ACTION_UP -> {
-                points += Triple(x, y, SystemClock.uptimeMillis())
-                dispatchStroke()
-            }
+            MotionEvent.ACTION_DOWN -> LiveGesture.down(sx, sy)
+            MotionEvent.ACTION_MOVE -> LiveGesture.move(sx, sy)
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> LiveGesture.up(sx, sy)
         }
         return true
     }
 
-    private fun dispatchStroke() {
-        val mapped = points.mapNotNull { (px, py, t) ->
-            // offset touch coords into the SurfaceView's box
-            toSource(px, py, viewBox, srcW, srcH, turns)?.let { (sx, sy) -> Triple(sx, sy, t) }
-        }
-        points.clear()
-        if (mapped.isEmpty()) return
-        val (x1, y1, t1) = mapped.first()
-        val (x2, y2, t2) = mapped.last()
-        MirrorInput.stroke(x1, y1, x2, y2, strokeDuration(t1, t2))
-    }
+
+    /** The session this screen shows. Only it is stopped here, and only when the screen is really closed. */
+    private var session: MirrorService? = null
 
     override fun onDestroy() {
-        MirrorService.instance?.stop()
+        // A leftover screen from an earlier session, or one being recreated, must not end the session now running.
+        if (isFinishing && session != null && MirrorService.instance === session) session?.stop()
         super.onDestroy()
     }
 }

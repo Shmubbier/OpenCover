@@ -106,6 +106,8 @@ class OverlayKeyboard(private val service: AccessibilityService) : KeyboardView.
         }
     }
 
+    val showing get() = view != null
+
     fun hide() {
         handler.removeCallbacks(hideSoon)
         editor = null

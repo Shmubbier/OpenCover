@@ -2,7 +2,20 @@ package dev.opencover.ui
 
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.horizontalDrag
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.composed
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.layout.onSizeChanged
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,13 +28,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -86,7 +96,8 @@ fun NotificationsPage(notes: List<Note>) {
         items(groups, key = { it.key }) { c ->
             val open = c.key in expanded
             Column(
-                Modifier.fillMaxWidth().background(Card, RoundedCornerShape(16.dp))
+                Modifier.fillMaxWidth().swipeRightToDismiss { c.notes.forEach { NotificationStore.dismiss(it.key) } }
+                    .background(Card, RoundedCornerShape(16.dp))
                     .clickable { expanded = if (open) expanded - c.key else expanded + c.key }
                     .padding(12.dp),
             ) {
@@ -104,26 +115,55 @@ fun NotificationsPage(notes: List<Note>) {
 @Composable
 private fun NoteRow(n: Note) {
     val ctx = LocalContext.current
-    // Only expanded rows swipe; swiping elsewhere on this page still changes pages.
-    val state = rememberSwipeToDismissBoxState(confirmValueChange = {
-        if (it != SwipeToDismissBoxValue.Settled) NotificationStore.dismiss(n.key)
-        true
-    })
-    SwipeToDismissBox(state, backgroundContent = {}) {
-        Column(
-            Modifier.fillMaxWidth().background(Card)
-                .clickable { if (!NotificationStore.open(ctx, n.key)) toast(ctx, "Couldn't open on the cover screen") }
-                .padding(vertical = 6.dp),
-        ) {
-            Text(n.title, color = Color.White, fontSize = 13.sp, maxLines = 1)
-            Text(n.text, color = Color.LightGray, fontSize = 13.sp)
-            if (n.actions.isNotEmpty()) Row {
-                n.actions.forEachIndexed { i, act ->
-                    TextButton(onClick = { runAction(ctx, n, i) }) { Text(act.title, maxLines = 1) }
-                }
+    Column(
+        Modifier.fillMaxWidth().swipeRightToDismiss { NotificationStore.dismiss(n.key) }.background(Card)
+            .clickable { if (!NotificationStore.open(ctx, n.key)) toast(ctx, "Couldn't open on the cover screen") }
+            .padding(vertical = 6.dp),
+    ) {
+        Text(n.title, color = Color.White, fontSize = 13.sp, maxLines = 1)
+        Text(n.text, color = Color.LightGray, fontSize = 13.sp)
+        if (n.actions.isNotEmpty()) Row {
+            n.actions.forEachIndexed { i, act ->
+                TextButton(onClick = { runAction(ctx, n, i) }) { Text(act.title, maxLines = 1) }
             }
         }
     }
+}
+
+/**
+ * Swipe right to dismiss. This is the leftmost page, so a swipe right has no page to go to; a swipe left is left alone
+ * for the pager, which goes to Home. Ongoing notifications can't be cleared: the card comes back.
+ */
+private fun Modifier.swipeRightToDismiss(onDismiss: () -> Unit): Modifier = composed {
+    val x = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    var width by remember { mutableStateOf(1) }
+    onSizeChanged { width = it.width }
+        .graphicsLayer { translationX = x.value; alpha = 1f - (x.value / width).coerceIn(0f, 1f) * 0.7f }
+        .pointerInput(Unit) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                var right = false
+                val drag = awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
+                    if (over > 0) { right = true; change.consume() }
+                } ?: return@awaitEachGesture
+                if (!right) return@awaitEachGesture
+                val velocity = VelocityTracker().apply { addPosition(drag.uptimeMillis, drag.position) }
+                horizontalDrag(drag.id) { change ->
+                    velocity.addPosition(change.uptimeMillis, change.position)
+                    scope.launch { x.snapTo((x.value + change.positionChange().x).coerceAtLeast(0f)) }
+                    change.consume()
+                }
+                val gone = x.value > width * 0.35f || velocity.calculateVelocity().x > 1500f
+                scope.launch {
+                    if (!gone) { x.animateTo(0f); return@launch }
+                    x.animateTo(width.toFloat())
+                    onDismiss()
+                    delay(700) // still here (not clearable): bring it back
+                    x.animateTo(0f)
+                }
+            }
+        }
 }
 
 /** Reply actions open the reply sheet; others fire directly. */

@@ -47,11 +47,24 @@ class CoverAccessibility : AccessibilityService() {
     private val dreams = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
             when (i.action) {
-                Intent.ACTION_DREAMING_STARTED -> if (LockPrefs.aod && aodReady(c)) AodOverlay.show(this@CoverAccessibility)
+                Intent.ACTION_DREAMING_STARTED -> if (LockPrefs.aod && aodReady(c)) {
+                    android.util.Log.i("OpenCoverAod", "doze started: showing the AOD")
+                    AodOverlay.show(this@CoverAccessibility)
+                    dev.opencover.lock.AodTimeout.start(c)
+                } else android.util.Log.i("OpenCoverAod", "doze started: no AOD (on=${LockPrefs.aod}, Samsung AOD ready=${aodReady(c)})")
                 Intent.ACTION_DREAMING_STOPPED -> AodOverlay.hide()
+                // Only a real wake: turning the AOD off itself also ends the doze.
+                Intent.ACTION_SCREEN_ON -> dev.opencover.lock.AodTimeout.stop(c)
+                android.os.PowerManager.ACTION_POWER_SAVE_MODE_CHANGED -> { dev.opencover.lock.PowerSaving.changed(c); return }
+                dev.opencover.lock.PowerSaving.TURN_OFF -> { dev.opencover.lock.PowerSaving.set(c, false); return }
             }
             // Woken (from doze or fully off): let the windows settle, then maybe replace Samsung's lock screen.
-            if (i.action != Intent.ACTION_DREAMING_STARTED) handler.postDelayed({ LockScreen.maybeShow(this@CoverAccessibility) }, 250)
+            if (i.action != Intent.ACTION_DREAMING_STARTED && i.action != Intent.ACTION_USER_PRESENT)
+                handler.postDelayed({ LockScreen.maybeShow(this@CoverAccessibility) }, 250)
+            // The navigation bar hides while locked and is redrawn on window changes, but unlocking can finish after the
+            // last one: redraw it once things have settled, so it doesn't stay hidden until the next change.
+            if (i.action == Intent.ACTION_USER_PRESENT || i.action == Intent.ACTION_SCREEN_ON)
+                listOf(300L, 1_000L).forEach { handler.postDelayed({ updateNavBar() }, it) }
         }
     }
 
@@ -62,20 +75,43 @@ class CoverAccessibility : AccessibilityService() {
             addAction(Intent.ACTION_DREAMING_STARTED)
             addAction(Intent.ACTION_DREAMING_STOPPED)
             addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_USER_PRESENT)
+            addAction(android.os.PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
+            addAction(dev.opencover.lock.PowerSaving.TURN_OFF)
         }, RECEIVER_NOT_EXPORTED)
+        dev.opencover.lock.PowerSaving.changed(this) // already on when the service starts
         // Restarted while the phone sleeps (update, low memory): the doze began before we were listening.
         val cover = getSystemService(android.hardware.display.DisplayManager::class.java).getDisplay(dev.opencover.COVER_DISPLAY)
         if (LockPrefs.aod && aodReady(this) &&
             dozing(getSystemService(android.os.PowerManager::class.java).isInteractive, cover?.state ?: android.view.Display.STATE_OFF)
-        ) AodOverlay.show(this)
+        ) { AodOverlay.show(this); dev.opencover.lock.AodTimeout.start(this) }
+        // Restarted after the AOD timeout turned Samsung's AOD off: turn it back on once the phone is in use.
+        if (getSystemService(android.os.PowerManager::class.java).isInteractive) dev.opencover.lock.AodTimeout.stop(this)
         refreshScope()
-        // The hold and its watcher do not survive a reboot. Only re-hold: a reset while awake locks the phone.
-        if (PhonePrefs(this).keepCoverOn) Fold.apply(this)
+        dev.opencover.nav.NavPrefs.syncHint(this)
         handler.post { updateNavBar() } // the window list is ready once connected
+        // Shizuku state does not survive a reboot, and after one Shizuku starts later than this service: redo it
+        // whenever Shizuku comes up (sticky: also right now if it already is).
+        rikka.shizuku.Shizuku.addBinderReceivedListenerSticky(shizukuUp, handler)
+        getSystemService(android.hardware.display.DisplayManager::class.java).registerDisplayListener(coverTurned, handler)
+    }
+
+    /** The cover turned (an app's rotation, or an app switching between landscape and portrait): the bar moves too. */
+    private val coverTurned = object : android.hardware.display.DisplayManager.DisplayListener {
+        override fun onDisplayChanged(id: Int) { if (id == COVER_DISPLAY) updateNavBar() }
+        override fun onDisplayAdded(id: Int) {}
+        override fun onDisplayRemoved(id: Int) {}
+    }
+
+    private val shizukuUp = rikka.shizuku.Shizuku.OnBinderReceivedListener {
+        // Only re-hold the fold state: a reset while awake locks the phone.
+        if (PhonePrefs(this).keepCoverOn) Fold.apply(this)
         if (PhonePrefs(this).rotationResetPending) RotationFeature.resetToDefault(this)
     }
 
     override fun onDestroy() {
+        rikka.shizuku.Shizuku.removeBinderReceivedListener(shizukuUp)
+        getSystemService(android.hardware.display.DisplayManager::class.java).unregisterDisplayListener(coverTurned)
         NavBar.hide()
         runCatching { unregisterReceiver(dreams) }
         AodOverlay.hide()
@@ -98,7 +134,7 @@ class CoverAccessibility : AccessibilityService() {
         serviceInfo = serviceInfo.apply {
             // A turned app needs its windows seen from every app; screen content is still never read.
             // Window-change events (top edge, our navigation bar) only arrive with every app in scope.
-            packageNames = if (topEdge || nav || PhonePrefs(this@CoverAccessibility).hasRotations) null
+            packageNames = if (topEdge || nav || KeepOnCover.enabled(this@CoverAccessibility) || PhonePrefs(this@CoverAccessibility).hasRotations) null
             else (setOf("com.android.systemui") + BankingMode.apps(this@CoverAccessibility)).toTypedArray()
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
                 (if (topEdge || nav) AccessibilityEvent.TYPE_WINDOWS_CHANGED else 0)
@@ -147,14 +183,21 @@ class CoverAccessibility : AccessibilityService() {
         if (event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
             if (TopEdge.enabled(this)) takeTopEdge()
             updateNavBar()
+            NavBar.dropCurtainIfHome(this)
             return
         }
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString()
+        if (pkg != null && KeepOnCover.onWindow(this, event.displayId, pkg, event.className?.toString().orEmpty())) return
         if (event.displayId == COVER_DISPLAY && pkg != null) when (pkg) {
             packageName -> {} // OpenCover's overlays; CoverActivity uprights itself
             "com.android.systemui" -> if (event.className?.toString() == SAMSUNG_COVER_HOME) RotationFeature.upright(this)
-            else -> { RotationFeature.onWindow(this, pkg); CallStore.otherWindow(this, pkg) }
+            imePackage() -> {} // the keyboard opens over the app; it must not turn the cover back upright
+            else -> {
+                // An app in the background still reports its window when the cover's density changes: only one in front counts.
+                if (dev.opencover.ui.CoverActivity.current == null) RotationFeature.onWindow(this, pkg)
+                CallStore.otherWindow(this, pkg)
+            }
         }
         if (pkg != null && pkg in BankingMode.apps(this)) {
             BankingMode.pause(this, pkg) // opened some other way than from OpenCover
@@ -162,6 +205,8 @@ class CoverAccessibility : AccessibilityService() {
         }
         if (event.displayId != COVER_DISPLAY || CoverWatcher.paused) return
         if (event.className?.toString() != SAMSUNG_COVER_HOME) return
+        // Mirroring brings Samsung's cover home up while it switches the phone open; the mirror goes on top of it.
+        if (dev.opencover.mirror.MirrorService.instance != null) return
         // Samsung's cover home also sits behind the lock screen; redirecting there fights the
         // PIN/face unlock UI (flicker). CoverWatcher opens the launcher on unlock instead.
         if (getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
@@ -176,7 +221,51 @@ class CoverAccessibility : AccessibilityService() {
     fun updateNavBar() {
         val bar = NavBar.samsungBar(this)
         val locked = getSystemService(KeyguardManager::class.java).isKeyguardLocked
-        NavBar.update(this, bar.takeIf { navBarShown(NavPrefs.enabled(this), bar != null, locked) })
+        NavBar.update(this, bar.takeIf { navBarShown(NavPrefs.enabled(this), bar != null, locked) }, keyboardUp())
+    }
+
+    /** The package of the keyboard in use ("pkg/.Service" in settings). */
+    private fun imePackage(): String? =
+        android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.DEFAULT_INPUT_METHOD)?.substringBefore('/')
+
+    /** A keyboard is up on the cover: Samsung's (an input-method window) or OpenCover's own. */
+    private fun keyboardUp(): Boolean = keyboard?.showing == true || runCatching {
+        windowsOnAllDisplays[dev.opencover.COVER_DISPLAY].orEmpty()
+            .any { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+    }.getOrDefault(false)
+
+    /** Hides whichever keyboard is up: OpenCover's own, or the input method (Back closes it). */
+    /**
+     * The inner screen is broken, so Android's "Allow USB debugging?" (or wireless debugging) prompt, which shows only
+     * there, can't be answered. On the user's tap, find that prompt on the inner screen, tick "Always allow" and tap
+     * Allow. Returns what happened, for a toast.
+     */
+    fun approveInnerPrompt(): String {
+        val info = serviceInfo
+        val had = info.flags and android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS != 0
+        if (!had) serviceInfo = info.apply { flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS }
+        try {
+            val roots = windowsOnAllDisplays[android.view.Display.DEFAULT_DISPLAY].orEmpty()
+                .filter { it.root?.packageName == "com.android.systemui" }.mapNotNull { it.root }
+            for (root in roots) {
+                val allow = (root.findAccessibilityNodeInfosByViewId("android:id/button1") +
+                    root.findAccessibilityNodeInfosByText("Allow")).firstOrNull { n ->
+                        n.isClickable && n.text?.toString()?.trim()?.equals("Allow", ignoreCase = true) == true
+                    } ?: continue
+                root.findAccessibilityNodeInfosByText("Always allow").firstOrNull { it.isCheckable }?.let { box ->
+                    if (!box.isChecked) box.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
+                }
+                return if (allow.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)) "Allowed" else "Couldn't tap Allow"
+            }
+            return "No debugging prompt on the inner screen"
+        } finally {
+            if (!had) refreshScope()
+        }
+    }
+
+    fun hideKeyboard() {
+        if (keyboard?.showing == true) keyboard?.hide() else performGlobalAction(GLOBAL_ACTION_BACK)
+        handler.postDelayed({ updateNavBar() }, 300) // drop the button once the keyboard has gone
     }
 
     override fun onInterrupt() {}

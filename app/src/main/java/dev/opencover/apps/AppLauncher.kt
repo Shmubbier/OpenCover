@@ -6,14 +6,39 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.LauncherApps
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.UserManager
 import android.widget.Toast
 import dev.opencover.COVER_DISPLAY
+import dev.opencover.quick.ShizukuShell
 import dev.opencover.watcher.CoverAccessibility
 
 object AppLauncher {
     fun options(): Bundle =
         ActivityOptions.makeBasic().setLaunchDisplayId(COVER_DISPLAY).toBundle()
+
+    // Hidden API (as Z Flip Cover Power uses it): without it the launch keeps the system's default windowing mode.
+    private val setWindowingMode by lazy {
+        runCatching { ActivityOptions::class.java.getMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType) }.getOrNull()
+    }
+
+    /**
+     * Options for an app opened on the cover without Shizuku: fullscreen there, allowed to start from the background,
+     * and, given where it was tapped ([from], in [view]'s window), fading in over the card OpenCover grew from there.
+     */
+    private fun appOptions(view: android.view.View? = null, from: android.graphics.Rect? = null): Bundle =
+        // Samsung's cover ignores the system's grow-from-the-icon animation (it always slides), so OpenCover grows a card
+        // from the icon itself and the app just fades in over it.
+        (if (view != null && from != null) ActivityOptions.makeCustomAnimation(view.context, dev.opencover.R.anim.oc_app_in, dev.opencover.R.anim.oc_hold)
+        else ActivityOptions.makeBasic()).setLaunchDisplayId(COVER_DISPLAY).apply {
+        runCatching { setWindowingMode?.invoke(this, 1) } // WINDOWING_MODE_FULLSCREEN
+        setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS)
+    }.toBundle()
+
+    /** Starts another app's screen on the cover from the accessibility service, as an app launch without Shizuku. */
+    fun startApp(ctx: Context, intent: Intent) =
+        (CoverAccessibility.instance ?: ctx).startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), appOptions())
 
     /**
      * Starts one of our own screens (or a Settings page) on the cover display. [animate] false: no system transition
@@ -25,17 +50,73 @@ object AppLauncher {
         (CoverAccessibility.instance ?: ctx).startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), options())
     }
 
-    /** Launches an installed app on the cover display as the given user (serial number). False if it failed. */
-    fun launch(ctx: Context, pkg: String, activity: String, user: Long): Boolean {
-        val handle = ctx.getSystemService(UserManager::class.java).getUserForSerialNumber(user)
-        try {
-            requireNotNull(handle) { "user $user gone" }
-            ctx.getSystemService(LauncherApps::class.java)
-                .startMainActivity(ComponentName(pkg, activity), handle, null, options())
-            return true
-        } catch (e: Exception) {
-            Toast.makeText(ctx, "Couldn't open $pkg", Toast.LENGTH_SHORT).show()
-            return false
-        }
+    /**
+     * Moves [pkg] to the cover, its task as it is (`am start` as the shell). Needs Shizuku: without it Samsung only lets
+     * apps on Good Lock MultiStar's cover list open there, and it keeps those on the cover itself. Off the main thread.
+     */
+    fun moveToCover(ctx: Context, pkg: String): Boolean {
+        val component = ctx.packageManager.getLaunchIntentForPackage(pkg)?.component ?: return false
+        return ShizukuShell.allowed() && ShizukuShell.run(
+            "am", "start", "--display", "$COVER_DISPLAY", "-a", Intent.ACTION_MAIN, "-c", Intent.CATEGORY_LAUNCHER,
+            "-f", "$LAUNCHER_FLAGS", "-n", component.flattenToShortString(),
+        )
     }
+
+    /**
+     * Launches an installed app on the cover display as the given user (serial number); [onFail] runs on the main
+     * thread if it didn't open. Samsung answers many apps launched by another app with "Open phone to continue", but
+     * lets the same launch from the shell through, so Shizuku goes first.
+     */
+    fun launch(
+        ctx: Context, pkg: String, activity: String, user: Long, onFail: () -> Unit = {},
+        view: android.view.View? = null, from: android.graphics.Rect? = null,
+    ) {
+        val handle = ctx.getSystemService(UserManager::class.java).getUserForSerialNumber(user)
+        // UserHandle's id is hidden API; its toString is "UserHandle{<id>}".
+        val userId = handle?.toString()?.substringAfter('{')?.substringBefore('}')
+        val main = Handler(Looper.getMainLooper())
+        // With every app on the cover list (see CoverAllowList) the accessibility start works for all of them, and it
+        // can carry the grow-from-the-icon animation; Shizuku's am start can't, so it is only the fallback then.
+        val listed = ctx.checkSelfPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED && CoverAccessibility.instance != null
+        Thread {
+            val shell = !listed && userId != null && ShizukuShell.run(
+                "am", "start", "--display", "$COVER_DISPLAY", "--user", userId,
+                "-a", Intent.ACTION_MAIN, "-c", Intent.CATEGORY_LAUNCHER, "-f", "${LAUNCHER_FLAGS}", "-n", "$pkg/$activity",
+            )
+            if (!shell) main.post {
+                try {
+                    requireNotNull(handle) { "user $user gone" }
+                    val service = CoverAccessibility.instance
+                    val own = handle == android.os.Process.myUserHandle()
+                    if (listed && own && view != null && from != null) {
+                        // From OpenCover's own screen: the system only honors its animation options for the screen that
+                        // was tapped. Allowed on the cover since the app is on the cover list.
+                        (view.context as? android.app.Activity ?: ctx).startActivity(
+                            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(ComponentName(pkg, activity))
+                                .addFlags(LAUNCHER_FLAGS or Intent.FLAG_ACTIVITY_NO_ANIMATION),
+                            appOptions(view, from),
+                        )
+                    } else if (service != null && own) {
+                        // No Shizuku: start it from the accessibility service, which Samsung lets open apps on the
+                        // cover (a plain launcher start gets "Open phone to continue").
+                        service.startActivity(
+                            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(ComponentName(pkg, activity))
+                                .addFlags(LAUNCHER_FLAGS),
+                            appOptions(view, from),
+                        )
+                    } else {
+                        ctx.getSystemService(LauncherApps::class.java)
+                            .startMainActivity(ComponentName(pkg, activity), handle, null, appOptions())
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(ctx, "Couldn't open $pkg", Toast.LENGTH_SHORT).show()
+                    onFail()
+                }
+            }
+        }.start()
+    }
+
+    // What a launcher uses: a new task, or the app's existing one brought to the front as it was.
+    private const val LAUNCHER_FLAGS = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
 }

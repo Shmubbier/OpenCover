@@ -96,49 +96,26 @@ fun LockFace(
     onMove: ((Module, Spot) -> Unit)? = null,
     selected: Module? = null,
     onSelect: (Module) -> Unit = {},
+    /** Moves only the clock and modules (the AOD's burn-in walk); the background stays put and covers the screen. */
+    shift: androidx.compose.ui.unit.DpOffset = androidx.compose.ui.unit.DpOffset.Zero,
+    /** 0..1, how far an unlock swipe has gone: the clock and modules dim and shrink a little (not the background). */
+    pull: Float = 0f,
 ) {
     val ctx = LocalContext.current
-    val wallpaper = remember(dim) { if (dim) null else Wallpaper.load(ctx) }
-    val sizes = remember { mutableStateMapOf<Module, IntSize>() }
     BoxWithConstraints(modifier.fillMaxSize().background(Color.Black)) {
-        wallpaper?.let { Image(it, null, Modifier.fillMaxSize().alpha(0.6f), contentScale = ContentScale.Crop) }
-        val wPx = constraints.maxWidth.toFloat()
-        val hPx = constraints.maxHeight.toFloat()
-        val density = LocalDensity.current
-        layout.forEach { (module, spot) ->
-            if (!spot.on && onMove == null) return@forEach
-            // Clamped as drawn too: a module can grow after it was placed (another clock style, more icons, the chip).
-            val size = sizes[module] ?: IntSize.Zero
-            val w = size.width * spot.scale / wPx
-            val h = size.height * spot.scale / hPx
-            val shown = clamp(spot, w, h)
-            val current by rememberUpdatedState(shown)
-            var m = Modifier
-                .offset(with(density) { (shown.x * wPx).toDp() }, with(density) { (shown.y * hPx).toDp() })
-                .onSizeChanged { sizes[module] = it }
-                .graphicsLayer {
-                    scaleX = spot.scale; scaleY = spot.scale
-                    transformOrigin = TransformOrigin(0f, 0f)
-                    alpha = if (!spot.on) 0.3f else if (dim) 0.55f else 1f
-                }
-            // Editor: the selected module is outlined until another one is touched.
-            if (onMove != null) m = m
-                .border(2.dp, if (selected == module) Color(0xFF8AB4F8) else Color.Transparent, RoundedCornerShape(6.dp))
-                .pointerInput(module) {
-                    awaitEachGesture {
-                        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                        onSelect(module)
-                    }
-                }
-            // Editor: drag to move, pinch to resize; each step is saved to the draft at once.
-            if (onMove != null) m = m.pointerInput(module) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    val s = sizes[module] ?: IntSize.Zero
-                    val next = resized(current, zoom)
-                    onMove(module, dropped(next, pan.x, pan.y, wPx, hPx, s.width * next.scale / wPx, s.height * next.scale / hPx))
-                }
+        // The lock screen's background (Home's unless set); the AOD shows the frame the lock screen stopped on, dimmed.
+        // The AOD on black (battery): only the clock and modules are lit.
+        if (!(dim && LockPrefs.aodBlack)) Background(
+            Wallpaper.lockStill ?: Wallpaper.homeStill, Wallpaper.lockAnim, dev.opencover.look.Playheads.lock,
+            playing = !dim, alpha = if (dim) 0.3f else 0.6f, crop = Wallpaper.lockAnimCrop, video = Wallpaper.lockVideo,
+        )
+        BoxWithConstraints(Modifier.fillMaxSize().offset(shift.x, shift.y).graphicsLayer {
+            alpha = 1f - 0.7f * pull
+            scaleX = 1f - 0.06f * pull; scaleY = scaleX
+        }) {
+            Placed(layout, onMove, selected, onSelect, onAlpha = if (dim) 0.55f else 1f) { module ->
+                ModuleView(module, locked || onMove != null, onPeek)
             }
-            Box(m) { ModuleView(module, locked || onMove != null, onPeek) }
         }
     }
 }

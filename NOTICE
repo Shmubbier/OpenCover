@@ -2,6 +2,10 @@ OpenCover is licensed under GPL-3.0.
 
 Rotation, keep cover on, mirroring and the heat guard come from FreeFlip (same author, GPL-3.0).
 
+Themed icons and icon shapes are made for Lawnicons (https://github.com/lawnchairlauncher/lawnicons), by the
+Lawnchair team, licensed under the Apache License, Version 2.0. Lawnicons is a separate app; OpenCover reads its
+icons when it is installed and does not include them. The icon shapes follow Lawnchair's choices.
+
 app/src/main/assets/words_en.txt is derived from the AOSP LatinIME word list
 dictionaries/en_GB_wordlist.combined.gz, Copyright The Android Open Source Project,
 licensed under the Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0).

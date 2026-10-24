@@ -1,10 +1,8 @@
 package dev.opencover.mirror
 
-import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
@@ -12,7 +10,9 @@ import android.provider.Settings
 import java.util.concurrent.Executors
 import dev.opencover.watcher.CoverAccessibility
 import dev.opencover.watcher.withService
+import dev.opencover.phone.INNER_SCREEN_RESET
 import dev.opencover.phone.foldStateArgs
+import dev.opencover.phone.innerScreenScript
 import dev.opencover.phone.PhonePrefs
 import dev.opencover.phone.RotationFeature
 import dev.opencover.quick.ShizukuShell
@@ -20,7 +20,9 @@ import dev.opencover.quick.ShizukuShell
 /**
  * What the phone must look like while mirroring a folded phone:
  *  - device state 4 (both displays render), otherwise the inner screen draws nothing;
- *  - developer options and unknown sources off, because banking apps like GCash refuse to run with them on.
+ *  - with Shizuku, developer options and unknown sources off, because banking apps refuse to run with them on and
+ *    OpenCover's accessibility (which would notice a banking app and hide them then) is off for the session. Without
+ *    Shizuku they stay on (adb keeps working); banking mode hides them only while a banking app is open.
  * Everything is put back when mirroring stops (see [resetState] for the lock that costs).
  */
 object MirrorEnv {
@@ -32,20 +34,53 @@ object MirrorEnv {
     private const val UNFOLDED_STATE = "4"
     private const val SECURE_NON_MARKET = "install_non_market_apps"
     private const val A11Y = "enabled_accessibility_services"
-    private const val HIDE = "settings put global development_settings_enabled 0; settings put secure $SECURE_NON_MARKET 0"
 
     /** Blocking; call off the main thread. Returns the shell output, null if Shizuku isn't ready. */
     fun enter(ctx: Context): String? {
         if (MirrorService.instance == null) return null // the session already ended
         val prefs = PhonePrefs(ctx)
         prefs.resetPending = true // until leave() finishes the job; if we die mid-session, recover() resets
+        val hideDev = ShizukuShell.allowed()
         // A crashed earlier run may have left our zeros behind; its saved originals win.
-        if (prefs.restoreSettings == null) {
+        if (hideDev && prefs.restoreSettings == null) {
             val r = ctx.contentResolver
             prefs.restoreSettings = "${Settings.Global.getInt(r, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0)}," +
                 Settings.Secure.getInt(r, SECURE_NON_MARKET, 0)
         }
-        return ShizukuShell.output("sh", "-c", "cmd device_state state $UNFOLDED_STATE; $HIDE; cmd device_state print-state")
+        // Optional: a shorter inner screen fits the near-square cover better. Before the state change, so the capture
+        // size read once the display settles already has it.
+        // wm size needs the shell user: only with Shizuku.
+        val resize = if (prefs.mirrorResize && ShizukuShell.allowed()) innerScreenScript(prefs.mirrorSize, prefs.mirrorDensity) else null
+        if (resize != null) prefs.innerResetPending = true
+        // OpenCover holds WRITE_SECURE_SETTINGS, so it hides these itself.
+        if (hideDev) runCatching {
+            Settings.Global.putInt(ctx.contentResolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0)
+            Settings.Secure.putInt(ctx.contentResolver, SECURE_NON_MARKET, 0)
+        }
+        val out = ShizukuShell.output("sh", "-c", "${resize.orEmpty()}cmd device_state state $UNFOLDED_STATE; cmd device_state print-state")
+        showPhoneHome(ctx)
+        return out
+    }
+
+    /**
+     * Opening moves OpenCover's Home from the cover to the inner screen; put the phone's own home in front of it there.
+     * Started from the accessibility service (an `am start` without Shizuku runs as OpenCover and is ignored).
+     */
+    private fun showPhoneHome(ctx: Context) {
+        val home = ctx.packageManager.resolveActivity(
+            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), android.content.pm.PackageManager.MATCH_DEFAULT_ONLY,
+        )?.activityInfo?.takeIf { it.packageName != "android" } ?: return // "android": no default home, it would ask
+        Thread.sleep(500) // let the inner screen come on first
+        Handler(Looper.getMainLooper()).post {
+            val starter: Context = CoverAccessibility.instance ?: ctx
+            runCatching {
+                starter.startActivity(
+                    Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+                        .setComponent(android.content.ComponentName(home.packageName, home.name)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    android.app.ActivityOptions.makeBasic().setLaunchDisplayId(android.view.Display.DEFAULT_DISPLAY).toBundle(),
+                )
+            }
+        }
     }
 
     /**
@@ -55,6 +90,9 @@ object MirrorEnv {
      */
     fun hideAccessibility(ctx: Context) {
         if (MirrorService.instance == null) return // the session already ended; leave() has restored it
+        // Without Shizuku, touch on the mirror goes through this service, so it has to stay on (banking apps that
+        // reject it then won't run while mirroring).
+        if (!ShizukuShell.allowed()) return
         val now = Settings.Secure.getString(ctx.contentResolver, A11Y)
         val me = me(ctx)
         if (me !in now.orEmpty().split(":")) return // wasn't on (banking mode may have it off)
@@ -66,52 +104,48 @@ object MirrorEnv {
 
     fun leave(ctx: Context) {
         val app = ctx.applicationContext
+        android.util.Log.i("OpenCoverMirror", "session ends", Throwable("who ended it"))
         PhonePrefs(app).resetPending = true
-        later { restoreSettings(app); restoreAccessibility(app) }
+        later { restoreSettings(app); restoreAccessibility(app); restoreInnerScreen(app) }
         resetState(app, wake = true)
     }
 
     /** Finish anything an earlier run left undone (process died, Shizuku was down). Call from Application.onCreate. */
     fun recover(app: Context) {
         val prefs = PhonePrefs(app)
-        if (prefs.restoreSettings != null || prefs.restoreAccessibility) {
-            later { restoreSettings(app); restoreAccessibility(app) }
+        if (prefs.restoreSettings != null || prefs.restoreAccessibility || prefs.innerResetPending) {
+            later { restoreSettings(app); restoreAccessibility(app); restoreInnerScreen(app) }
         }
-        if (prefs.resetPending) resetWhenAsleep(app)
+        // Left forced open the cover is black with nothing on it, so put the state back now, as a session end does
+        // (the phone locks), and wake the cover if it was on.
+        if (prefs.resetPending && MirrorService.instance == null) {
+            resetState(app, wake = app.getSystemService(PowerManager::class.java).isInteractive)
+        }
     }
 
     private fun restoreAccessibility(app: Context) {
         val prefs = PhonePrefs(app)
         val list = restoredAccessibility(Settings.Secure.getString(app.contentResolver, A11Y), me(app), prefs.restoreAccessibility) ?: return
-        if (ShizukuShell.run("sh", "-c", "settings put secure $A11Y '$list'; settings put secure accessibility_enabled 1")) {
-            prefs.restoreAccessibility = false
-        }
+        val ok = ShizukuShell.run("sh", "-c", "settings put secure $A11Y '$list'; settings put secure accessibility_enabled 1")
+        android.util.Log.i("OpenCoverMirror", "restore accessibility: ${if (ok) "done" else "failed, will retry on unlock"}")
+        if (ok) prefs.restoreAccessibility = false
+    }
+
+    private fun restoreInnerScreen(app: Context) {
+        val prefs = PhonePrefs(app)
+        if (!prefs.innerResetPending) return
+        // Resized only with Shizuku; without it there is nothing to put back (and no way to).
+        if (!ShizukuShell.allowed() || ShizukuShell.run("sh", "-c", INNER_SCREEN_RESET)) prefs.innerResetPending = false
     }
 
     private fun restoreSettings(app: Context) {
         val prefs = PhonePrefs(app)
-        val (dev, nm) = prefs.restoreSettings?.split(",")?.takeIf { it.size == 2 } ?: return
-        if (ShizukuShell.run("sh", "-c", "settings put global development_settings_enabled $dev; settings put secure $SECURE_NON_MARKET $nm")) {
+        val (dev, nm) = prefs.restoreSettings?.split(",")?.mapNotNull { it.toIntOrNull() }?.takeIf { it.size == 2 } ?: return
+        runCatching {
+            Settings.Global.putInt(app.contentResolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, dev)
+            Settings.Secure.putInt(app.contentResolver, SECURE_NON_MARKET, nm)
             prefs.restoreSettings = null
         }
-    }
-
-    private fun resetWhenAsleep(app: Context) {
-        if (!app.getSystemService(PowerManager::class.java).isInteractive) { resetNow(app); return }
-        app.registerReceiver(object : BroadcastReceiver() {
-            override fun onReceive(c: Context, i: Intent) {
-                app.unregisterReceiver(this)
-                resetNow(app)
-            }
-        }, IntentFilter(Intent.ACTION_SCREEN_OFF), Context.RECEIVER_NOT_EXPORTED)
-    }
-
-    private fun resetNow(app: Context) {
-        val prefs = PhonePrefs(app)
-        if (!prefs.resetPending) return
-        // Screen off while mirroring ends the session (as in Z Cover Power); stop() comes back here with no session.
-        MirrorService.instance?.let { it.stop(); return }
-        resetState(app, wake = false)
     }
 
     /**

@@ -54,6 +54,10 @@ object CallStore {
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("calls", Context.MODE_PRIVATE)
 
+    /** Internet calls (Messenger, Discord, Viber...) on the cover call screen: experimental, off by default. */
+    fun voip(ctx: Context) = prefs(ctx).getBoolean("voip", false)
+    fun setVoip(ctx: Context, on: Boolean) = prefs(ctx).edit().putBoolean("voip", on).apply()
+
     fun posted(ctx: Context, sbn: StatusBarNotification) {
         val n = sbn.notification
         val x = n.extras
@@ -65,6 +69,7 @@ object CallStore {
             "CallStore", "${sbn.packageName} category=${n.category} type=${x.getInt(Notification.EXTRA_CALL_TYPE, 0)} buttons=$titles -> $phase",
         )
         if (phase == null) return
+        if (handsOverOnAnswer(sbn.packageName) && !voip(ctx)) return // an app's internet call, while that's off
         val person = x.getParcelable(Notification.EXTRA_CALL_PERSON, Person::class.java)
         val caller = person?.name?.toString() ?: x.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
         val now = System.currentTimeMillis()

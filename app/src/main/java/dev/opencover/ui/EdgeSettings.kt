@@ -84,32 +84,31 @@ fun EdgeSettings(onBack: () -> Unit) {
         return
     }
 
-    BackHandler(onBack = onBack)
-    Column(
-        Modifier.fillMaxSize().background(Color(0xF0101010)).verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text("Edge lighting", color = Color.White, fontSize = 20.sp)
-        SwitchRow("Edge lighting", "The edges glow for new notifications.", enabled) { enabled = it; EdgePrefs.setEnabled(ctx, it) }
-        SwitchRow("Wake the screen", "With the screen off or on the AOD: wake, glow, sleep again. Needs Shizuku.", wake) {
-            wake = it; EdgePrefs.setWake(ctx, it)
-        }
-        Text("Glow colour", color = Color.Gray, fontSize = 13.sp)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            FilterChip(selected = custom == null, onClick = { custom = null; EdgePrefs.setCustom(ctx, null) }, label = { Text("App colour") })
-            FilterChip(selected = custom != null, onClick = { editing = "" }, label = { Text("Custom") })
-            custom?.let { Swatch(it) { editing = "" } }
-        }
-        Text("Per-app colours (these win over the glow colour)", color = Color.Gray, fontSize = 13.sp)
-        perApp.entries.sortedBy { labels[it.key] ?: it.key }.forEach { (pkg, c) ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Swatch(c) { editing = pkg }
-                Text(labels[pkg] ?: pkg, color = Color.White, modifier = Modifier.weight(1f).clickable { editing = pkg })
-                TextButton(onClick = { perApp = perApp - pkg; EdgePrefs.setPerApp(ctx, perApp) }) { Text("Remove") }
+    SettingsPage("Edge lighting", onBack) {
+        Group {
+            SwitchRow("Edge lighting", "The edges glow for new notifications.", enabled) { enabled = it; EdgePrefs.setEnabled(ctx, it) }
+            SwitchRow("Wake the screen", "With the screen off or on the AOD: wake, glow, sleep again. Needs Shizuku.", wake) {
+                wake = it; EdgePrefs.setWake(ctx, it)
             }
         }
-        Button(onClick = { picking = true }) { Text("Add app") }
-        TextButton(onClick = onBack) { Text("Back") }
+        Group("Glow colour") {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                FilterChip(selected = custom == null, onClick = { custom = null; EdgePrefs.setCustom(ctx, null) }, label = { Text("App colour") })
+                FilterChip(selected = custom != null, onClick = { editing = "" }, label = { Text("Custom") })
+                custom?.let { Swatch(it) { editing = "" } }
+            }
+        }
+        Group("Per-app colours") {
+            Note("These win over the glow colour.")
+            perApp.entries.sortedBy { labels[it.key] ?: it.key }.forEach { (pkg, c) ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Swatch(c) { editing = pkg }
+                    Text(labels[pkg] ?: pkg, color = Color.White, modifier = Modifier.weight(1f).clickable { editing = pkg })
+                    TextButton(onClick = { perApp = perApp - pkg; EdgePrefs.setPerApp(ctx, perApp) }) { Text("Remove") }
+                }
+            }
+            NavRow(null, "Add app", null) { picking = true }
+        }
     }
 }
 

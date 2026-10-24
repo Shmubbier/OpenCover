@@ -19,6 +19,14 @@ private const val STATUS_SEVERE = 3 // PowerManager.THERMAL_STATUS_SEVERE
 val STOP_HOTSPOT: List<String> =
     listOf("service", "call", "tethering", "5", "i32", "0", "s16", "com.android.shell", "i32", "-1", "null")
 
+/**
+ * Starts the Wi-Fi hotspot with its saved settings: ITetheringConnector.startTethering(request, "com.android.shell",
+ * null, null). The request is a TetheringRequestParcel written field by field as Android 16 lays it out (size, request
+ * type explicit, Wi-Fi, no addresses, exempt from the carrier check, no provisioning UI, global scope, saved config).
+ */
+val START_HOTSPOT: List<String> = listOf("service", "call", "tethering", "4", "i32", "1", "i32", "36", "i32", "1",
+    "i32", "0", "i32", "0", "i32", "0", "i32", "1", "i32", "0", "i32", "1", "i32", "0", "s16", "com.android.shell", "i32", "-1", "null")
+
 /** The heat level for Android's thermal [status] and the battery temperature, never dropping until clearly cooler. */
 fun heatLevel(status: Int, tenths: Int, previous: Heat): Heat {
     val cut = status >= STATUS_SEVERE || tenths >= CUT_TENTHS || (previous == Heat.CUT && tenths >= CUT_TENTHS - CLEAR_TENTHS)

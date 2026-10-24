@@ -49,6 +49,9 @@ class CoverWatcher : Service() {
         override fun onReceive(c: Context, i: Intent) {
             when (i.action) {
                 Intent.ACTION_USER_PRESENT -> {
+                    // A mirror session that ended while the screen was off or OpenCover was busy: finish putting back
+                    // what it changed (OpenCover's accessibility service above all).
+                    if (MirrorService.instance == null) dev.opencover.mirror.MirrorEnv.recover(applicationContext)
                     BankingMode.resume(this@CoverWatcher) // backstop if usage access is missing
                     // A notification tapped in peek opens on the cover; if it's gone, Home opens as usual.
                     val pending = openOnUnlock(LockScreen.pendingOpen, coverActive() && MirrorService.instance == null)
@@ -57,7 +60,8 @@ class CoverWatcher : Service() {
                         if (coverActive()) openLauncher("unlock", unlocked = true)
                     }
                 }
-                Intent.ACTION_SCREEN_OFF -> { paused = false; LockScreen.pendingOpen = null }
+                Intent.ACTION_SCREEN_OFF -> { paused = false; LockScreen.pendingOpen = null; dev.opencover.phone.DeepSleep.screenOff(c) }
+                Intent.ACTION_SCREEN_ON, Intent.ACTION_POWER_CONNECTED -> dev.opencover.phone.DeepSleep.awake()
             }
             onCoverStateMaybeChanged()
         }
@@ -106,6 +110,8 @@ class CoverWatcher : Service() {
         registerReceiver(receiver, IntentFilter().apply {
             addAction(Intent.ACTION_USER_PRESENT)
             addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_POWER_CONNECTED)
         })
         onCoverStateMaybeChanged()
         HeatGuard.start(this)

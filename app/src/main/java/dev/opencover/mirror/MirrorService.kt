@@ -87,7 +87,11 @@ class MirrorService : Service() {
         // ponytail: 1.5 s fallback copied from Z Cover Power in case display 0 never reports a change.
         handler.postDelayed({ if (!listener.fired) { listener.fired = true; dm.unregisterDisplayListener(listener); ready.run() } }, 1500)
         val app = applicationContext
-        MirrorEnv.later { Log.d(TAG, "mirror env -> ${MirrorEnv.enter(app)?.trim() ?: "skipped"}") }
+        MirrorEnv.later {
+            Log.d(TAG, "mirror env -> ${MirrorEnv.enter(app)?.trim() ?: "skipped"}")
+            // Putting the phone's home on the inner screen also brings Samsung's cover home up over the mirror.
+            handler.post { if (instance === this && mirrorShown) showMirror(clear = false) }
+        }
         return START_NOT_STICKY
     }
 
@@ -110,9 +114,22 @@ class MirrorService : Service() {
         }, handler)
         Log.d(TAG, "projection ready ${captureWidth}x$captureHeight")
         // Launch only now: the device-state switch moves whatever is on the cover to display 0.
-        AppLauncher.start(this, Intent(this, MirrorActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK))
+        showMirror(clear = true)
+        mirrorShown = true
+        MirrorInput.start(this) // live touch
+        innerWatch.wasOn = getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)?.state == Display.STATE_ON
+        getSystemService(DisplayManager::class.java).registerDisplayListener(innerWatch, handler)
         val app = applicationContext
         MirrorEnv.later { MirrorEnv.hideAccessibility(app) }
+    }
+
+    /** The mirror screen has been opened for this session (so bringing it back to the front is safe). */
+    private var mirrorShown = false
+
+    /** Opens the mirror screen on the cover; [clear] starts it fresh, otherwise it just comes back to the front. */
+    private fun showMirror(clear: Boolean) {
+        val i = Intent(this, MirrorActivity::class.java)
+        AppLauncher.start(this, if (clear) i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK) else i)
     }
 
     fun setSurface(s: Surface?) {
@@ -132,7 +149,25 @@ class MirrorService : Service() {
         }
     }
 
+    /**
+     * The system can drop the forced-open state by itself (it does when its requester isn't on top), which turns the
+     * inner screen off: the session is then over, so end it as the stop button would rather than mirror nothing.
+     */
+    private val innerWatch = object : DisplayManager.DisplayListener {
+        var wasOn = false
+        override fun onDisplayChanged(id: Int) {
+            if (id != Display.DEFAULT_DISPLAY || instance !== this@MirrorService) return
+            val on = getSystemService(DisplayManager::class.java).getDisplay(id)?.state == Display.STATE_ON
+            if (on) wasOn = true
+            else if (wasOn) { Log.i(TAG, "inner screen turned off: ending the session"); stop() }
+        }
+        override fun onDisplayAdded(id: Int) {}
+        override fun onDisplayRemoved(id: Int) {}
+    }
+
     fun stop() {
+        runCatching { getSystemService(DisplayManager::class.java).unregisterDisplayListener(innerWatch) }
+        MirrorInput.stop()
         if (instance != null) MirrorEnv.leave(this)
         instance = null
         HeatGuard.evaluate()

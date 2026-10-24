@@ -15,8 +15,31 @@ class PhonePrefs(ctx: Context) {
         sp.edit().putString("app_rotations", encodeRotations(all)).commit()
     }
 
-    /** At least one app is turned: the accessibility service then has to see every app's windows. */
-    val hasRotations: Boolean get() = parseRotations(sp.getString("app_rotations", null)).isNotEmpty()
+    /** Every turned app and its quarter turns. */
+    val rotations: Map<String, Int> get() = parseRotations(sp.getString("app_rotations", null))
+
+    /** At least one app is turned or has its own density: the accessibility service then has to see every app's windows. */
+    val hasRotations: Boolean get() = parseRotations(sp.getString("app_rotations", null)).isNotEmpty() || densities.isNotEmpty()
+
+    /** Cover density per app ("pkg=dpi;..."); apps not listed use the cover's. */
+    val densities: Map<String, Int>
+        get() = sp.getString("app_densities", null).orEmpty().split(';').mapNotNull {
+            val (pkg, dpi) = it.split('=', limit = 2).takeIf { p -> p.size == 2 } ?: return@mapNotNull null
+            dpi.toIntOrNull()?.let { d -> pkg to d }
+        }.toMap()
+
+    fun densityFor(pkg: String): Int? = densities[pkg]
+
+    fun setDensity(pkg: String, dpi: Int?) {
+        val all = densities.toMutableMap()
+        if (dpi == null) all.remove(pkg) else all[pkg] = dpi
+        sp.edit().putString("app_densities", all.entries.joinToString(";") { "${it.key}=${it.value}" }).commit()
+    }
+
+    /** The cover density to put back (0 = the cover's own) while an app's own is applied; null when none is. */
+    var densityBase: Int?
+        get() = sp.getInt("density_base", -1).takeIf { it >= 0 }
+        set(v) { sp.edit().putInt("density_base", v ?: -1).commit() }
 
     /** Clockwise quarter turns applied to the mirror view, 0..3. */
     var mirrorTurns: Int
@@ -52,4 +75,27 @@ class PhonePrefs(ctx: Context) {
     var heatGuard: Boolean
         get() = sp.getBoolean("heat_guard", true)
         set(v) = sp.edit().putBoolean("heat_guard", v).apply()
+
+    /** Before mirroring, set the inner screen to [mirrorSize] at [mirrorDensity]; reset when mirroring ends. */
+    var mirrorResize: Boolean
+        get() = sp.getBoolean("mirror_resize", false)
+        set(v) = sp.edit().putBoolean("mirror_resize", v).apply()
+
+    var mirrorSize: String
+        get() = sp.getString("mirror_size", null) ?: "1080x1600"
+        set(v) = sp.edit().putString("mirror_size", v).apply()
+
+    var mirrorDensity: Int
+        get() = sp.getInt("mirror_density", 400)
+        set(v) = sp.edit().putInt("mirror_density", v).apply()
+
+    /** The inner screen was resized for mirroring and still has to be put back. */
+    var innerResetPending: Boolean
+        get() = sp.getBoolean("inner_reset_pending", false)
+        set(v) { sp.edit().putBoolean("inner_reset_pending", v).commit() }
+
+    /** Force deep doze shortly after the screen turns off (see DeepSleep). */
+    var deepSleep: Boolean
+        get() = sp.getBoolean("deep_sleep", true)
+        set(v) = sp.edit().putBoolean("deep_sleep", v).apply()
 }

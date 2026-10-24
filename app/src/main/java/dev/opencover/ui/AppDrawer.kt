@@ -54,7 +54,7 @@ fun AppDrawer(
     val scope = rememberCoroutineScope()
     BackHandler(onBack = onClose)
 
-    Column(Modifier.fillMaxSize().background(Color(0xF0101010))) {
+    Column(Modifier.fillMaxSize()) { // the backdrop comes from PanelBackdrop
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = query, onValueChange = { query = it }, singleLine = true,
