@@ -217,11 +217,23 @@ class CoverAccessibility : AccessibilityService() {
         AppLauncher.start(this, Intent(this, CoverActivity::class.java))
     }
 
+    // The window list comes from the system, which can take many seconds to answer (seen with a USB-C monitor plugged
+    // in): ask on a thread of its own, so a slow answer never freezes OpenCover.
+    private val windowAsk = java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "nav-windows").apply { isDaemon = true } }
+    private val navAsked = java.util.concurrent.atomic.AtomicBoolean(false)
+
     /** OpenCover's bar over Samsung's while it's on the cover and the phone is unlocked. */
     fun updateNavBar() {
-        val bar = NavBar.samsungBar(this)
-        val locked = getSystemService(KeyguardManager::class.java).isKeyguardLocked
-        NavBar.update(this, bar.takeIf { navBarShown(NavPrefs.enabled(this), bar != null, locked) }, keyboardUp())
+        if (!navAsked.compareAndSet(false, true)) return // one already on its way: it reads the latest windows
+        windowAsk.execute {
+            navAsked.set(false)
+            val bar = NavBar.samsungBar(this)
+            val keyboard = keyboardUp()
+            handler.post {
+                val locked = getSystemService(KeyguardManager::class.java).isKeyguardLocked
+                NavBar.update(this, bar.takeIf { navBarShown(NavPrefs.enabled(this), bar != null, locked) }, keyboard)
+            }
+        }
     }
 
     /** The package of the keyboard in use ("pkg/.Service" in settings). */

@@ -32,8 +32,32 @@ class DeskService(context: Context) : IDesk.Stub() {
     }
 
     override fun release() {
+        stopMouse()
         display?.release()
         display = null
+    }
+
+    private var mouse: DeskMouse? = null
+
+    override fun startMouse(displayId: Int, width: Int, height: Int, cursor: IDeskCursor): Boolean {
+        stopMouse()
+        val m = DeskMouse(displayId, width, height, cursor) { runCatching { focus(displayId) } }
+        if (!m.start()) return false
+        mouse = m
+        // The keyboard follows the focused display: make it the desk.
+        runCatching { focus(displayId) }
+        return true
+    }
+
+    override fun stopMouse() {
+        mouse?.stop()
+        mouse = null
+    }
+
+    /** IActivityTaskManager.focusTopTask(displayId): the desk becomes the focused display, so typing goes there. */
+    private fun focus(displayId: Int) {
+        val atm = Class.forName("android.app.ActivityTaskManager").getMethod("getService").invoke(null)!!
+        atm.javaClass.getMethod("focusTopTask", Int::class.javaPrimitiveType).invoke(atm, displayId)
     }
 
     override fun destroy() {

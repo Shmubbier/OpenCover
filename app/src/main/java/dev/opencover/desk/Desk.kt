@@ -31,6 +31,21 @@ object Desk {
     private var helper: IDesk? = null
     private var pending: (() -> Unit)? = null // run once the helper is bound
     var displayId = -1; private set
+    private var root: android.view.View? = null
+    private var cursorView: android.view.View? = null
+    private const val POINTER_PX = 36
+    private const val HELPER_VERSION = 3
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+
+    // The helper says where the mouse is; the cursor is drawn here, over the desk (the system draws none there).
+    private val cursorListener = object : IDeskCursor.Stub() {
+        override fun moved(x: Float, y: Float) = main.post {
+            val v = cursorView ?: return@post
+            val lp = v.layoutParams as? WindowManager.LayoutParams ?: return@post
+            lp.x = x.toInt(); lp.y = y.toInt()
+            runCatching { v.context.getSystemService(WindowManager::class.java).updateViewLayout(v, lp) }
+        }.let { }
+    }
 
     /** The monitor, if one is plugged in: a presentation display that isn't the cover. */
     fun monitor(ctx: Context): Display? = ctx.getSystemService(DisplayManager::class.java)
@@ -40,7 +55,8 @@ object Desk {
 
     private val args by lazy {
         Shizuku.UserServiceArgs(ComponentName(BuildConfig.APPLICATION_ID, DeskService::class.java.name))
-            .daemon(false).processNameSuffix("desk").debuggable(BuildConfig.DEBUG).version(BuildConfig.VERSION_CODE)
+            // A running helper of another version is replaced: bump HELPER_VERSION whenever IDesk or DeskService changes.
+            .daemon(false).processNameSuffix("desk").debuggable(BuildConfig.DEBUG).version(HELPER_VERSION)
     }
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
@@ -60,6 +76,8 @@ object Desk {
         val h = minOf(mode.physicalWidth, mode.physicalHeight)
         val wctx = service.createDisplayContext(monitor).createWindowContext(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, null)
         val sv = SurfaceView(wctx)
+        val frame = android.widget.FrameLayout(wctx)
+        frame.addView(sv)
         sv.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) = withHelper { make(holder.surface, w, h, open) }
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
@@ -72,7 +90,18 @@ object Desk {
                 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
             PixelFormat.OPAQUE,
         )
-        return runCatching { wctx.getSystemService(WindowManager::class.java).addView(sv, lp); view = sv; "Desk on monitor ${monitor.displayId}" }
+        return runCatching {
+            val wm = wctx.getSystemService(WindowManager::class.java)
+            wm.addView(frame, lp); view = sv; root = frame
+            // The cursor in a small window of its own above the desk (the desk's picture would cover a view in its window).
+            val pointer = android.widget.ImageView(wctx).apply { setImageDrawable(PointerDrawable()) }
+            wm.addView(pointer, WindowManager.LayoutParams(POINTER_PX, POINTER_PX, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT).apply { gravity = android.view.Gravity.TOP or android.view.Gravity.START; x = w / 2; y = h / 2 })
+            cursorView = pointer
+            "Desk on monitor ${monitor.displayId}"
+        }
             .getOrElse { Log.w(TAG, "couldn't cover the monitor", it); "Couldn't cover the monitor: ${it.message}" }
     }
 
@@ -86,6 +115,10 @@ object Desk {
         val id = runCatching { helper?.create(surface, w, h, DPI) }.getOrNull() ?: -1
         displayId = id
         Log.i(TAG, "desk display $id (${w}x$h)")
+        if (id >= 0) {
+            val ok = runCatching { helper?.startMouse(id, w, h, cursorListener) }.getOrNull() == true
+            Log.i(TAG, if (ok) "mouse on the desk" else "no mouse found")
+        }
         if (id < 0 || open == null) return
         Thread {
             val out = ShizukuShell.output("sh", "-c",
@@ -97,10 +130,31 @@ object Desk {
     fun stop() {
         val v = view ?: return
         runCatching { helper?.release() }
-        runCatching { v.context.getSystemService(WindowManager::class.java).removeView(v) }
+        runCatching { v.context.getSystemService(WindowManager::class.java).removeView(root ?: v) }
+        cursorView?.let { c -> runCatching { c.context.getSystemService(WindowManager::class.java).removeView(c) } }
+        root = null; cursorView = null
         view = null
         displayId = -1
         runCatching { Shizuku.unbindUserService(args, connection, true) }
         helper = null
     }
+}
+
+/** An arrow pointer: white with a black edge, its tip at the top left. */
+private class PointerDrawable : android.graphics.drawable.Drawable() {
+    private val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
+    private val edge = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.BLACK; style = android.graphics.Paint.Style.STROKE; strokeWidth = 2f; strokeJoin = android.graphics.Paint.Join.ROUND
+    }
+    override fun draw(c: android.graphics.Canvas) {
+        val s = bounds.width() / 36f
+        val p = android.graphics.Path().apply {
+            moveTo(2f * s, 2f * s); lineTo(2f * s, 28f * s); lineTo(9f * s, 21f * s); lineTo(14f * s, 32f * s)
+            lineTo(19f * s, 30f * s); lineTo(14f * s, 19f * s); lineTo(24f * s, 19f * s); close()
+        }
+        c.drawPath(p, fill); c.drawPath(p, edge)
+    }
+    override fun setAlpha(alpha: Int) {}
+    override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) {}
+    @Deprecated("Deprecated in Java") override fun getOpacity() = android.graphics.PixelFormat.TRANSLUCENT
 }
