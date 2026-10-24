@@ -64,6 +64,30 @@ class DeskService(context: Context) : IDesk.Stub() {
             .onFailure { Log.w("OpenCoverDesk", "couldn't show task $taskId", it) }
     }
 
+    // IWallpaperManager straight, so the calls carry the shell's package (WallpaperManager would send OpenCover's).
+    private val wallpapers by lazy {
+        val binder = Class.forName("android.os.ServiceManager").getMethod("getService", String::class.java).invoke(null, "wallpaper") as android.os.IBinder
+        Class.forName("android.app.IWallpaperManager\$Stub").getMethod("asInterface", android.os.IBinder::class.java).invoke(null, binder)!!
+    }
+
+    override fun wallpaper(which: Int): String? = runCatching {
+        val info = wallpapers.javaClass.getMethod("getWallpaperInfoWithFlags", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
+            .invoke(wallpapers, which, 0) as android.app.WallpaperInfo?
+        info?.component?.flattenToString() ?: IMAGE_WALLPAPER // no live wallpaper: the still one
+    }.onFailure { Log.w("OpenCoverDesk", "couldn't read the wallpaper", it) }.getOrNull()
+
+    override fun setWallpaper(component: String, which: Int) {
+        val cn = android.content.ComponentName.unflattenFromString(component) ?: return
+        runCatching {
+            val builder = Class.forName("android.app.wallpaper.WallpaperDescription\$Builder").getConstructor().newInstance()
+            builder.javaClass.getMethod("setComponent", android.content.ComponentName::class.java).invoke(builder, cn)
+            val desc = builder.javaClass.getMethod("build").invoke(builder)!!
+            wallpapers.javaClass.getMethod("setWallpaperComponentChecked", desc.javaClass, String::class.java,
+                Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, android.os.Bundle::class.java)
+                .invoke(wallpapers, desc, "com.android.shell", which, 0, null)
+        }.onFailure { Log.w("OpenCoverDesk", "couldn't set the wallpaper to $component", it) }
+    }
+
     override fun closeTask(taskId: Int) {
         runCatching { atm.javaClass.getMethod("removeTask", Int::class.javaPrimitiveType).invoke(atm, taskId) }
             .onFailure { Log.w("OpenCoverDesk", "couldn't close task $taskId", it) }
@@ -82,9 +106,17 @@ class DeskService(context: Context) : IDesk.Stub() {
         val m = DeskMouse(displayId, width, height, cursor) { runCatching { focus(displayId) } }
         if (!m.start()) return false
         mouse = m
+        deskId = displayId
         // The keyboard follows the focused display: make it the desk.
         runCatching { focus(displayId) }
         return true
+    }
+
+    private var deskId = -1
+
+    override fun setLocked(locked: Boolean) {
+        mouse?.locked = locked
+        if (!locked) runCatching { focus(deskId) } // typing goes back to the desk's apps
     }
 
     override fun stopMouse() {
@@ -103,6 +135,7 @@ class DeskService(context: Context) : IDesk.Stub() {
     }
 
     private companion object {
+        const val IMAGE_WALLPAPER = "com.android.systemui/com.android.systemui.wallpapers.ImageWallpaper"
         // DisplayManager.VIRTUAL_DISPLAY_FLAG_*: public, own content only, touch, content destroyed on removal, system
         // decorations (a launcher and taskbar), trusted, own display group, always unlocked, own focus.
         const val FLAGS = 1 or 8 or 64 or 256 or 512 or 1024 or 2048 or 4096 or 16384

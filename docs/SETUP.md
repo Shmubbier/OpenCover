@@ -58,6 +58,13 @@ Android ends Shizuku on every reboot, and without root it can't start itself. St
 
 The first time, allow OpenCover in Shizuku. Its permission dialog opens on the inner screen, so allow it from the cover instead: open Shizuku on the cover > Authorized applications > turn on OpenCover.
 
+## Desktop on a monitor (experimental)
+With Shizuku running, turn on Settings > Experimental > Desktop on external monitor. Plug the phone into a USB-C monitor (a hub with HDMI and USB works), with a USB mouse and keyboard on the hub: the monitor gets Samsung's DeX desktop while the phone stays free.
+- Apps open as windows you can move, resize, minimize and close. Open apps show on the taskbar after the Back button; the Recents button lists every window, minimized ones too.
+- The cover goes black while the desktop runs; tap it to use it.
+- OpenCover's Home background fills the desktop. The phone's own home wallpaper is swapped for it while the desktop runs and put back after.
+- While the phone is locked the monitor shows a lock screen and the mouse and keyboard do nothing there. Unlock the phone to carry on.
+
 ## Troubleshooting
 - **"Open phone to continue"** for an app: do step 4, then open OpenCover once (it adds apps when it starts), or start Shizuku.
 - **Swiping Home shows Samsung's cover home**: Accessibility was turned off. Turn it back on in step 3. Force-stopping OpenCover also turns it off.

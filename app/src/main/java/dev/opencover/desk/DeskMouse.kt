@@ -21,6 +21,8 @@ class DeskMouse(
     private val onPress: () -> Unit = {},
 ) {
     @Volatile private var running = true
+    /** The phone is locked: the pointer still moves, but nothing on the desk is clicked or scrolled. */
+    @Volatile var locked = false
     private var stream: FileInputStream? = null
     private var x = w / 2f
     private var y = h / 2f
@@ -79,6 +81,7 @@ class DeskMouse(
             runCatching { cursor.moved(x, y, buttons != 0) }
             send(if (buttons != 0) MotionEvent.ACTION_MOVE else MotionEvent.ACTION_HOVER_MOVE)
         }
+        if (locked) return
         if (pressed != buttons) {
             val was = buttons
             buttons = pressed

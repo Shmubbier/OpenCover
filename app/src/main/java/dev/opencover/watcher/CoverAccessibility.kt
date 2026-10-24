@@ -238,7 +238,8 @@ class CoverAccessibility : AccessibilityService() {
             val keyboard = keyboardUp()
             handler.post {
                 val locked = getSystemService(KeyguardManager::class.java).isKeyguardLocked
-                NavBar.update(this, bar.takeIf { navBarShown(NavPrefs.enabled(this), bar != null, locked) }, keyboard)
+                // Not over the black cover while the desk is in use (it would be the only thing lit).
+                NavBar.update(this, bar.takeIf { navBarShown(NavPrefs.enabled(this), bar != null, locked) && !dev.opencover.desk.Desk.coverDark }, keyboard)
             }
         }
     }

@@ -177,6 +177,14 @@ private fun ExperimentalPanel(topEdge: Boolean, onTopEdge: (Boolean) -> Unit, on
                 desk = on
                 android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show()
             }
+            if (desk) {
+                var dimCover by remember { mutableStateOf(dev.opencover.desk.Desk.dimCover(ctx)) }
+                SwitchRow("Black cover while on a monitor", "The cover goes dark while the desktop is in use; tap it to use it, and it goes dark again after 30 s.",
+                    dimCover) { dimCover = it; dev.opencover.desk.Desk.setDimCover(ctx, it) }
+                var wall by remember { mutableStateOf(dev.opencover.desk.Desk.wallpaper(ctx)) }
+                SwitchRow("OpenCover background on the monitor", "The whole Home background, not the cover's cut, fills the desktop (an animated one shows its first frame). The phone's wallpaper goes back when the desktop stops.",
+                    wall) { wall = it; dev.opencover.desk.Desk.setWallpaper(ctx, it) }
+            }
         }
         Group {
             SwitchRow("Top-edge priority",

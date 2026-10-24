@@ -35,7 +35,7 @@ object Desk {
     private var cursorView: android.view.View? = null
     private var pointer: DeskPointer? = null
     private var taskbar: DeskTaskbar? = null
-    private const val HELPER_VERSION = 6
+    private const val HELPER_VERSION = 11
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
 
     // The helper says where the mouse is; the cursor is drawn here, over the desk (the system draws none there).
@@ -64,6 +64,14 @@ object Desk {
 
     fun wanted(ctx: Context) = ctx.getSharedPreferences("desk", Context.MODE_PRIVATE).getBoolean("on", false)
     fun setWanted(ctx: Context, on: Boolean) = ctx.getSharedPreferences("desk", Context.MODE_PRIVATE).edit().putBoolean("on", on).apply()
+    /** The cover goes black while the desk runs (on unless turned off). */
+    fun dimCover(ctx: Context) = ctx.getSharedPreferences("desk", Context.MODE_PRIVATE).getBoolean("dim_cover", true)
+    fun setDimCover(ctx: Context, on: Boolean) = ctx.getSharedPreferences("desk", Context.MODE_PRIVATE).edit().putBoolean("dim_cover", on).apply()
+    private var dim: CoverDim? = null
+    /** OpenCover's background behind the desk (on unless turned off). */
+    fun wallpaper(ctx: Context) = ctx.getSharedPreferences("desk", Context.MODE_PRIVATE).getBoolean("wallpaper", true)
+    fun setWallpaper(ctx: Context, on: Boolean) = ctx.getSharedPreferences("desk", Context.MODE_PRIVATE).edit().putBoolean("wallpaper", on).apply()
+    val coverDark get() = dim?.dark == true
 
     /** The monitor the desk is on, -1 when it isn't running. */
     var monitorId = -1; private set
@@ -102,6 +110,7 @@ object Desk {
         return runCatching {
             val wm = wctx.getSystemService(WindowManager::class.java)
             wm.addView(frame, lp); view = sv; root = frame
+            if (dimCover(service)) dim = CoverDim(service).also { it.start() }
             // The cursor in a small window of its own above the desk (the desk's picture would cover a view in its window).
             val arrow = android.widget.ImageView(wctx)
             wm.addView(arrow, WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
@@ -110,6 +119,8 @@ object Desk {
                 PixelFormat.TRANSLUCENT).apply { gravity = android.view.Gravity.TOP or android.view.Gravity.START; x = w / 2; y = h / 2 })
             cursorView = arrow
             // The system's pointer images at the desk's density.
+            lock = DeskLock(wctx)
+            this.service = service
             pointer = DeskPointer(arrow, wctx.createConfigurationContext(android.content.res.Configuration().apply { densityDpi = DPI }))
             monitorId = monitor.displayId
             (service as? dev.opencover.watcher.CoverAccessibility)?.refreshScope() // hear the taskbar's Recents button
@@ -125,6 +136,8 @@ object Desk {
     }
 
     private fun make(ctx: Context, surface: Surface, w: Int, h: Int, open: String?) {
+        // Before the display exists, so it starts with it.
+        useOurWallpaper(ctx, w, h)
         val id = runCatching { helper?.create(surface, w, h, DPI) }.getOrNull() ?: -1
         displayId = id
         Log.i(TAG, "desk display $id (${w}x$h)")
@@ -142,9 +155,51 @@ object Desk {
         }.start()
     }
 
+    /**
+     * Samsung shows the main screen's home wallpaper behind the desk, but only its own live wallpapers or a picture
+     * (another app's live wallpaper isn't allowed there, and its Fold one draws black). So while the desk runs, the
+     * home wallpaper becomes OpenCover's background as a picture: the whole picked image (an animation's first frame)
+     * filling the monitor. The live wallpaper before is put back in [stop]; a picture someone set is left alone, as it
+     * couldn't be put back.
+     */
+    private fun useOurWallpaper(ctx: Context, w: Int, h: Int) {
+        val on = wallpaper(ctx) // the picture is decoded either way, for the lock screen
+        val prefs = ctx.getSharedPreferences("desk", Context.MODE_PRIVATE)
+        // Read by the helper: apps aren't told which live wallpaper is set.
+        val image = runCatching {
+            val f = dev.opencover.home.Wallpaper.source(ctx, dev.opencover.home.Slot.HOME) ?: java.io.File(ctx.filesDir, "wallpaper.jpg")
+            android.graphics.ImageDecoder.decodeBitmap(android.graphics.ImageDecoder.createSource(f)) { d, info, _ ->
+                d.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+                val s = maxOf(w.toFloat() / info.size.width, h.toFloat() / info.size.height)
+                d.setTargetSize(maxOf(w, (info.size.width * s).toInt()), maxOf(h, (info.size.height * s).toInt()))
+            }.let { b -> android.graphics.Bitmap.createBitmap(b, (b.width - w) / 2, (b.height - h) / 2, w, h) } // centred, filling
+        }.getOrNull()?.also { background = it } ?: return
+        if (!on) return
+        val now = runCatching { helper?.wallpaper(MAIN_HOME) }.getOrNull() ?: return
+        val saved = prefs.getString("previous_wallpaper", null)
+        if (saved == null && now == IMAGE_WALLPAPER) return
+        if (saved == null) prefs.edit().putString("previous_wallpaper", now).apply() // else a crash left the picture: keep the saved one
+        runCatching { android.app.WallpaperManager.getInstance(ctx).setBitmap(image, null, false, MAIN_HOME) }
+            .onSuccess { Log.i(TAG, "desk background set (was $now)") }
+            .onFailure { Log.w(TAG, "couldn't set the desk background", it) }
+    }
+
+    private fun restoreWallpaper(ctx: Context) {
+        val prefs = ctx.getSharedPreferences("desk", Context.MODE_PRIVATE)
+        val previous = prefs.getString("previous_wallpaper", null) ?: return
+        if (runCatching { helper?.setWallpaper(previous, MAIN_HOME) != null }.getOrDefault(false)) prefs.edit().remove("previous_wallpaper").apply()
+    }
+
+    /** WallpaperManager's home (1) with Samsung's main-screen flag (4); 16 would be the cover's. */
+    private const val MAIN_HOME = 5
+    private const val IMAGE_WALLPAPER = "com.android.systemui/com.android.systemui.wallpapers.ImageWallpaper"
+
     fun stop() {
         val v = view ?: return
+        restoreWallpaper(v.context)
         taskbar?.stop(); taskbar = null
+        dim?.stop(); dim = null
+        lock?.hide(); lock = null; locked = false; background = null; service = null
         runCatching { helper?.release() }
         runCatching { v.context.getSystemService(WindowManager::class.java).removeView(root ?: v) }
         cursorView?.let { c -> runCatching { c.context.getSystemService(WindowManager::class.java).removeView(c) } }
@@ -156,6 +211,33 @@ object Desk {
         helper = null
         dev.opencover.watcher.CoverAccessibility.instance?.refreshScope()
     }
+
+    private var lock: DeskLock? = null
+    private var locked = false
+
+    /** The phone locked or unlocked (the taskbar's poll): the lock screen covers the monitor, the desk takes no input. */
+    fun lockChanged(now: Boolean) {
+        if (now == locked) return
+        locked = now
+        runCatching { helper?.setLocked(now) }
+        main.post {
+            val l = lock ?: return@post
+            if (now) l.show(background, deskContext()) else l.hide()
+            cursorView?.visibility = if (now) android.view.View.GONE else android.view.View.VISIBLE
+        }
+    }
+
+    private var service: AccessibilityService? = null
+
+    /** A window context on the desk display, for OpenCover's windows there. */
+    private fun deskContext(): Context? {
+        val s = service ?: return null
+        val d = s.getSystemService(DisplayManager::class.java).getDisplay(displayId) ?: return null
+        return s.createDisplayContext(d).createWindowContext(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, null)
+    }
+
+    /** OpenCover's background fitted to the monitor, for the lock screen; set with the desk's wallpaper. */
+    private var background: android.graphics.Bitmap? = null
 
     /** The desk's windows changed (the taskbar's poll): the pointer resizes on their edges. */
     fun windowsChanged(windows: List<Window>) { pointer?.windows = windows }

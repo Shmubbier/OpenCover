@@ -31,4 +31,13 @@ interface IDesk {
 
     /** Closes a window (removes its task). */
     void closeTask(int taskId) = 7;
+
+    /** Makes [component] (a live wallpaper, "pkg/class") the wallpaper for [which] (WallpaperManager flags, with Samsung's). */
+    void setWallpaper(String component, int which) = 8;
+
+    /** The wallpaper for [which] ("pkg/class"), or null if it can't be read. */
+    String wallpaper(int which) = 9;
+
+    /** The phone locked or unlocked: while locked the desk takes no clicks or typing. */
+    void setLocked(boolean locked) = 10;
 }

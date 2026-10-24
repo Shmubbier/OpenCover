@@ -51,6 +51,7 @@ class DeskTaskbar(ctx: Context, displayId: Int) {
         override fun run() {
             // DeX hides its taskbar while the phone is locked; so does this.
             val locked = wctx.getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked
+            Desk.lockChanged(locked)
             val all = if (locked) emptyList() else Desk.windows().filter { it.pkg != wctx.packageName }
             Desk.windowsChanged(all)
             val now = all.map { it.copy(starting = false, bounds = android.graphics.Rect()) }.sortedBy { it.task } // launch order, as a taskbar keeps it
