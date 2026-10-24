@@ -33,6 +33,7 @@ object Desk {
     var displayId = -1; private set
     private var root: android.view.View? = null
     private var cursorView: android.view.View? = null
+    private var taskbar: DeskTaskbar? = null
     private const val POINTER_PX = 36
     private const val HELPER_VERSION = 4
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
@@ -92,7 +93,7 @@ object Desk {
         val frame = android.widget.FrameLayout(wctx)
         frame.addView(sv)
         sv.holder.addCallback(object : SurfaceHolder.Callback {
-            override fun surfaceCreated(holder: SurfaceHolder) = withHelper { make(holder.surface, w, h, open) }
+            override fun surfaceCreated(holder: SurfaceHolder) = withHelper { make(service, holder.surface, w, h, open) }
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
             override fun surfaceDestroyed(holder: SurfaceHolder) { runCatching { helper?.release() }; displayId = -1 }
         })
@@ -126,13 +127,15 @@ object Desk {
         runCatching { Shizuku.bindUserService(args, connection) }.onFailure { Log.w(TAG, "couldn't start the desk helper", it) }
     }
 
-    private fun make(surface: Surface, w: Int, h: Int, open: String?) {
+    private fun make(ctx: Context, surface: Surface, w: Int, h: Int, open: String?) {
         val id = runCatching { helper?.create(surface, w, h, DPI) }.getOrNull() ?: -1
         displayId = id
         Log.i(TAG, "desk display $id (${w}x$h)")
         if (id >= 0) {
             val ok = runCatching { helper?.startMouse(id, w, h, cursorListener) }.getOrNull() == true
             Log.i(TAG, if (ok) "mouse on the desk" else "no mouse found")
+            taskbar?.stop()
+            taskbar = DeskTaskbar(ctx, id).also { it.start() }
         }
         if (id < 0 || open == null) return
         Thread {
@@ -144,6 +147,7 @@ object Desk {
 
     fun stop() {
         val v = view ?: return
+        taskbar?.stop(); taskbar = null
         runCatching { helper?.release() }
         runCatching { v.context.getSystemService(WindowManager::class.java).removeView(root ?: v) }
         cursorView?.let { c -> runCatching { c.context.getSystemService(WindowManager::class.java).removeView(c) } }
