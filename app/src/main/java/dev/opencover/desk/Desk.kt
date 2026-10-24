@@ -66,8 +66,21 @@ object Desk {
         override fun onServiceDisconnected(name: ComponentName?) { helper = null }
     }
 
-    /** Covers the monitor and shows the desk there. Main thread. Returns what happened, for a toast. */
-    fun start(service: AccessibilityService, open: String? = "com.android.chrome"): String {
+    fun wanted(ctx: Context) = ctx.getSharedPreferences("desk", Context.MODE_PRIVATE).getBoolean("on", false)
+    fun setWanted(ctx: Context, on: Boolean) = ctx.getSharedPreferences("desk", Context.MODE_PRIVATE).edit().putBoolean("on", on).apply()
+
+    /** The monitor the desk is on, -1 when it isn't running. */
+    var monitorId = -1; private set
+
+    /** A display came or went: the desk starts on a monitor plugged in, and stops when it's unplugged. Main thread. */
+    fun displaysChanged(service: AccessibilityService) {
+        val monitor = monitor(service)
+        if (running && (monitor == null || monitor.displayId != monitorId)) stop()
+        if (!running && monitor != null && wanted(service) && ShizukuShell.allowed()) Log.i(TAG, start(service))
+    }
+
+    /** Covers the monitor and shows the desk there (Samsung's DeX desktop), opening [open] on it if given. */
+    fun start(service: AccessibilityService, open: String? = null): String {
         if (view != null) return "Desk already running"
         if (!ShizukuShell.allowed()) return "Start Shizuku first"
         val monitor = monitor(service) ?: return "No external monitor found"
@@ -100,6 +113,7 @@ object Desk {
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT).apply { gravity = android.view.Gravity.TOP or android.view.Gravity.START; x = w / 2; y = h / 2 })
             cursorView = pointer
+            monitorId = monitor.displayId
             "Desk on monitor ${monitor.displayId}"
         }
             .getOrElse { Log.w(TAG, "couldn't cover the monitor", it); "Couldn't cover the monitor: ${it.message}" }
@@ -135,6 +149,7 @@ object Desk {
         root = null; cursorView = null
         view = null
         displayId = -1
+        monitorId = -1
         runCatching { Shizuku.unbindUserService(args, connection, true) }
         helper = null
     }

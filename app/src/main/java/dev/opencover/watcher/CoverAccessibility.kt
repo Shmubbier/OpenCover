@@ -99,14 +99,16 @@ class CoverAccessibility : AccessibilityService() {
     /** The cover turned (an app's rotation, or an app switching between landscape and portrait): the bar moves too. */
     private val coverTurned = object : android.hardware.display.DisplayManager.DisplayListener {
         override fun onDisplayChanged(id: Int) { if (id == COVER_DISPLAY) updateNavBar() }
-        override fun onDisplayAdded(id: Int) {}
-        override fun onDisplayRemoved(id: Int) {}
+        // A monitor plugged in or out: the desk follows (after a moment, so the monitor has settled).
+        override fun onDisplayAdded(id: Int) { handler.postDelayed({ dev.opencover.desk.Desk.displaysChanged(this@CoverAccessibility) }, 1_500) }
+        override fun onDisplayRemoved(id: Int) { dev.opencover.desk.Desk.displaysChanged(this@CoverAccessibility) }
     }
 
     private val shizukuUp = rikka.shizuku.Shizuku.OnBinderReceivedListener {
         // Only re-hold the fold state: a reset while awake locks the phone.
         if (PhonePrefs(this).keepCoverOn) Fold.apply(this)
         if (PhonePrefs(this).rotationResetPending) RotationFeature.resetToDefault(this)
+        dev.opencover.desk.Desk.displaysChanged(this) // a monitor was already plugged in, waiting for Shizuku
     }
 
     override fun onDestroy() {
