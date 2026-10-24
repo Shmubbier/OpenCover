@@ -87,6 +87,14 @@
             <meta-data android:name="com.samsung.android.multiwindow.show_on_cover" android:value="true" />
         </activity>
         <!-- Mirroring: consent dialog, the mirror view on the cover, and the capture service. -->
+        <!-- Recents on the desk (an external monitor); its own task so it never pulls OpenCover's cover screen along. -->
+        <activity
+            android:name=".desk.DeskRecentsActivity"
+            android:exported="false"
+            android:taskAffinity="dev.opencover.desk"
+            android:excludeFromRecents="true"
+            android:resizeableActivity="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <activity
             android:name=".mirror.ConsentActivity"
             android:exported="false"

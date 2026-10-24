@@ -74,7 +74,7 @@ fun SettingsPanel(
             NavRow(Icons.Filled.Widgets, "Samsung widgets", "Open Samsung's own cover widgets", onSamsungWidgets)
         }
         Group("More") {
-            NavRow(Icons.Filled.Science, "Experimental", "Keyboard, top edge, internet calls") { page = Page.EXPERIMENTAL }
+            NavRow(Icons.Filled.Science, "Experimental", "Desktop on a monitor, keyboard, internet calls") { page = Page.EXPERIMENTAL }
             // The inner screen is broken: answer Android's debugging prompt, which only shows there.
             NavRow(Icons.Filled.BugReport, "Approve debugging prompt", "Allows the USB or wireless debugging prompt on the inner screen") {
                 val r = CoverAccessibility.instance?.approveInnerPrompt() ?: "Turn on OpenCover's accessibility first"
@@ -160,6 +160,23 @@ private fun ExperimentalPanel(topEdge: Boolean, onTopEdge: (Boolean) -> Unit, on
             SwitchRow("Internet calls on the cover",
                 "Messenger, Discord, Viber and other apps' calls get the cover call screen, like phone calls. Answering hands over to the app's own call screen.",
                 voip) { voip = it; dev.opencover.call.CallStore.setVoip(ctx, it) }
+        }
+        var desk by remember { mutableStateOf(dev.opencover.desk.Desk.wanted(ctx)) }
+        Group {
+            SwitchRow("Desktop on external monitor",
+                "A USB-C monitor gets Samsung's DeX desktop while the phone stays free, with a USB mouse and keyboard. Starts when a monitor is plugged in. Needs Shizuku.",
+                desk) { on ->
+                dev.opencover.desk.Desk.setWanted(ctx, on)
+                val service = CoverAccessibility.instance
+                val msg = when {
+                    !on -> { dev.opencover.desk.Desk.stop(); "Desk off" }
+                    service == null -> "Turn on OpenCover's accessibility first"
+                    dev.opencover.desk.Desk.monitor(ctx) == null -> "Desk on: it starts when a monitor is plugged in"
+                    else -> dev.opencover.desk.Desk.start(service)
+                }
+                desk = on
+                android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show()
+            }
         }
         Group {
             SwitchRow("Top-edge priority",

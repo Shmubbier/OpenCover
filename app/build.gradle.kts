@@ -30,7 +30,7 @@ android {
         // ponytail: no R8. Much of OpenCover reaches hidden APIs by reflection; shrinking would need keep rules for each.
         release { signingConfig = signingConfigs.findByName("release") }
     }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; aidl = true; buildConfig = true }
 }
 
 dependencies {
