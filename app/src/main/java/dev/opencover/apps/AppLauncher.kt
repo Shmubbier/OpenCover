@@ -25,10 +25,12 @@ object AppLauncher {
 
     /**
      * Options for an app opened on the cover without Shizuku: fullscreen there, allowed to start from the background,
-     * and, given where it was tapped ([from], in [view]'s window), growing out of that spot.
+     * and, given where it was tapped ([from], in [view]'s window), fading in over the card OpenCover grew from there.
      */
     private fun appOptions(view: android.view.View? = null, from: android.graphics.Rect? = null): Bundle =
-        (if (view != null && from != null) ActivityOptions.makeScaleUpAnimation(view, from.left, from.top, from.width(), from.height())
+        // Samsung's cover ignores the system's grow-from-the-icon animation (it always slides), so OpenCover grows a card
+        // from the icon itself and the app just fades in over it.
+        (if (view != null && from != null) ActivityOptions.makeCustomAnimation(view.context, dev.opencover.R.anim.oc_app_in, dev.opencover.R.anim.oc_hold)
         else ActivityOptions.makeBasic()).setLaunchDisplayId(COVER_DISPLAY).apply {
         runCatching { setWindowingMode?.invoke(this, 1) } // WINDOWING_MODE_FULLSCREEN
         setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS)
@@ -86,7 +88,16 @@ object AppLauncher {
                 try {
                     requireNotNull(handle) { "user $user gone" }
                     val service = CoverAccessibility.instance
-                    if (service != null && handle == android.os.Process.myUserHandle()) {
+                    val own = handle == android.os.Process.myUserHandle()
+                    if (listed && own && view != null && from != null) {
+                        // From OpenCover's own screen: the system only honors its animation options for the screen that
+                        // was tapped. Allowed on the cover since the app is on the cover list.
+                        (view.context as? android.app.Activity ?: ctx).startActivity(
+                            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(ComponentName(pkg, activity))
+                                .addFlags(LAUNCHER_FLAGS or Intent.FLAG_ACTIVITY_NO_ANIMATION),
+                            appOptions(view, from),
+                        )
+                    } else if (service != null && own) {
                         // No Shizuku: start it from the accessibility service, which Samsung lets open apps on the
                         // cover (a plain launcher start gets "Open phone to continue").
                         service.startActivity(

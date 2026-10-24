@@ -98,6 +98,8 @@ fun LockFace(
     onSelect: (Module) -> Unit = {},
     /** Moves only the clock and modules (the AOD's burn-in walk); the background stays put and covers the screen. */
     shift: androidx.compose.ui.unit.DpOffset = androidx.compose.ui.unit.DpOffset.Zero,
+    /** 0..1, how far an unlock swipe has gone: the clock and modules dim and shrink a little (not the background). */
+    pull: Float = 0f,
 ) {
     val ctx = LocalContext.current
     BoxWithConstraints(modifier.fillMaxSize().background(Color.Black)) {
@@ -107,7 +109,10 @@ fun LockFace(
             Wallpaper.lockStill ?: Wallpaper.homeStill, Wallpaper.lockAnim, dev.opencover.look.Playheads.lock,
             playing = !dim, alpha = if (dim) 0.3f else 0.6f, crop = Wallpaper.lockAnimCrop, video = Wallpaper.lockVideo,
         )
-        BoxWithConstraints(Modifier.fillMaxSize().offset(shift.x, shift.y)) {
+        BoxWithConstraints(Modifier.fillMaxSize().offset(shift.x, shift.y).graphicsLayer {
+            alpha = 1f - 0.7f * pull
+            scaleX = 1f - 0.06f * pull; scaleY = scaleX
+        }) {
             Placed(layout, onMove, selected, onSelect, onAlpha = if (dim) 0.55f else 1f) { module ->
                 ModuleView(module, locked || onMove != null, onPeek)
             }

@@ -106,11 +106,10 @@ fun LockLayer(activity: android.app.Activity) {
         },
     ) {
         val pull = (drag.value.getDistance() / UNLOCK_PX).coerceIn(0f, 1f)
-        Box(Modifier.fillMaxSize().graphicsLayer {
-            translationX = drag.value.x * 0.25f; translationY = drag.value.y * 0.25f
-            alpha = 1f - 0.6f * pull
-            scaleX = 1f - 0.06f * pull; scaleY = scaleX
-        }) { LockFace(LockPrefs.layout, dim = false, locked = true, onPeek = { peek = true }) }
+        // Only the clock and modules follow the finger; the background stays put.
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val shift = with(density) { androidx.compose.ui.unit.DpOffset((drag.value.x * 0.3f).toDp(), (drag.value.y * 0.3f).toDp()) }
+        LockFace(LockPrefs.layout, dim = false, locked = true, onPeek = { peek = true }, shift = shift, pull = pull)
         if (!peek) UnlockHint(Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp).graphicsLayer { alpha = 1f - pull })
         if (peek) Peek(onOpen = { key -> LockScreen.pendingOpen = key; unlock() }, onClose = { peek = false })
     }

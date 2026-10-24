@@ -19,6 +19,10 @@ import androidx.activity.compose.setContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
@@ -105,7 +109,8 @@ class CoverActivity : ComponentActivity() {
 
     /** Home settles into place: after unlock, and back from an app. */
     private fun playEntrance() {
-        lifecycleScope.launch(UiClock) { motion.snapTo(0f); runCatching { motion.animateTo(1f, enter) }.onFailure { motion.snapTo(1f) } }
+        // From a dimmed, slightly zoomed Home, never from black: a black frame reads as a glitch.
+        lifecycleScope.launch(UiClock) { motion.snapTo(0.35f); runCatching { motion.animateTo(1f, enter) }.onFailure { motion.snapTo(1f) } }
     }
     private var quickSettingsRequests by mutableIntStateOf(0)
 
@@ -132,7 +137,6 @@ class CoverActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (intent.getBooleanExtra(EXTRA_UNLOCKED, false)) playEntrance()
         dev.opencover.lock.CoverScale.record(this)
         LockPrefs.load(this)
         applyLockScreen()
@@ -170,18 +174,24 @@ class CoverActivity : ComponentActivity() {
             launch = { pkg, activity, user ->
                 // Step aside before a banking app checks for accessibility services.
                 if (pkg in BankingMode.apps(this)) BankingMode.pause(this, pkg)
-                // Didn't open: we're still in OpenCover, so turn accessibility straight back on.
-                // The app grows out of where it was tapped (an icon-sized spot around the touch) while Home zooms and dims
-                // behind it; back on Home it settles in again (onResume). If the app didn't open (still here a moment
-                // later), Home comes straight back.
+                // A card grows out of where it was tapped (an icon-sized spot around the touch) to fill the screen, with the
+                // app's icon, while Home zooms and dims behind it; then the app fades in over the card. Back on Home it
+                // settles in again (onResume). If the app didn't open (still here a moment later), the card shrinks away.
                 val r = (56 * resources.displayMetrics.density / 2).toInt()
                 val (x, y) = lastDown
-                AppLauncher.launch(this@CoverActivity, pkg, activity, user, { BankingMode.resume(this@CoverActivity) },
-                    window.decorView, android.graphics.Rect(x - r, y - r, x + r, y + r))
+                val from = android.graphics.Rect(x - r, y - r, x + r, y + r)
+                opening = Opening(from, repo.icon(pkg, activity, user))
                 lifecycleScope.launch(UiClock) {
-                    runCatching { motion.animateTo(0.5f, androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
-                    kotlinx.coroutines.delay(1_200)
-                    if (current == this@CoverActivity && motion.value < 1f) runCatching { motion.animateTo(1f, enter) }.onFailure { motion.snapTo(1f) }
+                    launch { runCatching { motion.animateTo(0.5f, androidx.compose.animation.core.tween(240, easing = androidx.compose.animation.core.FastOutSlowInEasing)) } }
+                    runCatching { grow.snapTo(0f); grow.animateTo(1f, androidx.compose.animation.core.tween(240, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
+                    // Didn't open: we're still in OpenCover, so turn accessibility straight back on.
+                    AppLauncher.launch(this@CoverActivity, pkg, activity, user, { BankingMode.resume(this@CoverActivity) }, window.decorView, from)
+                    kotlinx.coroutines.delay(1_500)
+                    if (current == this@CoverActivity && opening != null) {
+                        launch { runCatching { motion.animateTo(1f, enter) }.onFailure { motion.snapTo(1f) } }
+                        runCatching { grow.animateTo(0f, androidx.compose.animation.core.tween(200)) }
+                        opening = null
+                    }
                 }
             },
             change = ::update,
@@ -235,6 +245,7 @@ class CoverActivity : ComponentActivity() {
                         )
                     }
                 }
+                opening?.let { o -> OpeningCard(o.from, o.icon, grow.value) }
                 cropping?.let { job ->
                     CropScreen(job.image, job.start, onDone = { crop ->
                         cropping = null
@@ -327,7 +338,11 @@ class CoverActivity : ComponentActivity() {
         widgets.startListening()
     }
 
+    /** When Home went out of sight (onStop), 0 while it's shown. */
+    private var hiddenAt = 0L
+
     override fun onStop() {
+        hiddenAt = android.os.SystemClock.uptimeMillis()
         widgets.stopListening()
         super.onStop()
     }
@@ -348,7 +363,12 @@ class CoverActivity : ComponentActivity() {
         refreshLocked()
         if (ShizukuShell.allowed()) RotationFeature.upright(this) // shell call runs on its own thread
         current = this
-        if (motion.value < 1f) playEntrance() // back from an app Home opened
+        // Settle in only when Home was really out of sight for a moment (an app, the lock screen): a Home swipe on Home
+        // only passes through Samsung's cover home for an instant, and replaying would flash.
+        if (hiddenAt != 0L && android.os.SystemClock.uptimeMillis() - hiddenAt > 400) playEntrance()
+        else lifecycleScope.launch(UiClock) { motion.snapTo(1f) }
+        hiddenAt = 0L
+        opening = null; lifecycleScope.launch(UiClock) { grow.snapTo(0f) }
         // Home resumed: check whether it's on top yet (the curtain hiding Samsung's cover home can go then).
         dev.opencover.watcher.CoverAccessibility.instance?.let { dev.opencover.nav.NavBar.dropCurtainIfHome(it) }
         BankingMode.resume(this) // back in OpenCover, so any banking app was left
@@ -386,6 +406,11 @@ class CoverActivity : ComponentActivity() {
 
     // Every launch through AppLauncher.start (Home gesture, unlock, fold) lands here: go to Home.
     // A touch on Home or the lock screen during edge lighting keeps the cover awake afterwards.
+    /** An app being opened: the card growing out of [from] (window pixels) with its [icon]. */
+    private class Opening(val from: android.graphics.Rect, val icon: androidx.compose.ui.graphics.ImageBitmap?)
+    private var opening by mutableStateOf<Opening?>(null)
+    private val grow = androidx.compose.animation.core.Animatable(0f)
+
     /** Where the last touch went down, in this window: an app opened from it grows out of that spot. */
     private var lastDown = 0 to 0
 
@@ -397,7 +422,6 @@ class CoverActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (intent.getBooleanExtra(EXTRA_UNLOCKED, false)) playEntrance()
         homeRequests++
     }
 
@@ -485,5 +509,30 @@ private fun Entrance(shown: Float, content: @androidx.compose.runtime.Composable
             scaleX = 1f + 0.08f * (1f - shown)
             scaleY = scaleX
         }) { content() }
+    }
+}
+
+/** The card an app opens from: grows from [from] (window pixels) to the whole screen as [t] goes 0 to 1. */
+@androidx.compose.runtime.Composable
+private fun OpeningCard(from: android.graphics.Rect, icon: androidx.compose.ui.graphics.ImageBitmap?, t: Float) {
+    if (t <= 0f) return
+    androidx.compose.foundation.layout.BoxWithConstraints(androidx.compose.ui.Modifier.fillMaxSize()) {
+        val w = constraints.maxWidth.toFloat(); val h = constraints.maxHeight.toFloat()
+        fun lerp(a: Float, b: Float) = a + (b - a) * t
+        val left = lerp(from.left.toFloat(), 0f); val top = lerp(from.top.toFloat(), 0f)
+        val right = lerp(from.right.toFloat(), w); val bottom = lerp(from.bottom.toFloat(), h)
+        val d = androidx.compose.ui.platform.LocalDensity.current
+        val corner = with(d) { lerp(from.width() / 2f, 28.dp.toPx()).toDp() }
+        androidx.compose.foundation.layout.Box(
+            androidx.compose.ui.Modifier
+                .offset { androidx.compose.ui.unit.IntOffset(left.toInt(), top.toInt()) }
+                .size(with(d) { (right - left).toDp() }, with(d) { (bottom - top).toDp() })
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(corner))
+                .background(Color(0xFF16161A).copy(alpha = (t * 3f).coerceAtMost(1f))),
+            contentAlignment = androidx.compose.ui.Alignment.Center,
+        ) {
+            if (icon != null) androidx.compose.foundation.Image(icon, null,
+                androidx.compose.ui.Modifier.size(with(d) { (from.width() * (1f + 0.4f * t)).toDp() }))
+        }
     }
 }
