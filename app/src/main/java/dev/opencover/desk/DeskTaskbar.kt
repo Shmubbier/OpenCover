@@ -46,14 +46,16 @@ class DeskTaskbar(ctx: Context, displayId: Int) {
         main.post { if (added) runCatching { wm.removeView(row) }; added = false }
     }
 
-    // ponytail: polls the window list each second; a task-stack listener if this ever shows up in battery use.
+    // ponytail: polls the window list a few times a second; a task-stack listener if this ever shows up in battery use.
     private val poll = object : Runnable {
         override fun run() {
             // DeX hides its taskbar while the phone is locked; so does this.
             val locked = wctx.getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked
-            val now = if (locked) emptyList() else Desk.windows().filter { it.pkg != wctx.packageName }.sortedBy { it.task } // launch order, as a taskbar keeps it
+            val all = if (locked) emptyList() else Desk.windows().filter { it.pkg != wctx.packageName }
+            Desk.windowsChanged(all)
+            val now = all.map { it.copy(starting = false, bounds = android.graphics.Rect()) }.sortedBy { it.task } // launch order, as a taskbar keeps it
             if (now != shown) main.post { show(now) }
-            bg.postDelayed(this, 1_000)
+            bg.postDelayed(this, 300) // often enough for the pointer to follow windows as they move
         }
     }
 

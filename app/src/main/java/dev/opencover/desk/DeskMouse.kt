@@ -56,7 +56,7 @@ class DeskMouse(
         val input = runCatching { FileInputStream(path) }.getOrElse { Log.w(TAG, "can't open $path", it); return }
         stream = input
         grab(input)
-        cursor.moved(x, y)
+        runCatching { cursor.moved(x, y, false) }
         val buf = ByteArray(EVENT_SIZE)
         var dx = 0; var dy = 0; var wheel = 0f; var pressed = buttons
         while (running) {
@@ -76,12 +76,13 @@ class DeskMouse(
     private fun frame(dx: Int, dy: Int, wheel: Float, pressed: Int) {
         if (dx != 0 || dy != 0) {
             x = (x + dx).coerceIn(0f, w - 1f); y = (y + dy).coerceIn(0f, h - 1f)
-            cursor.moved(x, y)
+            runCatching { cursor.moved(x, y, buttons != 0) }
             send(if (buttons != 0) MotionEvent.ACTION_MOVE else MotionEvent.ACTION_HOVER_MOVE)
         }
         if (pressed != buttons) {
             val was = buttons
             buttons = pressed
+            runCatching { cursor.moved(x, y, pressed != 0) }
             if (was == 0) { onPress(); downAt = SystemClock.uptimeMillis(); send(MotionEvent.ACTION_DOWN) }
             (pressed and was.inv()).takeIf { it != 0 }?.let { send(MotionEvent.ACTION_BUTTON_PRESS, it) }
             (was and pressed.inv()).takeIf { it != 0 }?.let { send(MotionEvent.ACTION_BUTTON_RELEASE, it) }

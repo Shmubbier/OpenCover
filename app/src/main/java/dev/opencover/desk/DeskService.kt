@@ -42,9 +42,21 @@ class DeskService(context: Context) : IDesk.Stub() {
         @Suppress("UNCHECKED_CAST")
         (get.invoke(atm, 50, false, false, displayId) as List<android.app.ActivityManager.RunningTaskInfo>)
             .filter { t -> runCatching { t.javaClass.getMethod("getActivityType").invoke(t) == 1 }.getOrDefault(true) } // standard apps, not the desktop
-            .mapNotNull { t -> t.baseActivity?.let { "${t.taskId} ${it.packageName} ${t.isVisible}" } }
+            .mapNotNull { t -> t.baseActivity?.let { "${t.taskId} ${it.packageName} ${t.isVisible} ${starting(t)} ${bounds(t)}" } }
             .toTypedArray()
     }.getOrElse { Log.w("OpenCoverDesk", "couldn't list the desk's windows", it); emptyArray() }
+
+    /** Asked to show but not drawn yet: the app is still starting. */
+    private fun starting(t: android.app.ActivityManager.RunningTaskInfo) =
+        runCatching { t.javaClass.getMethod("isVisibleRequested").invoke(t) == true && !t.isVisible }.getOrDefault(false)
+
+    /** Where the window is on the desk, "left top right bottom". */
+    private fun bounds(t: android.app.ActivityManager.RunningTaskInfo): String = runCatching {
+        val config = t.javaClass.getField("configuration").get(t) as android.content.res.Configuration
+        val wc = config.javaClass.getField("windowConfiguration").get(config)!!
+        val r = wc.javaClass.getMethod("getBounds").invoke(wc) as android.graphics.Rect
+        "${r.left} ${r.top} ${r.right} ${r.bottom}"
+    }.getOrDefault("0 0 0 0")
 
     override fun showTask(taskId: Int, displayId: Int) {
         val options = android.app.ActivityOptions.makeBasic().setLaunchDisplayId(displayId).toBundle()

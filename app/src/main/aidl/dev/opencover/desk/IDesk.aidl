@@ -23,7 +23,7 @@ interface IDesk {
     /** Gives the mouse back to the system. */
     void stopMouse() = 4;
 
-    /** The app windows on display [displayId], front first, each as "taskId package visible". */
+    /** The app windows on display [displayId], front first, each as "taskId package visible starting left top right bottom". */
     String[] tasks(int displayId) = 5;
 
     /** Brings a window to the front on [displayId], restoring it if it was minimized. */

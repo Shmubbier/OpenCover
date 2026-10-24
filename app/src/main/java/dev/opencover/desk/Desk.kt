@@ -33,19 +33,14 @@ object Desk {
     var displayId = -1; private set
     private var root: android.view.View? = null
     private var cursorView: android.view.View? = null
+    private var pointer: DeskPointer? = null
     private var taskbar: DeskTaskbar? = null
-    private const val POINTER_PX = 36
-    private const val HELPER_VERSION = 5
+    private const val HELPER_VERSION = 6
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
 
     // The helper says where the mouse is; the cursor is drawn here, over the desk (the system draws none there).
     private val cursorListener = object : IDeskCursor.Stub() {
-        override fun moved(x: Float, y: Float) = main.post {
-            val v = cursorView ?: return@post
-            val lp = v.layoutParams as? WindowManager.LayoutParams ?: return@post
-            lp.x = x.toInt(); lp.y = y.toInt()
-            runCatching { v.context.getSystemService(WindowManager::class.java).updateViewLayout(v, lp) }
-        }.let { }
+        override fun moved(x: Float, y: Float, down: Boolean) = main.post { pointer?.moved(x, y, down) }.let { }
     }
 
     /** The monitor, if one is plugged in: a presentation display that isn't the cover. */
@@ -108,12 +103,14 @@ object Desk {
             val wm = wctx.getSystemService(WindowManager::class.java)
             wm.addView(frame, lp); view = sv; root = frame
             // The cursor in a small window of its own above the desk (the desk's picture would cover a view in its window).
-            val pointer = android.widget.ImageView(wctx).apply { setImageDrawable(PointerDrawable()) }
-            wm.addView(pointer, WindowManager.LayoutParams(POINTER_PX, POINTER_PX, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            val arrow = android.widget.ImageView(wctx)
+            wm.addView(arrow, WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT).apply { gravity = android.view.Gravity.TOP or android.view.Gravity.START; x = w / 2; y = h / 2 })
-            cursorView = pointer
+            cursorView = arrow
+            // The system's pointer images at the desk's density.
+            pointer = DeskPointer(arrow, wctx.createConfigurationContext(android.content.res.Configuration().apply { densityDpi = DPI }))
             monitorId = monitor.displayId
             (service as? dev.opencover.watcher.CoverAccessibility)?.refreshScope() // hear the taskbar's Recents button
             "Desk on monitor ${monitor.displayId}"
@@ -151,7 +148,7 @@ object Desk {
         runCatching { helper?.release() }
         runCatching { v.context.getSystemService(WindowManager::class.java).removeView(root ?: v) }
         cursorView?.let { c -> runCatching { c.context.getSystemService(WindowManager::class.java).removeView(c) } }
-        root = null; cursorView = null
+        root = null; cursorView = null; pointer = null
         view = null
         displayId = -1
         monitorId = -1
@@ -160,12 +157,27 @@ object Desk {
         dev.opencover.watcher.CoverAccessibility.instance?.refreshScope()
     }
 
+    /** The desk's windows changed (the taskbar's poll): the pointer resizes on their edges. */
+    fun windowsChanged(windows: List<Window>) { pointer?.windows = windows }
+
+    /**
+     * The mouse went over a view on the desk (the app's hover event): the text beam over a text field. Only the view's
+     * type is looked at, never what it shows.
+     */
+    fun onHover(event: android.view.accessibility.AccessibilityEvent) {
+        if (displayId < 0 || event.displayId != displayId) return
+        val cls = event.className?.toString().orEmpty()
+        pointer?.overText = cls.endsWith("EditText") || cls.endsWith("AutoCompleteTextView")
+    }
+
     /** An app window on the desk. */
-    data class Window(val task: Int, val pkg: String, val visible: Boolean)
+    data class Window(val task: Int, val pkg: String, val visible: Boolean, val starting: Boolean = false,
+                      val bounds: android.graphics.Rect = android.graphics.Rect())
 
     /** The desk's app windows, front first, minimized ones included. */
     fun windows(): List<Window> = runCatching { helper?.tasks(displayId) }.getOrNull().orEmpty().mapNotNull { line ->
-        line.split(' ').takeIf { it.size == 3 }?.let { (id, pkg, vis) -> Window(id.toInt(), pkg, vis.toBoolean()) }
+        val f = line.split(' ').takeIf { it.size == 8 } ?: return@mapNotNull null
+        Window(f[0].toInt(), f[1], f[2].toBoolean(), f[3].toBoolean(), android.graphics.Rect(f[4].toInt(), f[5].toInt(), f[6].toInt(), f[7].toInt()))
     }
 
     fun show(task: Int) { runCatching { helper?.showTask(task, displayId) } }
@@ -188,23 +200,4 @@ object Desk {
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION), options.toBundle())
         }.onFailure { Log.w(TAG, "couldn't open the desk's recents", it) }
     }
-}
-
-/** An arrow pointer: white with a black edge, its tip at the top left. */
-private class PointerDrawable : android.graphics.drawable.Drawable() {
-    private val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
-    private val edge = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.BLACK; style = android.graphics.Paint.Style.STROKE; strokeWidth = 2f; strokeJoin = android.graphics.Paint.Join.ROUND
-    }
-    override fun draw(c: android.graphics.Canvas) {
-        val s = bounds.width() / 36f
-        val p = android.graphics.Path().apply {
-            moveTo(2f * s, 2f * s); lineTo(2f * s, 28f * s); lineTo(9f * s, 21f * s); lineTo(14f * s, 32f * s)
-            lineTo(19f * s, 30f * s); lineTo(14f * s, 19f * s); lineTo(24f * s, 19f * s); close()
-        }
-        c.drawPath(p, fill); c.drawPath(p, edge)
-    }
-    override fun setAlpha(alpha: Int) {}
-    override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) {}
-    @Deprecated("Deprecated in Java") override fun getOpacity() = android.graphics.PixelFormat.TRANSLUCENT
 }
