@@ -27,8 +27,34 @@ class DeskService(context: Context) : IDesk.Stub() {
             // The public constructor isn't exposed; DisplayManager(Context) is.
             val dm = DisplayManager::class.java.getDeclaredConstructor(Context::class.java).apply { isAccessible = true }.newInstance(shell)
             display = dm.createVirtualDisplay("OpenCover Desk", width, height, dpi, surface, FLAGS)
-            display!!.display.displayId
+            display!!.display.displayId.also { id ->
+                // Freeform: apps open as windows that move, resize and minimize, as on DeX.
+                runCatching { Runtime.getRuntime().exec(arrayOf("cmd", "window", "set-display-windowing-mode", "-d", "$id", "5")).waitFor() }
+            }
         }.getOrElse { Log.w("OpenCoverDesk", "couldn't make the desk display", it); -1 }
+    }
+
+    private val atm by lazy { Class.forName("android.app.ActivityTaskManager").getMethod("getService").invoke(null)!! }
+
+    override fun tasks(displayId: Int): Array<String> = runCatching {
+        // IActivityTaskManager.getTasks(maxNum, filterOnlyVisibleRecents, keepIntentExtra, displayId), front first.
+        val get = atm.javaClass.methods.first { it.name == "getTasks" && it.parameterTypes.size == 4 }
+        @Suppress("UNCHECKED_CAST")
+        (get.invoke(atm, 50, false, false, displayId) as List<android.app.ActivityManager.RunningTaskInfo>)
+            .filter { t -> runCatching { t.javaClass.getMethod("getActivityType").invoke(t) == 1 }.getOrDefault(true) } // standard apps, not the desktop
+            .mapNotNull { t -> t.baseActivity?.let { "${t.taskId} ${it.packageName} ${t.isVisible}" } }
+            .toTypedArray()
+    }.getOrElse { Log.w("OpenCoverDesk", "couldn't list the desk's windows", it); emptyArray() }
+
+    override fun showTask(taskId: Int, displayId: Int) {
+        val options = android.app.ActivityOptions.makeBasic().setLaunchDisplayId(displayId).toBundle()
+        runCatching { atm.javaClass.getMethod("startActivityFromRecents", Int::class.javaPrimitiveType, android.os.Bundle::class.java).invoke(atm, taskId, options) }
+            .onFailure { Log.w("OpenCoverDesk", "couldn't show task $taskId", it) }
+    }
+
+    override fun closeTask(taskId: Int) {
+        runCatching { atm.javaClass.getMethod("removeTask", Int::class.javaPrimitiveType).invoke(atm, taskId) }
+            .onFailure { Log.w("OpenCoverDesk", "couldn't close task $taskId", it) }
     }
 
     override fun release() {
@@ -56,7 +82,6 @@ class DeskService(context: Context) : IDesk.Stub() {
 
     /** IActivityTaskManager.focusTopTask(displayId): the desk becomes the focused display, so typing goes there. */
     private fun focus(displayId: Int) {
-        val atm = Class.forName("android.app.ActivityTaskManager").getMethod("getService").invoke(null)!!
         atm.javaClass.getMethod("focusTopTask", Int::class.javaPrimitiveType).invoke(atm, displayId)
     }
 

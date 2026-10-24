@@ -34,7 +34,7 @@ object Desk {
     private var root: android.view.View? = null
     private var cursorView: android.view.View? = null
     private const val POINTER_PX = 36
-    private const val HELPER_VERSION = 3
+    private const val HELPER_VERSION = 4
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
 
     // The helper says where the mouse is; the cursor is drawn here, over the desk (the system draws none there).
@@ -114,6 +114,7 @@ object Desk {
                 PixelFormat.TRANSLUCENT).apply { gravity = android.view.Gravity.TOP or android.view.Gravity.START; x = w / 2; y = h / 2 })
             cursorView = pointer
             monitorId = monitor.displayId
+            (service as? dev.opencover.watcher.CoverAccessibility)?.refreshScope() // hear the taskbar's Recents button
             "Desk on monitor ${monitor.displayId}"
         }
             .getOrElse { Log.w(TAG, "couldn't cover the monitor", it); "Couldn't cover the monitor: ${it.message}" }
@@ -152,6 +153,36 @@ object Desk {
         monitorId = -1
         runCatching { Shizuku.unbindUserService(args, connection, true) }
         helper = null
+        dev.opencover.watcher.CoverAccessibility.instance?.refreshScope()
+    }
+
+    /** An app window on the desk. */
+    data class Window(val task: Int, val pkg: String, val visible: Boolean)
+
+    /** The desk's app windows, front first, minimized ones included. */
+    fun windows(): List<Window> = runCatching { helper?.tasks(displayId) }.getOrNull().orEmpty().mapNotNull { line ->
+        line.split(' ').takeIf { it.size == 3 }?.let { (id, pkg, vis) -> Window(id.toInt(), pkg, vis.toBoolean()) }
+    }
+
+    fun show(task: Int) { runCatching { helper?.showTask(task, displayId) } }
+    fun close(task: Int) { runCatching { helper?.closeTask(task) } }
+
+    /**
+     * DeX's taskbar Recents button sends the Recents key, which the folded phone ignores (and would show on the phone,
+     * not here), so OpenCover answers the button's click with its own switcher on the desk.
+     * ponytail: matched by its English label; match the launcher's own string if other languages need it.
+     */
+    fun onClick(service: Context, event: android.view.accessibility.AccessibilityEvent) {
+        if (displayId < 0 || event.displayId != displayId || event.packageName != "com.sec.android.app.launcher") return
+        if (event.contentDescription?.toString() != "Recents") return
+        // Apps' windows on the desk are freeform and always on top, so Recents is a freeform window too, over the whole desk.
+        val size = service.getSystemService(DisplayManager::class.java).getDisplay(displayId)?.mode ?: return
+        val options = android.app.ActivityOptions.makeBasic().setLaunchDisplayId(displayId)
+            .setLaunchBounds(android.graphics.Rect(0, 0, size.physicalWidth, size.physicalHeight))
+        runCatching {
+            service.startActivity(android.content.Intent(service, DeskRecentsActivity::class.java)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION), options.toBundle())
+        }.onFailure { Log.w(TAG, "couldn't open the desk's recents", it) }
     }
 }
 

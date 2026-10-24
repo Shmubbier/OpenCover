@@ -137,9 +137,12 @@ class CoverAccessibility : AccessibilityService() {
             // A turned app needs its windows seen from every app; screen content is still never read.
             // Window-change events (top edge, our navigation bar) only arrive with every app in scope.
             packageNames = if (topEdge || nav || KeepOnCover.enabled(this@CoverAccessibility) || PhonePrefs(this@CoverAccessibility).hasRotations) null
-            else (setOf("com.android.systemui") + BankingMode.apps(this@CoverAccessibility)).toTypedArray()
+            else (setOf("com.android.systemui") + BankingMode.apps(this@CoverAccessibility) +
+                (if (dev.opencover.desk.Desk.running) setOf("com.sec.android.app.launcher") else emptySet())).toTypedArray()
+            // The desk: clicks, to catch DeX's taskbar Recents button (Desk.onClick).
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
-                (if (topEdge || nav) AccessibilityEvent.TYPE_WINDOWS_CHANGED else 0)
+                (if (topEdge || nav) AccessibilityEvent.TYPE_WINDOWS_CHANGED else 0) or
+                (if (dev.opencover.desk.Desk.running) AccessibilityEvent.TYPE_VIEW_CLICKED else 0)
             // The window list: top-edge priority catches Samsung's panel; the lock screen checks nothing (a call, an alarm) is
             // on top; OpenCover's navigation bar follows Samsung's.
             flags = (if (topEdge || LockPrefs.lockScreen || nav) flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
@@ -182,6 +185,7 @@ class CoverAccessibility : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
+        if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) return dev.opencover.desk.Desk.onClick(this, event)
         if (event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
             if (TopEdge.enabled(this)) takeTopEdge()
             updateNavBar()
