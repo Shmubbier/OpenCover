@@ -161,6 +161,18 @@ private fun ExperimentalPanel(topEdge: Boolean, onTopEdge: (Boolean) -> Unit, on
                 "Messenger, Discord, Viber and other apps' calls get the cover call screen, like phone calls. Answering hands over to the app's own call screen.",
                 voip) { voip = it; dev.opencover.call.CallStore.setVoip(ctx, it) }
         }
+        var desk by remember { mutableStateOf(dev.opencover.desk.Desk.running) }
+        Group {
+            SwitchRow("Desktop on external monitor (test)",
+                "Plug a USB-C monitor in and turn this on: Chrome opens on the monitor while the phone stays free. Needs Shizuku.",
+                desk) { on ->
+                val service = CoverAccessibility.instance
+                val msg = if (!on) { dev.opencover.desk.Desk.stop(); "Desk stopped" }
+                    else service?.let { dev.opencover.desk.Desk.start(it) } ?: "Turn on OpenCover's accessibility first"
+                desk = dev.opencover.desk.Desk.running
+                android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
         Group {
             SwitchRow("Top-edge priority",
                 "Replaces Samsung's pull-down panel with ours. Its panel still flashes and blocks touches for ~2 s. Lets OpenCover read the window list.",
