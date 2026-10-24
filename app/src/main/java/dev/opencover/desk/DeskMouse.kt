@@ -34,10 +34,16 @@ class DeskMouse(
     private val inject by lazy { im.javaClass.getMethod("injectInputEvent", InputEvent::class.java, Int::class.javaPrimitiveType) }
     private val setDisplay by lazy { MotionEvent::class.java.getMethod("setDisplayId", Int::class.javaPrimitiveType) }
 
-    /** Starts reading; false if there's no mouse. */
+    /** Starts reading; false if there's no mouse. A mouse that drops off (unplugged, a hub reset) is taken again when it's back. */
     fun start(): Boolean {
-        val path = findMouse() ?: return false
-        Thread({ run(path) }, "desk-mouse").start()
+        val first = findMouse() ?: return false
+        Thread({
+            var path: String? = first
+            while (running) {
+                if (path != null) run(path)
+                if (running) { Thread.sleep(1_000); path = findMouse() }
+            }
+        }, "desk-mouse").start()
         return true
     }
 

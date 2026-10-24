@@ -35,7 +35,7 @@ object Desk {
     private var cursorView: android.view.View? = null
     private var taskbar: DeskTaskbar? = null
     private const val POINTER_PX = 36
-    private const val HELPER_VERSION = 4
+    private const val HELPER_VERSION = 5
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
 
     // The helper says where the mouse is; the cursor is drawn here, over the desk (the system draws none there).
