@@ -69,8 +69,9 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 /**
- * Home: the clock and the quick apps, each where the user put them. Long-press an empty spot to move, resize or hide
- * them ([editing]); Done saves, Back drops the changes.
+ * Home: the clock and the quick apps, each where the user put them. Long-press to customize ([editing]): move, resize
+ * or hide them, and tap a quick app spot to choose its app. Empty spots only show while customizing, so an empty Home
+ * is all wallpaper. Done saves, Back drops the changes.
  */
 @Composable
 fun HomeScreen(home: Home, a: LauncherActions, editing: Boolean, onEditing: (Boolean) -> Unit, onEditSlot: (Int) -> Unit) {
@@ -96,7 +97,9 @@ fun HomeScreen(home: Home, a: LauncherActions, editing: Boolean, onEditing: (Boo
             when (item) {
                 HomeItem.CLOCK -> ClockFace(style, Modifier.padding(20.dp))
                 HomeItem.APPS -> Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    home.quick.forEachIndexed { slot, q -> QuickSlot(q, a, enabled = !editing) { onEditSlot(slot) } }
+                    home.quick.forEachIndexed { slot, q ->
+                        if (q != null || editing) QuickSlot(q, a, editing, onEdit = { onEditSlot(slot) }, onCustomize = { onEditing(true) })
+                    }
                 }
             }
         }
@@ -114,14 +117,13 @@ fun HomeScreen(home: Home, a: LauncherActions, editing: Boolean, onEditing: (Boo
 private val homeItemNames = mapOf(HomeItem.CLOCK to "Clock", HomeItem.APPS to "Quick apps")
 
 @Composable
-private fun QuickSlot(q: QuickApp?, a: LauncherActions, enabled: Boolean, onEdit: () -> Unit) {
+private fun QuickSlot(q: QuickApp?, a: LauncherActions, editing: Boolean, onEdit: () -> Unit, onCustomize: () -> Unit) {
     val icon = q?.let { a.repo.icon(it.pkg, it.activity, it.user) }
     Box(
-        Modifier.size(52.dp).pointerInput(q, enabled) {
-            if (enabled) detectTapGestures(
-                onTap = { if (q == null) onEdit() else a.launch(q.pkg, q.activity, q.user) },
-                onLongPress = { onEdit() },
-            )
+        Modifier.size(52.dp).pointerInput(q, editing) {
+            // Customizing: a tap chooses or changes the app. Otherwise a tap opens it and a hold starts customizing.
+            if (editing) detectTapGestures(onTap = { onEdit() })
+            else detectTapGestures(onTap = { q?.let { a.launch(it.pkg, it.activity, it.user) } }, onLongPress = { onCustomize() })
         },
         contentAlignment = Alignment.Center,
     ) {

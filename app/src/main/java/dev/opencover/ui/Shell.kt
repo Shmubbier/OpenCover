@@ -215,12 +215,21 @@ fun Shell(
                     }
                 },
             ) { i ->
-                when (i) {
-                    NOTIFICATIONS_PAGE -> PanelBackdrop { NotificationsPage(NotificationStore.notes) }
-                    HOME_PAGE -> HomeScreen(layout.home, a, homeEditing, { homeEditing = it }) { slot ->
-                        if (layout.home.quick[slot] == null) overlay = Overlay.PickSlot(slot) else slotMenu = slot
+                // As a page slides away it fades, and Home also sinks back a little; the page coming in rises to meet you.
+                // (The other pages only fade: shrinking would show the edges of their backdrop.)
+                Box(Modifier.fillMaxSize().graphicsLayer {
+                    val away = kotlin.math.abs(pager.currentPage - i + pager.currentPageOffsetFraction).coerceIn(0f, 1f)
+                    val eased = androidx.compose.animation.core.FastOutSlowInEasing.transform(away)
+                    alpha = 1f - 0.45f * eased
+                    if (i == HOME_PAGE) { scaleX = 1f - 0.08f * eased; scaleY = scaleX }
+                }) {
+                    when (i) {
+                        NOTIFICATIONS_PAGE -> PanelBackdrop { NotificationsPage(NotificationStore.notes) }
+                        HOME_PAGE -> HomeScreen(layout.home, a, homeEditing, { homeEditing = it }) { slot ->
+                            if (layout.home.quick[slot] == null) overlay = Overlay.PickSlot(slot) else slotMenu = slot
+                        }
+                        else -> PanelBackdrop { GridPage(layout, layoutPageFor(i)!!, editing, labels, a, onLongPress = { editing = true }) }
                     }
-                    else -> PanelBackdrop { GridPage(layout, layoutPageFor(i)!!, editing, labels, a, onLongPress = { editing = true }) }
                 }
             }
         }

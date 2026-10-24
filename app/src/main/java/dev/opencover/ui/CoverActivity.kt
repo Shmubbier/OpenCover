@@ -29,6 +29,8 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
@@ -94,7 +96,17 @@ class CoverActivity : ComponentActivity() {
     fun applyLockScreen() = setShowWhenLocked(LockPrefs.lockScreen)
 
     /** Bumped when Home comes up straight from the lock screen: plays [Entrance]. */
-    private var entrances by mutableIntStateOf(0)
+    // Compose's main dispatcher: it carries the frame clock animations need (lifecycleScope's alone doesn't).
+    private val UiClock = androidx.compose.ui.platform.AndroidUiDispatcher.Main
+
+    /** Home's motion (see [Entrance]): 1 at rest. */
+    private val motion = androidx.compose.animation.core.Animatable(1f)
+    private val enter = androidx.compose.animation.core.tween<Float>(320, easing = androidx.compose.animation.core.LinearOutSlowInEasing)
+
+    /** Home settles into place: after unlock, and back from an app. */
+    private fun playEntrance() {
+        lifecycleScope.launch(UiClock) { motion.snapTo(0f); runCatching { motion.animateTo(1f, enter) }.onFailure { motion.snapTo(1f) } }
+    }
     private var quickSettingsRequests by mutableIntStateOf(0)
 
     /** Called by the accessibility service after it closes Samsung's panel. */
@@ -120,7 +132,7 @@ class CoverActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (intent.getBooleanExtra(EXTRA_UNLOCKED, false)) entrances++
+        if (intent.getBooleanExtra(EXTRA_UNLOCKED, false)) playEntrance()
         dev.opencover.lock.CoverScale.record(this)
         LockPrefs.load(this)
         applyLockScreen()
@@ -159,7 +171,18 @@ class CoverActivity : ComponentActivity() {
                 // Step aside before a banking app checks for accessibility services.
                 if (pkg in BankingMode.apps(this)) BankingMode.pause(this, pkg)
                 // Didn't open: we're still in OpenCover, so turn accessibility straight back on.
-                AppLauncher.launch(this, pkg, activity, user) { BankingMode.resume(this) }
+                // The app grows out of where it was tapped (an icon-sized spot around the touch) while Home zooms and dims
+                // behind it; back on Home it settles in again (onResume). If the app didn't open (still here a moment
+                // later), Home comes straight back.
+                val r = (56 * resources.displayMetrics.density / 2).toInt()
+                val (x, y) = lastDown
+                AppLauncher.launch(this@CoverActivity, pkg, activity, user, { BankingMode.resume(this@CoverActivity) },
+                    window.decorView, android.graphics.Rect(x - r, y - r, x + r, y + r))
+                lifecycleScope.launch(UiClock) {
+                    runCatching { motion.animateTo(0.5f, androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
+                    kotlinx.coroutines.delay(1_200)
+                    if (current == this@CoverActivity && motion.value < 1f) runCatching { motion.animateTo(1f, enter) }.onFailure { motion.snapTo(1f) }
+                }
             },
             change = ::update,
             addApp = { e, page -> place(page, 1, 1, { AppItem(newId(), it, e.pkg, e.activity, e.user) }) },
@@ -194,7 +217,7 @@ class CoverActivity : ComponentActivity() {
                     when {
                         isLocked && LockPrefs.lockScreen -> LockLayer(this@CoverActivity)
                         isLocked -> Box(Modifier.fillMaxSize().background(Color.Black)) // not shown over the keyguard then
-                        required && !showSetup -> Entrance(entrances) { Shell(layout, apps, actions, prompt, Wallpaper.homeStill, homeRequests, quickSettingsRequests) }
+                        required && !showSetup -> Entrance(motion.value) { Shell(layout, apps, actions, prompt, Wallpaper.homeStill, homeRequests, quickSettingsRequests) }
                         pickingBanking -> {
                             var selected by remember { mutableStateOf(BankingMode.apps(this@CoverActivity)) }
                             BankingPicker(
@@ -325,6 +348,7 @@ class CoverActivity : ComponentActivity() {
         refreshLocked()
         if (ShizukuShell.allowed()) RotationFeature.upright(this) // shell call runs on its own thread
         current = this
+        if (motion.value < 1f) playEntrance() // back from an app Home opened
         // Home resumed: check whether it's on top yet (the curtain hiding Samsung's cover home can go then).
         dev.opencover.watcher.CoverAccessibility.instance?.let { dev.opencover.nav.NavBar.dropCurtainIfHome(it) }
         BankingMode.resume(this) // back in OpenCover, so any banking app was left
@@ -362,14 +386,18 @@ class CoverActivity : ComponentActivity() {
 
     // Every launch through AppLauncher.start (Home gesture, unlock, fold) lands here: go to Home.
     // A touch on Home or the lock screen during edge lighting keeps the cover awake afterwards.
+    /** Where the last touch went down, in this window: an app opened from it grows out of that spot. */
+    private var lastDown = 0 to 0
+
     override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
         dev.opencover.edge.EdgeLight.lastTouch = android.os.SystemClock.uptimeMillis()
+        if (ev.actionMasked == android.view.MotionEvent.ACTION_DOWN) lastDown = ev.x.toInt() to ev.y.toInt()
         return super.dispatchTouchEvent(ev)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (intent.getBooleanExtra(EXTRA_UNLOCKED, false)) entrances++
+        if (intent.getBooleanExtra(EXTRA_UNLOCKED, false)) playEntrance()
         homeRequests++
     }
 
@@ -443,18 +471,19 @@ class CoverActivity : ComponentActivity() {
     }
 }
 
-/** Home's own entrance after unlock (the system's app-open animation is off): a quick fade and settle. */
+/**
+ * Home's own motion (the system's app animations are off on the cover). [shown] 1 is Home at rest; towards 0 it grows
+ * and fades, as if you were diving into the app: opening an app plays 1 to 0, and coming back (or unlocking) 0 to 1,
+ * so Home settles back into place as the app shrinks away.
+ */
 @androidx.compose.runtime.Composable
-private fun Entrance(key: Int, content: @androidx.compose.runtime.Composable () -> Unit) {
-    val t = androidx.compose.runtime.remember { androidx.compose.animation.core.Animatable(1f) }
-    androidx.compose.runtime.LaunchedEffect(key) {
-        if (key == 0) return@LaunchedEffect
-        t.snapTo(0f)
-        t.animateTo(1f, androidx.compose.animation.core.tween(260, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+private fun Entrance(shown: Float, content: @androidx.compose.runtime.Composable () -> Unit) {
+    // Fades through black, not to transparent: the window behind Home is Samsung's cover home.
+    androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.background(Color.Black)) {
+        androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.graphicsLayer {
+            alpha = shown
+            scaleX = 1f + 0.08f * (1f - shown)
+            scaleY = scaleX
+        }) { content() }
     }
-    androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.graphicsLayer {
-        alpha = t.value
-        scaleX = 0.96f + 0.04f * t.value
-        scaleY = scaleX
-    }) { content() }
 }

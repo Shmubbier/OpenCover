@@ -34,6 +34,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.VectorConverter
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -68,7 +73,9 @@ fun openOnUnlock(pending: String?, coverActive: Boolean): String? = pending?.tak
 @androidx.compose.runtime.Composable
 fun LockLayer(activity: android.app.Activity) {
     var peek by remember { mutableStateOf(false) }
-    var dragged by remember { mutableStateOf(0f) }
+    // The swipe so far: the face follows it a little and fades, then springs back if it didn't go far enough.
+    val drag = remember { androidx.compose.animation.core.Animatable(androidx.compose.ui.geometry.Offset.Zero, androidx.compose.ui.geometry.Offset.VectorConverter) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     fun unlock() {
         activity.getSystemService(KeyguardManager::class.java).requestDismissKeyguard(activity, object : KeyguardManager.KeyguardDismissCallback() {
             override fun onDismissSucceeded() { (activity as? CoverActivity)?.refreshLocked() }
@@ -87,15 +94,40 @@ fun LockLayer(activity: android.app.Activity) {
     }
     Box(
         Modifier.fillMaxSize().pointerInput(Unit) {
-            detectVerticalDragGestures(
-                onDragStart = { dragged = 0f },
-                onDragEnd = { if (dragged < -150f) unlock() },
-            ) { _, dy -> dragged += dy }
+            // Any direction unlocks once the finger has gone far enough.
+            detectDragGestures(
+                onDragEnd = {
+                    val far = drag.value.getDistance() > UNLOCK_PX
+                    if (far) unlock()
+                    scope.launch { drag.animateTo(androidx.compose.ui.geometry.Offset.Zero, androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 300f)) }
+                },
+                onDragCancel = { scope.launch { drag.animateTo(androidx.compose.ui.geometry.Offset.Zero) } },
+            ) { change, amount -> change.consume(); scope.launch { drag.snapTo(drag.value + amount) } }
         },
     ) {
-        LockFace(LockPrefs.layout, dim = false, locked = true, onPeek = { peek = true })
+        val pull = (drag.value.getDistance() / UNLOCK_PX).coerceIn(0f, 1f)
+        Box(Modifier.fillMaxSize().graphicsLayer {
+            translationX = drag.value.x * 0.25f; translationY = drag.value.y * 0.25f
+            alpha = 1f - 0.6f * pull
+            scaleX = 1f - 0.06f * pull; scaleY = scaleX
+        }) { LockFace(LockPrefs.layout, dim = false, locked = true, onPeek = { peek = true }) }
+        if (!peek) UnlockHint(Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp).graphicsLayer { alpha = 1f - pull })
         if (peek) Peek(onOpen = { key -> LockScreen.pendingOpen = key; unlock() }, onClose = { peek = false })
     }
+}
+
+private const val UNLOCK_PX = 160f
+
+/** "Swipe to unlock", breathing slowly so it's noticed without drawing the eye all the time. */
+@androidx.compose.runtime.Composable
+private fun UnlockHint(modifier: Modifier) {
+    val breath by androidx.compose.animation.core.rememberInfiniteTransition(label = "hint").animateFloat(
+        0.35f, 0.85f, androidx.compose.animation.core.infiniteRepeatable(
+            androidx.compose.animation.core.tween(1600, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            androidx.compose.animation.core.RepeatMode.Reverse,
+        ), label = "breath",
+    )
+    androidx.compose.material3.Text("Swipe to unlock", color = Color.White, fontSize = 14.sp, modifier = modifier.graphicsLayer { alpha *= breath })
 }
 
 object LockScreen {

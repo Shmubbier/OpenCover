@@ -23,8 +23,13 @@ object AppLauncher {
         runCatching { ActivityOptions::class.java.getMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType) }.getOrNull()
     }
 
-    /** Options for an app opened on the cover without Shizuku: fullscreen there, allowed to start from the background. */
-    private fun appOptions(): Bundle = ActivityOptions.makeBasic().setLaunchDisplayId(COVER_DISPLAY).apply {
+    /**
+     * Options for an app opened on the cover without Shizuku: fullscreen there, allowed to start from the background,
+     * and, given where it was tapped ([from], in [view]'s window), growing out of that spot.
+     */
+    private fun appOptions(view: android.view.View? = null, from: android.graphics.Rect? = null): Bundle =
+        (if (view != null && from != null) ActivityOptions.makeScaleUpAnimation(view, from.left, from.top, from.width(), from.height())
+        else ActivityOptions.makeBasic()).setLaunchDisplayId(COVER_DISPLAY).apply {
         runCatching { setWindowingMode?.invoke(this, 1) } // WINDOWING_MODE_FULLSCREEN
         setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS)
     }.toBundle()
@@ -60,13 +65,20 @@ object AppLauncher {
      * thread if it didn't open. Samsung answers many apps launched by another app with "Open phone to continue", but
      * lets the same launch from the shell through, so Shizuku goes first.
      */
-    fun launch(ctx: Context, pkg: String, activity: String, user: Long, onFail: () -> Unit = {}) {
+    fun launch(
+        ctx: Context, pkg: String, activity: String, user: Long, onFail: () -> Unit = {},
+        view: android.view.View? = null, from: android.graphics.Rect? = null,
+    ) {
         val handle = ctx.getSystemService(UserManager::class.java).getUserForSerialNumber(user)
         // UserHandle's id is hidden API; its toString is "UserHandle{<id>}".
         val userId = handle?.toString()?.substringAfter('{')?.substringBefore('}')
         val main = Handler(Looper.getMainLooper())
+        // With every app on the cover list (see CoverAllowList) the accessibility start works for all of them, and it
+        // can carry the grow-from-the-icon animation; Shizuku's am start can't, so it is only the fallback then.
+        val listed = ctx.checkSelfPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED && CoverAccessibility.instance != null
         Thread {
-            val shell = userId != null && ShizukuShell.run(
+            val shell = !listed && userId != null && ShizukuShell.run(
                 "am", "start", "--display", "$COVER_DISPLAY", "--user", userId,
                 "-a", Intent.ACTION_MAIN, "-c", Intent.CATEGORY_LAUNCHER, "-f", "${LAUNCHER_FLAGS}", "-n", "$pkg/$activity",
             )
@@ -80,7 +92,7 @@ object AppLauncher {
                         service.startActivity(
                             Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(ComponentName(pkg, activity))
                                 .addFlags(LAUNCHER_FLAGS),
-                            appOptions(),
+                            appOptions(view, from),
                         )
                     } else {
                         ctx.getSystemService(LauncherApps::class.java)
