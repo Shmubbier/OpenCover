@@ -37,10 +37,13 @@ class DeskPointer(private val view: ImageView, iconContext: Context) {
     }
 
     private fun update() {
+        val was = type
         if (!down) show(pick()) // a drag keeps the shape it started with, as a resize does
         val icon = icons[type] ?: return
         val lp = view.layoutParams as? WindowManager.LayoutParams ?: return
-        lp.x = (x - icon.hotX).toInt(); lp.y = (y - icon.hotY).toInt()
+        val nx = (x - icon.hotX).toInt(); val ny = (y - icon.hotY).toInt()
+        if (nx == lp.x && ny == lp.y && type == was) return // the window list changed but not the pointer: nothing to move
+        lp.x = nx; lp.y = ny
         runCatching { view.context.getSystemService(WindowManager::class.java).updateViewLayout(view, lp) }
     }
 

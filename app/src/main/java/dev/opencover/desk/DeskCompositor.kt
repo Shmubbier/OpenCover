@@ -47,8 +47,11 @@ class DeskCompositor(out: Surface, private val w: Int, private val h: Int, priva
         ready.await()
     }
 
+    /** Lets go of everything, the monitor's surface included, before returning (it may be drawn on again at once). */
     fun release() {
-        gl.post { tearDown(); thread.quitSafely() }
+        val done = CountDownLatch(1)
+        gl.post { tearDown(); done.countDown(); thread.quitSafely() }
+        done.await()
     }
 
     private fun setUp(out: Surface) {

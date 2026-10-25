@@ -68,7 +68,10 @@ object DeskBackground {
     /** Makes the H.264 for an animated own background (blocking, a few seconds; Home's makes its own). */
     fun makeVideo(ctx: Context) {
         val f = own(ctx).takeIf { it.exists() && !isVideo(it) && Video.of(it) == null } ?: return
-        if (dev.opencover.home.Animation.open(f) != null) Video.make(f)
+        val anim = dev.opencover.home.Animation.open(f)
+        val head = f.inputStream().use { i -> ByteArray(16).also { i.read(it) } }.joinToString(" ") { "%02x".format(it) }
+        android.util.Log.i("OpenCoverDesk", "desk background ${f.length()} bytes [$head], animation ${anim?.duration} ms: making its video")
+        if (anim != null) android.util.Log.i("OpenCoverDesk", "video made: ${Video.make(f)}")
     }
 
     /** The shown part as a [w]x[h] picture. */

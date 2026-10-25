@@ -35,7 +35,7 @@ object Desk {
     private var cursorView: android.view.View? = null
     private var pointer: DeskPointer? = null
     private var taskbar: DeskTaskbar? = null
-    private const val HELPER_VERSION = 14
+    private const val HELPER_VERSION = 15
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
 
     // The helper says where the mouse is; the cursor is drawn here, over the desk (the system draws none there).
@@ -97,6 +97,7 @@ object Desk {
         frame.addView(sv)
         sv.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
+                monitorSurface = holder.surface; size = w to h
                 // An animated background: OpenCover draws the desk onto the monitor, the video where the desk shows its key colour.
                 val target = deskVideo(service, w, h)?.let { (video, crop) ->
                     DeskCompositor(holder.surface, w, h, video, crop).also { compositor = it }.input
@@ -106,7 +107,7 @@ object Desk {
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
             override fun surfaceDestroyed(holder: SurfaceHolder) {
                 runCatching { helper?.release() }; displayId = -1
-                compositor?.release(); compositor = null
+                compositor?.release(); compositor = null; monitorSurface = null
             }
         })
         val lp = WindowManager.LayoutParams(
@@ -132,6 +133,11 @@ object Desk {
             this.service = service
             pointer = DeskPointer(arrow, wctx.createConfigurationContext(android.content.res.Configuration().apply { densityDpi = DPI }))
             monitorId = monitor.displayId
+            // An animated own background whose video isn't made yet (it takes a few seconds): make it, then show it.
+            if (wallpaper(service) && DeskBackground.hasOwn(service) && DeskBackground.video(service) == null) Thread {
+                DeskBackground.makeVideo(service)
+                if (DeskBackground.video(service) != null) main.post { backgroundChanged() }
+            }.apply { priority = Thread.MIN_PRIORITY }.start()
             (service as? dev.opencover.watcher.CoverAccessibility)?.refreshScope() // hear the taskbar's Recents button
             "Desk on monitor ${monitor.displayId}"
         }
@@ -173,7 +179,7 @@ object Desk {
      */
     private fun useOurWallpaper(ctx: Context, w: Int, h: Int) {
         background = DeskBackground.picture(ctx, w, h) ?: return // decoded either way, for the lock screen
-        if (!wallpaper(ctx)) return
+        if (!wallpaper(ctx)) return restoreWallpaper(ctx)
         val prefs = ctx.getSharedPreferences("desk", Context.MODE_PRIVATE)
         // Read by the helper: apps aren't told which live wallpaper is set.
         val now = runCatching { helper?.wallpaper(MAIN_HOME) }.getOrNull() ?: return
@@ -207,10 +213,22 @@ object Desk {
 
     /** The desk's background changed: start the desk again so the monitor shows it. */
     fun backgroundChanged() {
-        val service = this.service ?: return
-        stop()
-        start(service)
+        val ctx = service ?: return
+        val out = monitorSurface ?: return
+        val (w, h) = size
+        // Swapped in place (restarting the desk left the monitor black): the desk draws nowhere while the compositor
+        // lets go of the monitor's surface, then into the new one, or straight to the monitor for a still.
+        runCatching { helper?.setSurface(null) }
+        compositor?.release(); compositor = null
+        val video = deskVideo(ctx, w, h)
+        Log.i(TAG, "desk background from ${DeskBackground.source(ctx)?.name}, video ${video?.first?.name}")
+        val target = video?.let { (v, crop) -> DeskCompositor(out, w, h, v, crop).also { compositor = it }.input } ?: out
+        runCatching { helper?.setSurface(target) }
+        useOurWallpaper(ctx, w, h)
     }
+
+    private var monitorSurface: Surface? = null
+    private var size = 0 to 0
 
     private fun restoreWallpaper(ctx: Context) {
         val prefs = ctx.getSharedPreferences("desk", Context.MODE_PRIVATE)
