@@ -35,7 +35,7 @@ object Desk {
     private var cursorView: android.view.View? = null
     private var pointer: DeskPointer? = null
     private var taskbar: DeskTaskbar? = null
-    private const val HELPER_VERSION = 12
+    private const val HELPER_VERSION = 14
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
 
     // The helper says where the mouse is; the cursor is drawn here, over the desk (the system draws none there).
@@ -96,9 +96,18 @@ object Desk {
         val frame = android.widget.FrameLayout(wctx)
         frame.addView(sv)
         sv.holder.addCallback(object : SurfaceHolder.Callback {
-            override fun surfaceCreated(holder: SurfaceHolder) = withHelper { make(service, holder.surface, w, h, open) }
+            override fun surfaceCreated(holder: SurfaceHolder) {
+                // An animated background: OpenCover draws the desk onto the monitor, the video where the desk shows its key colour.
+                val target = deskVideo(service, w, h)?.let { (video, crop) ->
+                    DeskCompositor(holder.surface, w, h, video, crop).also { compositor = it }.input
+                } ?: holder.surface
+                withHelper { make(service, target, w, h, open) }
+            }
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
-            override fun surfaceDestroyed(holder: SurfaceHolder) { runCatching { helper?.release() }; displayId = -1 }
+            override fun surfaceDestroyed(holder: SurfaceHolder) {
+                runCatching { helper?.release() }; displayId = -1
+                compositor?.release(); compositor = null
+            }
         })
         val lp = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
@@ -158,8 +167,8 @@ object Desk {
     /**
      * Samsung shows the main screen's home wallpaper behind the desk, but only its own wallpapers (another app's live
      * wallpaper isn't allowed there, and its Fold one draws black). So while the desk runs, the home wallpaper becomes
-     * the desk's background ([DeskBackground]): an animated one as Samsung's video wallpaper, a still as a picture,
-     * either cropped as chosen. The live wallpaper before is put back in [stop]; a picture someone set is left alone,
+     * the desk's background ([DeskBackground]) as a picture cropped as chosen; for an animated one, the solid colour
+     * [DeskCompositor] swaps for the video (Samsung plays video wallpapers on the lock screen only). The live wallpaper before is put back in [stop]; a picture someone set is left alone,
      * as it couldn't be put back.
      */
     private fun useOurWallpaper(ctx: Context, w: Int, h: Int) {
@@ -171,25 +180,29 @@ object Desk {
         val saved = prefs.getString("previous_wallpaper", null)
         if (saved == null && now == IMAGE_WALLPAPER) return
         if (saved == null) prefs.edit().putString("previous_wallpaper", now).apply() // else a crash left ours: keep the saved one
-        DeskBackground.video(ctx)?.let { video ->
-            val crop = runCatching {
-                android.media.MediaMetadataRetriever().use { m ->
-                    m.setDataSource(video.path)
-                    val vw = m.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)!!.toInt()
-                    val vh = m.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)!!.toInt()
-                    val c = DeskBackground.crop(ctx) ?: dev.opencover.home.Crop.centered(vw, vh, w.toFloat(), h.toFloat())
-                    android.graphics.Rect((c.x * vw).toInt(), (c.y * vh).toInt(), ((c.x + c.w) * vw).toInt(), ((c.y + c.h) * vh).toInt())
-                }
-            }.getOrNull() ?: android.graphics.Rect()
-            val ok = runCatching {
-                android.os.ParcelFileDescriptor.open(video, android.os.ParcelFileDescriptor.MODE_READ_ONLY).use { helper?.setVideoWallpaper(it, crop, MAIN_HOME) }
-            }.getOrNull() == true
-            Log.i(TAG, "desk video background: $ok (was $now)")
-            if (ok) return
-        }
-        runCatching { android.app.WallpaperManager.getInstance(ctx).setBitmap(background, null, false, MAIN_HOME) }
+        // Animated: the wallpaper is the key colour the compositor swaps for the video.
+        val picture = if (compositor?.input != null) android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+            .apply { eraseColor(DeskCompositor.KEY) } else background
+        runCatching { android.app.WallpaperManager.getInstance(ctx).setBitmap(picture, null, false, MAIN_HOME) }
             .onSuccess { Log.i(TAG, "desk background set (was $now)") }
             .onFailure { Log.w(TAG, "couldn't set the desk background", it) }
+    }
+
+    private var compositor: DeskCompositor? = null
+
+    /** The animated background's video and the part of it shown (fractions), or null for a still one. */
+    private fun deskVideo(ctx: Context, w: Int, h: Int): Pair<java.io.File, android.graphics.RectF>? {
+        if (!wallpaper(ctx)) return null
+        val video = DeskBackground.video(ctx) ?: return null
+        val c = DeskBackground.crop(ctx) ?: runCatching {
+            android.media.MediaMetadataRetriever().use { m ->
+                m.setDataSource(video.path)
+                val vw = m.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)!!.toInt()
+                val vh = m.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)!!.toInt()
+                dev.opencover.home.Crop.centered(vw, vh, w.toFloat(), h.toFloat())
+            }
+        }.getOrNull() ?: return null
+        return video to android.graphics.RectF(c.x, c.y, c.x + c.w, c.y + c.h)
     }
 
     /** The desk's background changed: start the desk again so the monitor shows it. */

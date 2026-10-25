@@ -1,7 +1,5 @@
 package dev.opencover.desk;
 
-import android.graphics.Rect;
-import android.os.ParcelFileDescriptor;
 import android.view.Surface;
 import dev.opencover.desk.IDeskCursor;
 
@@ -42,7 +40,4 @@ interface IDesk {
 
     /** The phone locked or unlocked: while locked the desk takes no clicks or typing. */
     void setLocked(boolean locked) = 10;
-
-    /** Samsung's video wallpaper for [which], playing [video] with [crop] (video pixels) shown. False if it failed. */
-    boolean setVideoWallpaper(in ParcelFileDescriptor video, in Rect crop, int which) = 11;
 }
