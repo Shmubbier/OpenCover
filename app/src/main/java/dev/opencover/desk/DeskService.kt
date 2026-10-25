@@ -88,6 +88,21 @@ class DeskService(context: Context) : IDesk.Stub() {
         }.onFailure { Log.w("OpenCoverDesk", "couldn't set the wallpaper to $component", it) }
     }
 
+    override fun setVideoWallpaper(video: android.os.ParcelFileDescriptor, crop: android.graphics.Rect, which: Int): Boolean = runCatching {
+        // Samsung's video wallpaper plays a file by path, so the video goes where its player can read it.
+        val dir = java.io.File(VIDEO_DIR).apply { mkdirs() }
+        val out = java.io.File(dir, "desk.mp4")
+        android.os.ParcelFileDescriptor.AutoCloseInputStream(video).use { input -> out.outputStream().use { input.copyTo(it) } }
+        out.setReadable(true, false)
+        val extras = android.os.Bundle().apply { putParcelable("videoCropHint", crop) }
+        // IWallpaperManager.setVideoWallpaper(path, themePackage, fileName, callingPackage, which, userId, allowBackup,
+        // extras): Samsung's, for platform-signed callers, which the shell is.
+        wallpapers.javaClass.getMethod("setVideoWallpaper", String::class.java, String::class.java, String::class.java, String::class.java,
+            Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, Boolean::class.javaPrimitiveType, android.os.Bundle::class.java)
+            .invoke(wallpapers, out.path, "", out.name, "com.android.shell", which, 0, false, extras)
+        true
+    }.onFailure { Log.w("OpenCoverDesk", "couldn't set the video wallpaper", it) }.getOrDefault(false)
+
     override fun closeTask(taskId: Int) {
         runCatching { atm.javaClass.getMethod("removeTask", Int::class.javaPrimitiveType).invoke(atm, taskId) }
             .onFailure { Log.w("OpenCoverDesk", "couldn't close task $taskId", it) }
@@ -135,6 +150,7 @@ class DeskService(context: Context) : IDesk.Stub() {
     }
 
     private companion object {
+        const val VIDEO_DIR = "/sdcard/OpenCover"
         const val IMAGE_WALLPAPER = "com.android.systemui/com.android.systemui.wallpapers.ImageWallpaper"
         // DisplayManager.VIRTUAL_DISPLAY_FLAG_*: public, own content only, touch, content destroyed on removal, system
         // decorations (a launcher and taskbar), trusted, own display group, always unlocked, own focus.

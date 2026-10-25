@@ -35,7 +35,7 @@ object Desk {
     private var cursorView: android.view.View? = null
     private var pointer: DeskPointer? = null
     private var taskbar: DeskTaskbar? = null
-    private const val HELPER_VERSION = 11
+    private const val HELPER_VERSION = 12
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
 
     // The helper says where the mouse is; the cursor is drawn here, over the desk (the system draws none there).
@@ -156,32 +156,47 @@ object Desk {
     }
 
     /**
-     * Samsung shows the main screen's home wallpaper behind the desk, but only its own live wallpapers or a picture
-     * (another app's live wallpaper isn't allowed there, and its Fold one draws black). So while the desk runs, the
-     * home wallpaper becomes OpenCover's background as a picture: the whole picked image (an animation's first frame)
-     * filling the monitor. The live wallpaper before is put back in [stop]; a picture someone set is left alone, as it
-     * couldn't be put back.
+     * Samsung shows the main screen's home wallpaper behind the desk, but only its own wallpapers (another app's live
+     * wallpaper isn't allowed there, and its Fold one draws black). So while the desk runs, the home wallpaper becomes
+     * the desk's background ([DeskBackground]): an animated one as Samsung's video wallpaper, a still as a picture,
+     * either cropped as chosen. The live wallpaper before is put back in [stop]; a picture someone set is left alone,
+     * as it couldn't be put back.
      */
     private fun useOurWallpaper(ctx: Context, w: Int, h: Int) {
-        val on = wallpaper(ctx) // the picture is decoded either way, for the lock screen
+        background = DeskBackground.picture(ctx, w, h) ?: return // decoded either way, for the lock screen
+        if (!wallpaper(ctx)) return
         val prefs = ctx.getSharedPreferences("desk", Context.MODE_PRIVATE)
         // Read by the helper: apps aren't told which live wallpaper is set.
-        val image = runCatching {
-            val f = dev.opencover.home.Wallpaper.source(ctx, dev.opencover.home.Slot.HOME) ?: java.io.File(ctx.filesDir, "wallpaper.jpg")
-            android.graphics.ImageDecoder.decodeBitmap(android.graphics.ImageDecoder.createSource(f)) { d, info, _ ->
-                d.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
-                val s = maxOf(w.toFloat() / info.size.width, h.toFloat() / info.size.height)
-                d.setTargetSize(maxOf(w, (info.size.width * s).toInt()), maxOf(h, (info.size.height * s).toInt()))
-            }.let { b -> android.graphics.Bitmap.createBitmap(b, (b.width - w) / 2, (b.height - h) / 2, w, h) } // centred, filling
-        }.getOrNull()?.also { background = it } ?: return
-        if (!on) return
         val now = runCatching { helper?.wallpaper(MAIN_HOME) }.getOrNull() ?: return
         val saved = prefs.getString("previous_wallpaper", null)
         if (saved == null && now == IMAGE_WALLPAPER) return
-        if (saved == null) prefs.edit().putString("previous_wallpaper", now).apply() // else a crash left the picture: keep the saved one
-        runCatching { android.app.WallpaperManager.getInstance(ctx).setBitmap(image, null, false, MAIN_HOME) }
+        if (saved == null) prefs.edit().putString("previous_wallpaper", now).apply() // else a crash left ours: keep the saved one
+        DeskBackground.video(ctx)?.let { video ->
+            val crop = runCatching {
+                android.media.MediaMetadataRetriever().use { m ->
+                    m.setDataSource(video.path)
+                    val vw = m.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)!!.toInt()
+                    val vh = m.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)!!.toInt()
+                    val c = DeskBackground.crop(ctx) ?: dev.opencover.home.Crop.centered(vw, vh, w.toFloat(), h.toFloat())
+                    android.graphics.Rect((c.x * vw).toInt(), (c.y * vh).toInt(), ((c.x + c.w) * vw).toInt(), ((c.y + c.h) * vh).toInt())
+                }
+            }.getOrNull() ?: android.graphics.Rect()
+            val ok = runCatching {
+                android.os.ParcelFileDescriptor.open(video, android.os.ParcelFileDescriptor.MODE_READ_ONLY).use { helper?.setVideoWallpaper(it, crop, MAIN_HOME) }
+            }.getOrNull() == true
+            Log.i(TAG, "desk video background: $ok (was $now)")
+            if (ok) return
+        }
+        runCatching { android.app.WallpaperManager.getInstance(ctx).setBitmap(background, null, false, MAIN_HOME) }
             .onSuccess { Log.i(TAG, "desk background set (was $now)") }
             .onFailure { Log.w(TAG, "couldn't set the desk background", it) }
+    }
+
+    /** The desk's background changed: start the desk again so the monitor shows it. */
+    fun backgroundChanged() {
+        val service = this.service ?: return
+        stop()
+        start(service)
     }
 
     private fun restoreWallpaper(ctx: Context) {

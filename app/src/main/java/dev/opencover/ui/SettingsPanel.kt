@@ -184,6 +184,17 @@ private fun ExperimentalPanel(topEdge: Boolean, onTopEdge: (Boolean) -> Unit, on
                 var wall by remember { mutableStateOf(dev.opencover.desk.Desk.wallpaper(ctx)) }
                 SwitchRow("OpenCover background on the monitor", "The whole Home background, not the cover's cut, fills the desktop (an animated one shows its first frame). The phone's wallpaper goes back when the desktop stops.",
                     wall) { wall = it; dev.opencover.desk.Desk.setWallpaper(ctx, it) }
+                if (wall) {
+                    var own by remember { mutableStateOf(dev.opencover.desk.DeskBackground.hasOwn(ctx)) }
+                    NavRow(null, "Desktop background", if (own) "Its own image, GIF, WebP or video" else "Home's; pick an image, GIF, WebP or video for the monitor") {
+                        CoverActivity.current?.pickDeskBackground()
+                    }
+                    NavRow(null, "Adjust desktop background", "What part of it fills the monitor") { CoverActivity.current?.adjustDeskBackground() }
+                    if (own) NavRow(null, "Use Home's background", "On the monitor too") {
+                        dev.opencover.desk.DeskBackground.clearOwn(ctx); own = false
+                        dev.opencover.desk.Desk.backgroundChanged()
+                    }
+                }
             }
         }
         Group {

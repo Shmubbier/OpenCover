@@ -247,7 +247,10 @@ class CoverActivity : ComponentActivity() {
                 }
                 opening?.let { o -> OpeningCard(o.from, o.icon, grow.value) }
                 cropping?.let { job ->
-                    CropScreen(job.image, job.start, onDone = { crop ->
+                    if (job.desk) CropScreen(job.image, job.start, onDone = { crop -> cropping = null; deskCropped(job, crop) },
+                        onCancel = { cropping = null; if (job.picked) job.file.delete() },
+                        aspect = dev.opencover.desk.DeskBackground.ASPECT, hint = "Drag and pinch to choose what the monitor shows")
+                    else CropScreen(job.image, job.start, onDone = { crop ->
                         cropping = null
                         if (!Wallpaper.save(this@CoverActivity, job.file, job.slot, crop))
                             Toast.makeText(this@CoverActivity, "Couldn't use that image", Toast.LENGTH_SHORT).show()
@@ -258,9 +261,12 @@ class CoverActivity : ComponentActivity() {
         }
     }
 
-    /** A background being cropped: the file, its picture, where to start; [picked]: just picked (else cropping again). */
+    /**
+     * A background being cropped: the file, its picture, where to start; [picked]: just picked (else cropping again);
+     * [desk]: the desktop's on a monitor (else the cover's, for [slot]).
+     */
     private class CropJob(val slot: dev.opencover.home.Slot, val file: java.io.File, val image: android.graphics.Bitmap,
-        val start: dev.opencover.home.Crop?, val picked: Boolean)
+        val start: dev.opencover.home.Crop?, val picked: Boolean, val desk: Boolean = false)
 
     private var cropping by mutableStateOf<CropJob?>(null)
 
@@ -271,6 +277,38 @@ class CoverActivity : ComponentActivity() {
         val start = if (slot == dev.opencover.home.Slot.HOME) Wallpaper.homeCrop else Wallpaper.lockCrop
         cropping = CropJob(slot, f, image, start, picked = false)
         return true
+    }
+
+    /** Choose again which part of the desktop's background the monitor shows. False when there's none. */
+    fun adjustDeskBackground(): Boolean {
+        val f = dev.opencover.desk.DeskBackground.source(this) ?: return false
+        val image = dev.opencover.desk.DeskBackground.preview(f) ?: return false
+        cropping = CropJob(dev.opencover.home.Slot.HOME, f, image, dev.opencover.desk.DeskBackground.crop(this), picked = false, desk = true)
+        return true
+    }
+
+    /** Photo picker for the desktop's own background: an image, GIF, WebP or video. */
+    fun pickDeskBackground() {
+        try {
+            startActivityForResult(Intent(MediaStore.ACTION_PICK_IMAGES), REQ_DESK_WALLPAPER, AppLauncher.options())
+        } catch (e: Exception) {
+            Toast.makeText(this, "Couldn't open the photo picker", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun deskCropped(job: CropJob, crop: dev.opencover.home.Crop) {
+        val app = applicationContext
+        if (job.picked) {
+            if (!dev.opencover.desk.DeskBackground.saveOwn(app, job.file, crop)) {
+                Toast.makeText(this, "Couldn't use that file", Toast.LENGTH_SHORT).show()
+                return
+            }
+        } else dev.opencover.desk.DeskBackground.setCrop(app, crop)
+        // An animation's video takes a few seconds to make; the monitor shows the new background once it's ready.
+        Thread {
+            dev.opencover.desk.DeskBackground.makeVideo(app)
+            android.os.Handler(android.os.Looper.getMainLooper()).post { dev.opencover.desk.Desk.backgroundChanged() }
+        }.apply { priority = Thread.MIN_PRIORITY }.start()
     }
 
     private fun setupSteps() = listOfNotNull(
@@ -391,6 +429,18 @@ class CoverActivity : ComponentActivity() {
 
     @Deprecated("Widget flows need startActivityForResult with display options")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == REQ_DESK_WALLPAPER) {
+            val uri = data?.data
+            if (resultCode == RESULT_OK && uri != null) {
+                val f = runCatching {
+                    java.io.File(cacheDir, "desk.pick").also { f -> contentResolver.openInputStream(uri)!!.use { input -> f.outputStream().use { input.copyTo(it) } } }
+                }.getOrNull()
+                val image = f?.let { dev.opencover.desk.DeskBackground.preview(it) }
+                if (f == null || image == null) Toast.makeText(this, "Couldn't use that file", Toast.LENGTH_SHORT).show()
+                else cropping = CropJob(dev.opencover.home.Slot.HOME, f, image, null, picked = true, desk = true)
+            }
+            return
+        }
         if (requestCode == REQ_WALLPAPER) {
             val uri = data?.data
             if (resultCode == RESULT_OK && uri != null) {
@@ -492,6 +542,7 @@ class CoverActivity : ComponentActivity() {
         private const val CELL_W_DP = 88
         private const val CELL_H_DP = 84
         private const val REQ_WALLPAPER = 21
+        private const val REQ_DESK_WALLPAPER = 22
     }
 }
 
