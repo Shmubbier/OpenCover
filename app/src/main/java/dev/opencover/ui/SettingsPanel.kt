@@ -74,7 +74,7 @@ fun SettingsPanel(
             NavRow(Icons.Filled.Widgets, "Samsung widgets", "Open Samsung's own cover widgets", onSamsungWidgets)
         }
         Group("More") {
-            NavRow(Icons.Filled.Science, "Experimental", "Desktop on a monitor, keyboard, internet calls") { page = Page.EXPERIMENTAL }
+            NavRow(Icons.Filled.Science, "Experimental", "Desktop on a monitor, keyboard") { page = Page.EXPERIMENTAL }
             // The inner screen is broken: answer Android's debugging prompt, which only shows there.
             NavRow(Icons.Filled.BugReport, "Approve debugging prompt", "Allows the USB or wireless debugging prompt on the inner screen") {
                 val r = CoverAccessibility.instance?.approveInnerPrompt() ?: "Turn on OpenCover's accessibility first"
@@ -144,7 +144,6 @@ private fun ExperimentalPanel(topEdge: Boolean, onTopEdge: (Boolean) -> Unit, on
     val ctx = LocalContext.current
     var typing by remember { mutableStateOf(KeyboardPrefs.enabled(ctx)) }
     var suggest by remember { mutableStateOf(KeyboardPrefs.suggestions(ctx)) }
-    var voip by remember { mutableStateOf(dev.opencover.call.CallStore.voip(ctx)) }
     SettingsPage("Experimental", onBack) {
         Group {
             SwitchRow("OpenCover keyboard",
@@ -155,11 +154,6 @@ private fun ExperimentalPanel(topEdge: Boolean, onTopEdge: (Boolean) -> Unit, on
                 CoverAccessibility.instance?.refreshScope()
             }
             if (typing) SwitchRow("Show suggestions", "", suggest) { suggest = it; KeyboardPrefs.setSuggestions(ctx, it) }
-        }
-        Group {
-            SwitchRow("Internet calls on the cover",
-                "Messenger, Discord, Viber and other apps' calls get the cover call screen, like phone calls. Answering hands over to the app's own call screen.",
-                voip) { voip = it; dev.opencover.call.CallStore.setVoip(ctx, it) }
         }
         var desk by remember { mutableStateOf(dev.opencover.desk.Desk.wanted(ctx)) }
         Group {
