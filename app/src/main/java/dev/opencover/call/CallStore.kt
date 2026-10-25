@@ -54,9 +54,13 @@ object CallStore {
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("calls", Context.MODE_PRIVATE)
 
-    /** Internet calls (Messenger, Discord, Viber...) on the cover call screen: experimental, off by default. */
-    fun voip(ctx: Context) = prefs(ctx).getBoolean("voip", false)
-    fun setVoip(ctx: Context, on: Boolean) = prefs(ctx).edit().putBoolean("voip", on).apply()
+    /**
+     * Internet calls (Messenger, Discord, Viber...) on the cover call screen. Off, whatever was saved: hanging up didn't
+     * end the call and there's no keypad, so it isn't ready for real use.
+     * ponytail: switched off in code; bring back the setting (and read the pref) once hang-up and a keypad work.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    fun voip(ctx: Context) = false
 
     fun posted(ctx: Context, sbn: StatusBarNotification) {
         val n = sbn.notification
