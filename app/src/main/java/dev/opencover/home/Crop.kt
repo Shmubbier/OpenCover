@@ -54,3 +54,18 @@ fun placementOf(c: Crop, iw: Int, ih: Int, sw: Float, sh: Float): Placement {
     val s = maxOf(sw / (c.w * iw), sh / (c.h * ih))
     return clamp(Placement(s, -c.x * iw * s, -c.y * ih * s), iw, ih, sw, sh)
 }
+
+/**
+ * [c] (chosen for a screen of another shape) re-fitted to a [sw]x[sh] screen's shape around its centre, staying on
+ * the [iw]x[ih] image: the side that's too long is cut, so nothing is stretched.
+ */
+fun refit(c: Crop, iw: Int, ih: Int, sw: Float, sh: Float): Crop {
+    val target = sw / sh
+    var pw = c.w * iw; var ph = c.h * ih
+    if (pw / ph > target) pw = ph * target else ph = pw / target
+    if (pw > iw) { pw = iw.toFloat(); ph = pw / target }
+    if (ph > ih) { ph = ih.toFloat(); pw = ph * target }
+    val cx = (c.x + c.w / 2) * iw; val cy = (c.y + c.h / 2) * ih
+    val x = (cx - pw / 2).coerceIn(0f, iw - pw); val y = (cy - ph / 2).coerceIn(0f, ih - ph)
+    return Crop(x / iw, y / ih, pw / iw, ph / ih)
+}

@@ -13,10 +13,19 @@ import kotlin.math.roundToInt
 
 /**
  * The desk's background: its own picked image, GIF, WebP or video, or else Home's background (the whole picked
- * file, not the cover's cut), with the part of it the monitor shows ([crop], 16:9; centred when unset).
+ * file, not the cover's cut), with the part of it the monitor shows ([crop], chosen in the monitor's shape; centred when unset).
  */
 object DeskBackground {
-    const val ASPECT = 16f / 9f
+    /** The shape (width / height) of the monitor the desk last ran on, for the adjust screen; 16:9 until one has. */
+    fun aspect(ctx: Context) = prefs(ctx).getFloat("monitor_aspect", 16f / 9f)
+    fun setAspect(ctx: Context, a: Float) = prefs(ctx).edit().putFloat("monitor_aspect", a).apply()
+
+    /**
+     * The part of a [iw]x[ih] image to show on a [w]x[h] monitor: the chosen part, re-fitted around its centre when it
+     * was chosen for a monitor of another shape (so nothing is stretched), else the centre.
+     */
+    fun fitted(ctx: Context, iw: Int, ih: Int, w: Int, h: Int): Crop =
+        crop(ctx)?.let { dev.opencover.home.refit(it, iw, ih, w.toFloat(), h.toFloat()) } ?: Crop.centered(iw, ih, w.toFloat(), h.toFloat())
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("desk", Context.MODE_PRIVATE)
     // The picked file as it is; the content decides what it is (named like Wallpaper's kept file).
@@ -77,7 +86,7 @@ object DeskBackground {
         val full = (if (isVideo(f)) preview(f) else runCatching {
             ImageDecoder.decodeBitmap(ImageDecoder.createSource(f)) { d, _, _ -> d.allocator = ImageDecoder.ALLOCATOR_SOFTWARE }
         }.getOrNull()) ?: return null
-        val c = crop(ctx) ?: Crop.centered(full.width, full.height, w.toFloat(), h.toFloat())
+        val c = fitted(ctx, full.width, full.height, w, h)
         val src = android.graphics.Rect((c.x * full.width).roundToInt(), (c.y * full.height).roundToInt(),
             ((c.x + c.w) * full.width).roundToInt(), ((c.y + c.h) * full.height).roundToInt())
         return Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also { out ->

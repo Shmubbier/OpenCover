@@ -249,7 +249,7 @@ class CoverActivity : ComponentActivity() {
                 cropping?.let { job ->
                     if (job.desk) CropScreen(job.image, job.start, onDone = { crop -> cropping = null; deskCropped(job, crop) },
                         onCancel = { cropping = null; if (job.picked) job.file.delete() },
-                        aspect = dev.opencover.desk.DeskBackground.ASPECT, hint = "Drag and pinch to choose what the monitor shows")
+                        aspect = dev.opencover.desk.DeskBackground.aspect(this@CoverActivity), hint = "Drag and pinch to choose what the monitor shows")
                     else CropScreen(job.image, job.start, onDone = { crop ->
                         cropping = null
                         if (!Wallpaper.save(this@CoverActivity, job.file, job.slot, crop))

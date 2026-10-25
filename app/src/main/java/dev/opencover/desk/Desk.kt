@@ -91,6 +91,7 @@ object Desk {
         val mode = monitor.mode
         val w = maxOf(mode.physicalWidth, mode.physicalHeight)
         val h = minOf(mode.physicalWidth, mode.physicalHeight)
+        DeskBackground.setAspect(service, w.toFloat() / h) // the adjust screen frames this shape
         val wctx = service.createDisplayContext(monitor).createWindowContext(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, null)
         val sv = SurfaceView(wctx)
         val frame = android.widget.FrameLayout(wctx)
@@ -200,12 +201,12 @@ object Desk {
     private fun deskVideo(ctx: Context, w: Int, h: Int): Pair<java.io.File, android.graphics.RectF>? {
         if (!wallpaper(ctx)) return null
         val video = DeskBackground.video(ctx) ?: return null
-        val c = DeskBackground.crop(ctx) ?: runCatching {
+        val c = runCatching {
             android.media.MediaMetadataRetriever().use { m ->
                 m.setDataSource(video.path)
                 val vw = m.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)!!.toInt()
                 val vh = m.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)!!.toInt()
-                dev.opencover.home.Crop.centered(vw, vh, w.toFloat(), h.toFloat())
+                DeskBackground.fitted(ctx, vw, vh, w, h)
             }
         }.getOrNull() ?: return null
         return video to android.graphics.RectF(c.x, c.y, c.x + c.w, c.y + c.h)
