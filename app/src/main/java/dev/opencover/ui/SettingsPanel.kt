@@ -179,7 +179,7 @@ private fun ExperimentalPanel(topEdge: Boolean, onTopEdge: (Boolean) -> Unit, on
             }
             if (desk) {
                 var dimCover by remember { mutableStateOf(dev.opencover.desk.Desk.dimCover(ctx)) }
-                SwitchRow("Black cover while on a monitor", "The cover goes dark while the desktop is in use; tap it to use it, and it goes dark again after 30 s.",
+                SwitchRow("Cover rests while on a monitor", "The cover shows OpenCover's AOD (black with the AOD off) while the desktop is in use; tap it to use it, and it rests again after 30 s.",
                     dimCover) { dimCover = it; dev.opencover.desk.Desk.setDimCover(ctx, it) }
                 var wall by remember { mutableStateOf(dev.opencover.desk.Desk.wallpaper(ctx)) }
                 SwitchRow("OpenCover background on the monitor", "Home's background, or one of its own, fills the desktop, animated ones too. The phone's wallpaper goes back when the desktop stops.",

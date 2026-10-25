@@ -61,7 +61,7 @@ The first time, allow OpenCover in Shizuku. Its permission dialog opens on the i
 ## Desktop on a monitor (experimental)
 With Shizuku running, turn on Settings > Experimental > Desktop on external monitor. Plug the phone into a USB-C monitor (a hub with HDMI and USB works), with a USB mouse and keyboard on the hub: the monitor gets Samsung's DeX desktop while the phone stays free.
 - Apps open as windows you can move, resize, minimize and close. Open apps show on the taskbar after the Back button; the Recents button lists every window, minimized ones too.
-- The cover goes black while the desktop runs; tap it to use it.
+- The cover shows OpenCover's AOD while the desktop runs; tap it to use it.
 - OpenCover's Home background fills the desktop, animated ones too; Settings > Experimental can give the desktop its own image, GIF, WebP or video and adjust what part of it shows. The phone's own home wallpaper is swapped while the desktop runs and put back after.
 - While the phone is locked the monitor shows a lock screen and the mouse and keyboard do nothing there. Unlock the phone to carry on.
 

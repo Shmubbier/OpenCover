@@ -12,8 +12,9 @@ import android.view.WindowManager
 import dev.opencover.COVER_DISPLAY
 
 /**
- * The cover goes black while the desk is in use (its pixels off, so it costs next to nothing; the phone itself has to
- * stay awake for the monitor). A tap brings the cover back; it goes black again after [IDLE_MS] without a touch.
+ * The cover rests while the desk is in use: OpenCover's AOD over black (or just black with the AOD off), so it costs
+ * next to nothing while the phone itself has to stay awake for the monitor. A tap brings the cover back; it rests
+ * again after [IDLE_MS] without a touch.
  */
 class CoverDim(private val service: AccessibilityService) {
     private val ctx = service.createDisplayContext(service.getSystemService(DisplayManager::class.java).getDisplay(COVER_DISPLAY))
@@ -46,7 +47,7 @@ class CoverDim(private val service: AccessibilityService) {
 
     fun stop() {
         main.removeCallbacks(dimRun)
-        if (dark) runCatching { wm.removeView(black) }
+        if (dark) { dev.opencover.lock.AodOverlay.hide(); runCatching { wm.removeView(black) } }
         if (watching) runCatching { wm.removeView(watcher) }
         dark = false; watching = false
         (service as? dev.opencover.watcher.CoverAccessibility)?.updateNavBar()
@@ -60,11 +61,13 @@ class CoverDim(private val service: AccessibilityService) {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.OPAQUE).apply { layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS })
         }.isSuccess
+        // The AOD's face on top (it takes no touches: a tap still lands on the black and wakes the cover).
+        if (dark && dev.opencover.lock.LockPrefs.aod) dev.opencover.lock.AodOverlay.show(service)
         (service as? dev.opencover.watcher.CoverAccessibility)?.updateNavBar()
     }
 
     private fun wake() {
-        if (dark) runCatching { wm.removeView(black) }
+        if (dark) { dev.opencover.lock.AodOverlay.hide(); runCatching { wm.removeView(black) } }
         dark = false
         (service as? dev.opencover.watcher.CoverAccessibility)?.updateNavBar()
         idleAgain()
