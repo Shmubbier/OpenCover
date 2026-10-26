@@ -54,6 +54,7 @@ class DeskTaskbar(ctx: Context, displayId: Int) {
             Desk.lockChanged(locked)
             val all = if (locked) emptyList() else Desk.windows().filter { it.pkg != wctx.packageName }
             Desk.windowsChanged(all)
+            if (!locked) DeskGame.windowsChanged(all.map { it.pkg }.toSet())
             val now = all.map { it.copy(starting = false, bounds = android.graphics.Rect()) }.sortedBy { it.task } // launch order, as a taskbar keeps it
             if (now != shown) main.post { show(now) }
             bg.postDelayed(this, 300) // often enough for the pointer to follow windows as they move

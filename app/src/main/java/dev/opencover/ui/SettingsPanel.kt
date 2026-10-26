@@ -197,6 +197,23 @@ private fun ExperimentalPanel(topEdge: Boolean, onTopEdge: (Boolean) -> Unit, on
                 }
             }
         }
+        if (desk) Group("Gaming mode") {
+            val games = remember { dev.opencover.desk.DeskGame.installed(ctx) }
+            if (games.isEmpty()) Note("Install DroidDeck, GameNative or GameHub to play them on the monitor.")
+            else {
+                var game by remember { mutableStateOf(dev.opencover.desk.DeskGame.app(ctx)) }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    games.forEach { (pkg, name) ->
+                        FilterChip(selected = game == pkg, onClick = { game = pkg; dev.opencover.desk.DeskGame.setApp(ctx, pkg) }, label = { Text(name) })
+                    }
+                }
+                var auto by remember { mutableStateOf(dev.opencover.desk.DeskGame.auto(ctx)) }
+                SwitchRow("Start it when the monitor is plugged in", "", auto) { auto = it; dev.opencover.desk.DeskGame.setAuto(ctx, it) }
+                NavRow(null, "Play on the monitor", "Opens it filling the monitor; no animated background, the cover rests, and the phone runs off the charger while it's open") {
+                    android.widget.Toast.makeText(ctx, dev.opencover.desk.DeskGame.play(ctx), android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        }
         Group {
             SwitchRow("Top-edge priority",
                 "Replaces Samsung's pull-down panel with ours. Its panel still flashes and blocks touches for ~2 s. Lets OpenCover read the window list.",

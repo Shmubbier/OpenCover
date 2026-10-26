@@ -18,12 +18,13 @@ import java.nio.ByteOrder
 import java.util.concurrent.CountDownLatch
 
 /**
- * An animated desk background. Samsung only plays a video wallpaper on the lock screen, so the desk's wallpaper is
- * a solid [KEY] colour and OpenCover draws the desk onto the monitor itself, putting [video] wherever that colour
- * shows (the desktop between icons and windows). Shadows and the dim taskbar over it come out darker, not the key,
- * so they stay; pure black in an app isn't the key either. [crop] is the part of the video shown, as fractions.
+ * Draws the desk onto the monitor, for its whole run (the desk's display can't be moved to another surface mid-run:
+ * it stops delivering frames). With a video ([setVideo]), an animated background: Samsung only plays a video
+ * wallpaper on the lock screen, so the desk's wallpaper is a solid [KEY] colour and the video goes wherever that
+ * colour shows (the desktop between icons and windows). Shadows and the dim taskbar over it come out darker, not the
+ * key, so they stay; pure black in an app isn't the key either. Without one, the desk is passed through as it is.
  */
-class DeskCompositor(out: Surface, private val w: Int, private val h: Int, private val video: File, private val crop: RectF) {
+class DeskCompositor(out: Surface, private val w: Int, private val h: Int) {
     /** Where the desk display draws; null if setting up failed (then draw the desk straight to the monitor). */
     var input: Surface? = null; private set
 
@@ -40,10 +41,32 @@ class DeskCompositor(out: Surface, private val w: Int, private val h: Int, priva
     private val videoM = FloatArray(16)
     private var released = false
     private val tex = IntArray(2) // the desk's texture, the video's
+    private var crop = RectF(0f, 0f, 1f, 1f)
+    @Volatile private var keyed = false
+
+    /** True while a video is shown (the desk's wallpaper should then be the key colour). */
+    val animated get() = keyed
+
+    /** Shows [video] (its [crop] part, as fractions) where the key colour is, or nothing more (null). */
+    fun setVideo(video: File?, crop: RectF) {
+        val done = CountDownLatch(1)
+        gl.post {
+            runCatching { player?.release() }; player = null
+            keyed = false
+            this.crop = crop
+            if (video != null && videoTex != null) player = runCatching {
+                MediaPlayer().apply { setDataSource(video.path); setSurface(Surface(videoTex)); isLooping = true; setVolume(0f, 0f); prepare(); start() }
+            }.onFailure { Log.w(TAG, "no animated desk background", it) }.getOrNull()
+            keyed = player != null
+            draw()
+            done.countDown()
+        }
+        done.await()
+    }
 
     init {
         val ready = CountDownLatch(1)
-        gl.post { runCatching { setUp(out) }.onFailure { Log.w(TAG, "no animated desk background", it); tearDown() }; ready.countDown() }
+        gl.post { runCatching { setUp(out) }.onFailure { Log.w(TAG, "couldn't draw the desk", it); tearDown() }; ready.countDown() }
         ready.await()
     }
 
@@ -72,18 +95,13 @@ class DeskCompositor(out: Surface, private val w: Int, private val h: Int, priva
         }
         deskTex = SurfaceTexture(tex[0]).apply { setDefaultBufferSize(w, h); setOnFrameAvailableListener({ draw() }, gl) }
         videoTex = SurfaceTexture(tex[1]).apply { setOnFrameAvailableListener({ draw() }, gl) }
-        player = MediaPlayer().apply {
-            setDataSource(video.path); setSurface(Surface(videoTex)); isLooping = true; setVolume(0f, 0f); prepare(); start()
-        }
         input = Surface(deskTex)
     }
 
     private fun draw() {
         if (released) return
-        runCatching {
-            deskTex!!.updateTexImage(); deskTex!!.getTransformMatrix(deskM)
-            videoTex!!.updateTexImage(); videoTex!!.getTransformMatrix(videoM)
-        }
+        runCatching { deskTex!!.updateTexImage(); deskTex!!.getTransformMatrix(deskM) }
+        if (keyed) runCatching { videoTex!!.updateTexImage(); videoTex!!.getTransformMatrix(videoM) }
         GLES20.glViewport(0, 0, w, h)
         GLES20.glUseProgram(program)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0); GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, tex[0])
@@ -93,6 +111,7 @@ class DeskCompositor(out: Surface, private val w: Int, private val h: Int, priva
         GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(program, "deskM"), 1, false, deskM, 0)
         GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(program, "vidM"), 1, false, videoM, 0)
         GLES20.glUniform4f(GLES20.glGetUniformLocation(program, "crop"), crop.left, crop.top, crop.width(), crop.height())
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "keyed"), if (keyed) 1f else 0f)
         val pos = GLES20.glGetAttribLocation(program, "pos")
         GLES20.glEnableVertexAttribArray(pos)
         GLES20.glVertexAttribPointer(pos, 2, GLES20.GL_FLOAT, false, 0, QUAD)
@@ -149,11 +168,12 @@ class DeskCompositor(out: Surface, private val w: Int, private val h: Int, priva
             uniform mat4 deskM;
             uniform mat4 vidM;
             uniform vec4 crop;
+            uniform float keyed;
             varying vec2 uv;
             void main() {
                 vec4 d = texture2D(desk, (deskM * vec4(uv, 0.0, 1.0)).xy);
                 vec3 c = d.rgb * 255.0;
-                bool key = c.g < 1.5 && abs(c.r - c.b) < 1.5 && c.r > 3.5 && c.r < 12.0;
+                bool key = keyed > 0.5 && c.g < 1.5 && abs(c.r - c.b) < 1.5 && c.r > 3.5 && c.r < 12.0;
                 if (key) {
                     vec2 v = vec2(crop.x + uv.x * crop.z, 1.0 - (crop.y + (1.0 - uv.y) * crop.w));
                     gl_FragColor = texture2D(vid, (vidM * vec4(v, 0.0, 1.0)).xy);

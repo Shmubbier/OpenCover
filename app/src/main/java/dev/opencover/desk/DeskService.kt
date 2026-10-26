@@ -93,10 +93,6 @@ class DeskService(context: Context) : IDesk.Stub() {
             .onFailure { Log.w("OpenCoverDesk", "couldn't close task $taskId", it) }
     }
 
-    override fun setSurface(surface: Surface?) {
-        display?.surface = surface
-    }
-
     override fun release() {
         stopMouse()
         display?.release()
@@ -117,6 +113,10 @@ class DeskService(context: Context) : IDesk.Stub() {
     }
 
     private var deskId = -1
+
+    override fun focusDisplay(displayId: Int) {
+        runCatching { focus(displayId) }
+    }
 
     override fun setLocked(locked: Boolean) {
         mouse?.locked = locked

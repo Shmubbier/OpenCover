@@ -35,7 +35,7 @@ object Desk {
     private var cursorView: android.view.View? = null
     private var pointer: DeskPointer? = null
     private var taskbar: DeskTaskbar? = null
-    private const val HELPER_VERSION = 15
+    private const val HELPER_VERSION = 17
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
 
     // The helper says where the mouse is; the cursor is drawn here, over the desk (the system draws none there).
@@ -98,17 +98,16 @@ object Desk {
         frame.addView(sv)
         sv.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
-                monitorSurface = holder.surface; size = w to h
-                // An animated background: OpenCover draws the desk onto the monitor, the video where the desk shows its key colour.
-                val target = deskVideo(service, w, h)?.let { (video, crop) ->
-                    DeskCompositor(holder.surface, w, h, video, crop).also { compositor = it }.input
-                } ?: holder.surface
+                size = w to h
+                // OpenCover draws the desk onto the monitor (an animated background goes where the desk shows its key colour).
+                val c = DeskCompositor(holder.surface, w, h)
+                val target = c.input?.also { compositor = c; showVideo(service, w, h) } ?: holder.surface
                 withHelper { make(service, target, w, h, open) }
             }
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
             override fun surfaceDestroyed(holder: SurfaceHolder) {
                 runCatching { helper?.release() }; displayId = -1
-                compositor?.release(); compositor = null; monitorSurface = null
+                compositor?.release(); compositor = null
             }
         })
         val lp = WindowManager.LayoutParams(
@@ -162,6 +161,8 @@ object Desk {
             Log.i(TAG, if (ok) "mouse on the desk" else "no mouse found")
             taskbar?.stop()
             taskbar = DeskTaskbar(ctx, id).also { it.start() }
+            // Gaming mode on plug-in: the game app once the desktop has settled.
+            if (DeskGame.auto(ctx) && DeskGame.app(ctx) != null) main.postDelayed({ if (displayId == id) Log.i(TAG, DeskGame.play(ctx)) }, 3_000)
         }
         if (id < 0 || open == null) return
         Thread {
@@ -188,7 +189,7 @@ object Desk {
         if (saved == null && now == IMAGE_WALLPAPER) return
         if (saved == null) prefs.edit().putString("previous_wallpaper", now).apply() // else a crash left ours: keep the saved one
         // Animated: the wallpaper is the key colour the compositor swaps for the video.
-        val picture = if (compositor?.input != null) android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+        val picture = if (compositor?.animated == true) android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
             .apply { eraseColor(DeskCompositor.KEY) } else background
         runCatching { android.app.WallpaperManager.getInstance(ctx).setBitmap(picture, null, false, MAIN_HOME) }
             .onSuccess { Log.i(TAG, "desk background set (was $now)") }
@@ -199,7 +200,7 @@ object Desk {
 
     /** The animated background's video and the part of it shown (fractions), or null for a still one. */
     private fun deskVideo(ctx: Context, w: Int, h: Int): Pair<java.io.File, android.graphics.RectF>? {
-        if (!wallpaper(ctx)) return null
+        if (!wallpaper(ctx) || DeskGame.playing != null) return null // gaming mode keeps the GPU for the game
         val video = DeskBackground.video(ctx) ?: return null
         val c = runCatching {
             android.media.MediaMetadataRetriever().use { m ->
@@ -215,21 +216,31 @@ object Desk {
     /** The desk's background changed: start the desk again so the monitor shows it. */
     fun backgroundChanged() {
         val ctx = service ?: return
-        val out = monitorSurface ?: return
         val (w, h) = size
-        // Swapped in place (restarting the desk left the monitor black): the desk draws nowhere while the compositor
-        // lets go of the monitor's surface, then into the new one, or straight to the monitor for a still.
-        runCatching { helper?.setSurface(null) }
-        compositor?.release(); compositor = null
-        val video = deskVideo(ctx, w, h)
-        Log.i(TAG, "desk background from ${DeskBackground.source(ctx)?.name}, video ${video?.first?.name}")
-        val target = video?.let { (v, crop) -> DeskCompositor(out, w, h, v, crop).also { compositor = it }.input } ?: out
-        runCatching { helper?.setSurface(target) }
+        showVideo(ctx, w, h)
         useOurWallpaper(ctx, w, h)
     }
 
-    private var monitorSurface: Surface? = null
+    /** The compositor shows the animated background's video, or none (a still background, gaming mode). */
+    private fun showVideo(ctx: Context, w: Int, h: Int) {
+        val c = compositor ?: return
+        val video = deskVideo(ctx, w, h)
+        Log.i(TAG, "desk background from ${DeskBackground.source(ctx)?.name}, video ${video?.first?.name}")
+        c.setVideo(video?.first, video?.second ?: android.graphics.RectF(0f, 0f, 1f, 1f))
+    }
+
     private var size = 0 to 0
+
+    /** The desk's size in pixels (the monitor's). */
+    val deskSize get() = size
+
+    /** The desk becomes the focused display. */
+    fun focusDesk() { runCatching { helper?.focusDisplay(displayId) } }
+
+    /** The cover rests now, if it rests while the desk runs. */
+    fun restCover() { dim?.rest() }
+
+    fun post(block: () -> Unit) { main.post(block) }
 
     private fun restoreWallpaper(ctx: Context) {
         val prefs = ctx.getSharedPreferences("desk", Context.MODE_PRIVATE)
@@ -244,6 +255,7 @@ object Desk {
     fun stop() {
         val v = view ?: return
         restoreWallpaper(v.context)
+        DeskGame.leave(background = false)
         taskbar?.stop(); taskbar = null
         dim?.stop(); dim = null
         lock?.hide(); lock = null; locked = false; background = null; service = null

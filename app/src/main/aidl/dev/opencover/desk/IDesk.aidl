@@ -41,6 +41,6 @@ interface IDesk {
     /** The phone locked or unlocked: while locked the desk takes no clicks or typing. */
     void setLocked(boolean locked) = 10;
 
-    /** Where the desk draws from now on (null: nowhere, for a moment). */
-    void setSurface(in Surface surface) = 12;
+    /** Makes [displayId] the focused display (typing and new launches go there). */
+    void focusDisplay(int displayId) = 13;
 }

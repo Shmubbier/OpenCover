@@ -53,6 +53,9 @@ class CoverDim(private val service: AccessibilityService) {
         (service as? dev.opencover.watcher.CoverAccessibility)?.updateNavBar()
     }
 
+    /** Rests the cover now (it would after [IDLE_MS] anyway). */
+    fun rest() { main.removeCallbacks(dimRun); dim() }
+
     private fun dim() {
         if (dark) return
         dark = runCatching {
