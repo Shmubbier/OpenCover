@@ -27,6 +27,7 @@ object RotationFeature {
 
     /** An app's window came to the cover: pin its saved rotation. */
     fun onWindow(ctx: Context, pkg: String) {
+        if (Desktop.connected(ctx)) return upright(ctx) // per-app rotation and density would follow the app onto the monitor
         foreground = pkg
         pin(ctx, PhonePrefs(ctx).turnsFor(pkg))
         AppDensity.onWindow(ctx, pkg)

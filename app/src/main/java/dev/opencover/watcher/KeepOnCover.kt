@@ -31,7 +31,8 @@ object KeepOnCover {
     /** Folded: the cover is on and the inner screen off, and nothing (mirroring) holds the phone open on purpose. */
     private fun folded(ctx: Context): Boolean {
         val dm = ctx.getSystemService(DisplayManager::class.java)
-        return MirrorService.instance == null &&
+        // A monitor shows the inner screen's apps (DeX, desktop mode or mirrored): they belong there.
+        return MirrorService.instance == null && !dev.opencover.phone.Desktop.connected(ctx) &&
             dm.getDisplay(COVER_DISPLAY)?.state == Display.STATE_ON && dm.getDisplay(Display.DEFAULT_DISPLAY)?.state != Display.STATE_ON
     }
 
