@@ -74,7 +74,7 @@ fun SettingsPanel(
             NavRow(Icons.Filled.Widgets, "Samsung widgets", "Open Samsung's own cover widgets", onSamsungWidgets)
         }
         Group("More") {
-            NavRow(Icons.Filled.Science, "Experimental", "Keyboard, top edge, internet calls") { page = Page.EXPERIMENTAL }
+            NavRow(Icons.Filled.Science, "Experimental", "Desktop on a monitor, keyboard, internet calls") { page = Page.EXPERIMENTAL }
             // The inner screen is broken: answer Android's debugging prompt, which only shows there.
             NavRow(Icons.Filled.BugReport, "Approve debugging prompt", "Allows the USB or wireless debugging prompt on the inner screen") {
                 val r = CoverAccessibility.instance?.approveInnerPrompt() ?: "Turn on OpenCover's accessibility first"
@@ -160,6 +160,59 @@ private fun ExperimentalPanel(topEdge: Boolean, onTopEdge: (Boolean) -> Unit, on
             SwitchRow("Internet calls on the cover",
                 "Messenger, Discord, Viber and other apps' calls get the cover call screen, like phone calls. Answering hands over to the app's own call screen.",
                 voip) { voip = it; dev.opencover.call.CallStore.setVoip(ctx, it) }
+        }
+        var desk by remember { mutableStateOf(dev.opencover.desk.Desk.wanted(ctx)) }
+        Group {
+            SwitchRow("Desktop on external monitor",
+                "A USB-C monitor gets Samsung's DeX desktop while the phone stays free, with a USB mouse and keyboard. Starts when a monitor is plugged in. Needs Shizuku.",
+                desk) { on ->
+                dev.opencover.desk.Desk.setWanted(ctx, on)
+                val service = CoverAccessibility.instance
+                val msg = when {
+                    !on -> { dev.opencover.desk.Desk.stop(); "Desk off" }
+                    service == null -> "Turn on OpenCover's accessibility first"
+                    dev.opencover.desk.Desk.monitor(ctx) == null -> "Desk on: it starts when a monitor is plugged in"
+                    else -> dev.opencover.desk.Desk.start(service)
+                }
+                desk = on
+                android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show()
+            }
+            if (desk) {
+                var dimCover by remember { mutableStateOf(dev.opencover.desk.Desk.dimCover(ctx)) }
+                SwitchRow("Cover rests while on a monitor", "The cover shows OpenCover's AOD (black with the AOD off) while the desktop is in use; tap it to use it, and it rests again after 30 s.",
+                    dimCover) { dimCover = it; dev.opencover.desk.Desk.setDimCover(ctx, it) }
+                var wall by remember { mutableStateOf(dev.opencover.desk.Desk.wallpaper(ctx)) }
+                SwitchRow("OpenCover background on the monitor", "Home's background, or one of its own, fills the desktop, animated ones too. The phone's wallpaper goes back when the desktop stops.",
+                    wall) { wall = it; dev.opencover.desk.Desk.setWallpaper(ctx, it); dev.opencover.desk.Desk.backgroundChanged() }
+                if (wall) {
+                    var own by remember { mutableStateOf(dev.opencover.desk.DeskBackground.hasOwn(ctx)) }
+                    NavRow(null, "Desktop background", if (own) "Its own image, GIF, WebP or video" else "Home's; pick an image, GIF, WebP or video for the monitor") {
+                        CoverActivity.current?.pickDeskBackground()
+                    }
+                    NavRow(null, "Adjust desktop background", "What part of it fills the monitor") { CoverActivity.current?.adjustDeskBackground() }
+                    if (own) NavRow(null, "Use Home's background", "On the monitor too") {
+                        dev.opencover.desk.DeskBackground.clearOwn(ctx); own = false
+                        dev.opencover.desk.Desk.backgroundChanged()
+                    }
+                }
+            }
+        }
+        if (desk) Group("Gaming mode") {
+            val games = remember { dev.opencover.desk.DeskGame.installed(ctx) }
+            if (games.isEmpty()) Note("Install DroidDeck, GameNative or GameHub to play them on the monitor.")
+            else {
+                var game by remember { mutableStateOf(dev.opencover.desk.DeskGame.app(ctx)) }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    games.forEach { (pkg, name) ->
+                        FilterChip(selected = game == pkg, onClick = { game = pkg; dev.opencover.desk.DeskGame.setApp(ctx, pkg) }, label = { Text(name) })
+                    }
+                }
+                var auto by remember { mutableStateOf(dev.opencover.desk.DeskGame.auto(ctx)) }
+                SwitchRow("Start it when the monitor is plugged in", "", auto) { auto = it; dev.opencover.desk.DeskGame.setAuto(ctx, it) }
+                NavRow(null, "Play on the monitor", "Opens it filling the monitor; no animated background, the cover rests, and the phone runs off the charger while it's open") {
+                    android.widget.Toast.makeText(ctx, dev.opencover.desk.DeskGame.play(ctx), android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
         }
         Group {
             SwitchRow("Top-edge priority",
