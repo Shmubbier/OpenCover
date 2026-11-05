@@ -94,6 +94,11 @@ class PhonePrefs(ctx: Context) {
         get() = sp.getBoolean("inner_reset_pending", false)
         set(v) { sp.edit().putBoolean("inner_reset_pending", v).commit() }
 
+    /** Turn the camera 180° while an external monitor is connected (see Desktop). */
+    var desktopCamera180: Boolean
+        get() = sp.getBoolean("desktop_camera_180", false)
+        set(v) = sp.edit().putBoolean("desktop_camera_180", v).apply()
+
     /** Force deep doze shortly after the screen turns off (see DeepSleep). */
     var deepSleep: Boolean
         get() = sp.getBoolean("deep_sleep", true)
