@@ -40,9 +40,12 @@ class CoverWatcher : Service() {
     private var wasActive = false
 
     private val displayListener = object : DisplayManager.DisplayListener {
-        override fun onDisplayAdded(displayId: Int) {}
-        override fun onDisplayRemoved(displayId: Int) {}
-        override fun onDisplayChanged(displayId: Int) = onCoverStateMaybeChanged()
+        override fun onDisplayAdded(displayId: Int) = dev.opencover.phone.Desktop.onDisplaysChanged(this@CoverWatcher)
+        override fun onDisplayRemoved(displayId: Int) = dev.opencover.phone.Desktop.onDisplaysChanged(this@CoverWatcher)
+        override fun onDisplayChanged(displayId: Int) {
+            dev.opencover.phone.Desktop.onDisplaysChanged(this@CoverWatcher)
+            onCoverStateMaybeChanged()
+        }
     }
 
     private val receiver = object : BroadcastReceiver() {

@@ -21,6 +21,7 @@ A free, open-source (GPL-3.0) launcher for the Galaxy Z Flip 5 cover screen. No 
 - Edge lighting (Settings, on by default): the cover's edges glow in the app's colour for new notifications. With the screen off or on the AOD it wakes the cover, glows and sleeps again (Shizuku); a touch keeps it awake. Not while you're using the cover (unlocked), the phone is open or in a call. Settings > Notifications > Edge lighting: each app's own colour or one custom colour (colour wheel, brightness, hex), plus colours per app.
 - Calls: one cover call screen, over the lock screen, with Answer, Decline, Answer muted and Decline and mute that person for 30 minutes; during the call a timer, Mute and Hang up. Not while the phone is open. Internet calls from apps (Messenger, Discord, Viber) are experimental, off by default: Settings > Experimental.
 - Keep the cover screen awake in any app.
+- External monitor (DeX or desktop mode): per-app cover rotation and density pause and no app is moved to the cover while one is connected. Settings > Phone & display > External monitor (Shizuku): force desktop windows for every app (Android's developer options, restart after), and turn the camera 180° while connected.
 - "Open Samsung widgets" in settings to reach Samsung's own cover widgets.
 
 ## Install
