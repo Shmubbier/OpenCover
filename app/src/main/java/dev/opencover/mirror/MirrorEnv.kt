@@ -133,7 +133,7 @@ object MirrorEnv {
 
     private fun restoreInnerScreen(app: Context) {
         val prefs = PhonePrefs(app)
-        if (!prefs.innerResetPending) return
+        if (!prefs.innerResetPending || dev.opencover.desk.Desk.running) return // the desk holds it at its density
         // Resized only with Shizuku; without it there is nothing to put back (and no way to).
         if (!ShizukuShell.allowed() || ShizukuShell.run("sh", "-c", INNER_SCREEN_RESET)) prefs.innerResetPending = false
     }
