@@ -102,28 +102,6 @@ fun PhoneSettings(keepAwake: Boolean, onKeepAwake: (Boolean) -> Unit, onBack: ()
             if (shizuku) NavRow(null, "Restrict in background", "Stop apps working in the background") { sub = PhonePage.BACKGROUND }
         }
         Group("Inner screen (Shizuku)") { InnerLauncherSettings() }
-        if (shizuku) Group("External monitor (Shizuku)") { DesktopSettings(prefs) }
-    }
-}
-
-/** DeX or desktop mode on a monitor: force desktop windows for every app, and the camera turned 180°. */
-@Composable
-private fun DesktopSettings(prefs: PhonePrefs) {
-    val ctx = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var forced by remember { mutableStateOf<Boolean?>(null) }
-    var camera by remember { mutableStateOf(prefs.desktopCamera180) }
-    LaunchedEffect(Unit) { forced = withContext(Dispatchers.IO) { dev.opencover.phone.Desktop.forced() } }
-    Text("While a monitor is connected, apps keep the cover's own rotation and density, and none are moved to the cover.",
-        color = Color.Gray, fontSize = 11.sp)
-    forced?.let { now ->
-        SwitchRow("Desktop mode for every app",
-            "Resizable windows for all apps, and desktop mode on monitors (Android's developer options). Restart the phone after changing it.", now) { want ->
-            scope.launch { forced = withContext(Dispatchers.IO) { dev.opencover.phone.Desktop.setForced(want); dev.opencover.phone.Desktop.forced() } }
-        }
-    }
-    SwitchRow("Turn camera 180° on a monitor", "For a phone standing upside down by the monitor. Cameras that can't rotate ignore it.", camera) {
-        camera = it; prefs.desktopCamera180 = it; dev.opencover.phone.Desktop.applyCamera(ctx)
     }
 }
 

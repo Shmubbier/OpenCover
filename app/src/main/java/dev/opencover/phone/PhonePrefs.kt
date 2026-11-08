@@ -94,7 +94,7 @@ class PhonePrefs(ctx: Context) {
         get() = sp.getBoolean("inner_reset_pending", false)
         set(v) { sp.edit().putBoolean("inner_reset_pending", v).commit() }
 
-    /** Turn the camera 180° while an external monitor is connected (see Desktop). */
+    /** Turn the camera 180° while the desk runs (see Desk). */
     var desktopCamera180: Boolean
         get() = sp.getBoolean("desktop_camera_180", false)
         set(v) = sp.edit().putBoolean("desktop_camera_180", v).apply()

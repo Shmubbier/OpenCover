@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Navigation
@@ -32,7 +33,7 @@ import dev.opencover.nav.NavStyle
 import dev.opencover.watcher.CoverAccessibility
 
 /** The pages under Settings, as in Lawnchair: one list of categories, each opening its own page. */
-private enum class Page { HOME, LOCK, NOTIFICATIONS, NAVIGATION, PHONE, EXPERIMENTAL }
+private enum class Page { HOME, LOCK, NOTIFICATIONS, NAVIGATION, PHONE, DESKTOP, EXPERIMENTAL }
 
 @Composable
 fun SettingsPanel(
@@ -57,6 +58,7 @@ fun SettingsPanel(
         Page.NOTIFICATIONS -> return NotificationSettings(popups, onPopups, onBack = back)
         Page.NAVIGATION -> return NavigationSettings(onBack = back)
         Page.PHONE -> return PhoneSettings(keepAwake, onKeepAwake, onBack = back)
+        Page.DESKTOP -> return DesktopPanel(onBack = back)
         Page.EXPERIMENTAL -> return ExperimentalPanel(topEdge, onTopEdge, onBack = back)
         null -> {}
     }
@@ -67,6 +69,7 @@ fun SettingsPanel(
             NavRow(Icons.Filled.Notifications, "Notifications", "Pop-ups and edge lighting") { page = Page.NOTIFICATIONS }
             NavRow(Icons.Filled.Navigation, "Navigation & media", "Navigation bar, gestures, media player") { page = Page.NAVIGATION }
             NavRow(Icons.Filled.PhoneAndroid, "Phone & display", "Keep awake, battery, Shizuku tweaks") { page = Page.PHONE }
+            NavRow(Icons.Filled.DesktopWindows, "Desktop", "DeX on a monitor, gaming mode") { page = Page.DESKTOP }
         }
         Group("Setup") {
             NavRow(Icons.Filled.Checklist, "Setup & permissions", "What OpenCover needs, and what's missing", onSetup)
@@ -74,7 +77,7 @@ fun SettingsPanel(
             NavRow(Icons.Filled.Widgets, "Samsung widgets", "Open Samsung's own cover widgets", onSamsungWidgets)
         }
         Group("More") {
-            NavRow(Icons.Filled.Science, "Experimental", "Desktop on a monitor, keyboard, internet calls") { page = Page.EXPERIMENTAL }
+            NavRow(Icons.Filled.Science, "Experimental", "Keyboard, internet calls, top-edge priority") { page = Page.EXPERIMENTAL }
             // The inner screen is broken: answer Android's debugging prompt, which only shows there.
             NavRow(Icons.Filled.BugReport, "Approve debugging prompt", "Allows the USB or wireless debugging prompt on the inner screen") {
                 val r = CoverAccessibility.instance?.approveInnerPrompt() ?: "Turn on OpenCover's accessibility first"
@@ -161,10 +164,23 @@ private fun ExperimentalPanel(topEdge: Boolean, onTopEdge: (Boolean) -> Unit, on
                 "Messenger, Discord, Viber and other apps' calls get the cover call screen, like phone calls. Answering hands over to the app's own call screen.",
                 voip) { voip = it; dev.opencover.call.CallStore.setVoip(ctx, it) }
         }
+        Group {
+            SwitchRow("Top-edge priority",
+                "Replaces Samsung's pull-down panel with ours. Its panel still flashes and blocks touches for ~2 s. Lets OpenCover read the window list.",
+                topEdge, onTopEdge)
+        }
+    }
+}
+
+/** Settings > Desktop: Samsung's DeX on a USB-C monitor, with the phone free (see Desk). */
+@Composable
+private fun DesktopPanel(onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    SettingsPage("Desktop", onBack) {
         var desk by remember { mutableStateOf(dev.opencover.desk.Desk.wanted(ctx)) }
         Group {
             SwitchRow("Desktop on external monitor",
-                "A USB-C monitor gets Samsung's DeX desktop while the phone stays free, with a USB mouse and keyboard. Starts when a monitor is plugged in. Needs Shizuku.",
+                "A USB-C monitor gets Samsung's DeX desktop while the phone stays free, with a USB mouse and keyboard. Starts when a monitor is plugged in; apps get desktop windows while it runs. Needs Shizuku.",
                 desk) { on ->
                 dev.opencover.desk.Desk.setWanted(ctx, on)
                 val service = CoverAccessibility.instance
@@ -178,6 +194,12 @@ private fun ExperimentalPanel(topEdge: Boolean, onTopEdge: (Boolean) -> Unit, on
                 android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show()
             }
             if (desk) {
+                var camera by remember { mutableStateOf(dev.opencover.phone.PhonePrefs(ctx).desktopCamera180) }
+                SwitchRow("Turn camera 180°", "While the desktop runs, for a phone standing upside down by the monitor. Cameras that can't rotate ignore it.", camera) {
+                    camera = it; dev.opencover.phone.PhonePrefs(ctx).desktopCamera180 = it
+                    val turned = it && dev.opencover.desk.Desk.running
+                    Thread { dev.opencover.phone.Desktop.camera(turned) }.start()
+                }
                 var dimCover by remember { mutableStateOf(dev.opencover.desk.Desk.dimCover(ctx)) }
                 SwitchRow("Cover rests while on a monitor", "The cover shows OpenCover's AOD (black with the AOD off) while the desktop is in use; tap it to use it, and it rests again after 30 s.",
                     dimCover) { dimCover = it; dev.opencover.desk.Desk.setDimCover(ctx, it) }
@@ -213,11 +235,6 @@ private fun ExperimentalPanel(topEdge: Boolean, onTopEdge: (Boolean) -> Unit, on
                     android.widget.Toast.makeText(ctx, dev.opencover.desk.DeskGame.play(ctx), android.widget.Toast.LENGTH_LONG).show()
                 }
             }
-        }
-        Group {
-            SwitchRow("Top-edge priority",
-                "Replaces Samsung's pull-down panel with ours. Its panel still flashes and blocks touches for ~2 s. Lets OpenCover read the window list.",
-                topEdge, onTopEdge)
         }
     }
 }
