@@ -153,7 +153,7 @@ object Desk {
     private fun make(ctx: Context, surface: Surface, w: Int, h: Int, open: String?) {
         // Before the display exists, so it starts with it.
         useOurWallpaper(ctx, w, h)
-        matchInnerDensity(ctx, on = true)
+        desktopSession(ctx, on = true)
         val id = runCatching { helper?.create(surface, w, h, DPI) }.getOrNull() ?: -1
         displayId = id
         Log.i(TAG, "desk display $id (${w}x$h)")
@@ -257,20 +257,24 @@ object Desk {
      * Apps that take their scale from the phone's main screen (React Native ones: Discord and others) lay out at its
      * 480 dpi inside the desk's 160: tiny text, huge badges. The inner screen is off while folded, so it takes the desk's
      * density while the desk runs; put back in [stop], or by MirrorEnv.recover if OpenCover died first.
+     * Desktop windows for every app, and the camera turned if chosen, last only as long as the desk too.
      */
     // ponytail: unfolding while the desk runs shows the inner screen at desk density; restore on unfold if that matters.
-    private fun matchInnerDensity(ctx: Context, on: Boolean) {
+    // ponytail: if OpenCover dies mid-desk, forced desktop windows and the camera stay until the next desk stops.
+    private fun desktopSession(ctx: Context, on: Boolean) {
         val prefs = dev.opencover.phone.PhonePrefs(ctx.applicationContext)
         if (on) prefs.innerResetPending = true
         Thread {
             val ok = ShizukuShell.run("wm", "density", if (on) "$DPI" else "reset", "-d", "${Display.DEFAULT_DISPLAY}")
             if (!on && ok) prefs.innerResetPending = false
+            dev.opencover.phone.Desktop.setForced(on)
+            dev.opencover.phone.Desktop.camera(on && prefs.desktopCamera180)
         }.start()
     }
 
     fun stop() {
         val v = view ?: return
-        matchInnerDensity(v.context, on = false)
+        desktopSession(v.context, on = false)
         restoreWallpaper(v.context)
         DeskGame.leave(background = false)
         taskbar?.stop(); taskbar = null
