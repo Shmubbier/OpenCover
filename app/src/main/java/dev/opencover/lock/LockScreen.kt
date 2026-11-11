@@ -76,12 +76,21 @@ fun LockLayer(activity: android.app.Activity) {
     // The swipe so far: the face follows it a little and fades, then springs back if it didn't go far enough.
     val drag = remember { androidx.compose.animation.core.Animatable(androidx.compose.ui.geometry.Offset.Zero, androidx.compose.ui.geometry.Offset.VectorConverter) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val km = activity.getSystemService(KeyguardManager::class.java)
     fun unlock() {
-        activity.getSystemService(KeyguardManager::class.java).requestDismissKeyguard(activity, object : KeyguardManager.KeyguardDismissCallback() {
+        if (!km.isKeyguardLocked) return (activity as? CoverActivity)?.refreshLocked() ?: Unit // already unlocked: just leave
+        km.requestDismissKeyguard(activity, object : KeyguardManager.KeyguardDismissCallback() {
             override fun onDismissSucceeded() { (activity as? CoverActivity)?.refreshLocked() }
             override fun onDismissCancelled() { LockScreen.pendingOpen = null }
-            override fun onDismissError() { LockScreen.pendingOpen = null }
+            override fun onDismissError() { LockScreen.pendingOpen = null; (activity as? CoverActivity)?.refreshLocked() }
         })
+    }
+    // The unlock can slip past every broadcast (fingerprint, PIN from Samsung's cover): while showing, keep checking.
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(700)
+            if (!km.isKeyguardLocked) (activity as? CoverActivity)?.refreshLocked()
+        }
     }
     BackHandler { peek = false } // nothing behind the lock screen to go back to
     // No navigation bar while locked; a swipe from the bottom edge still shows it for a moment.
