@@ -89,6 +89,49 @@ object NotificationStore {
         false
     }
 
+    /** What a notification shows besides its text: who sent it, the app, and an attached picture. */
+    class Visuals(val avatar: android.graphics.drawable.Drawable?, val appIcon: android.graphics.drawable.Drawable?,
+        val appName: String, val picture: android.graphics.Bitmap?)
+
+    /**
+     * The sender's picture (a chat's latest sender, else the app's large icon), the app's icon and name, and an image
+     * the notification carries (a big picture, or a photo in the latest chat message), scaled to at most [maxPx] wide.
+     */
+    fun visuals(ctx: Context, key: String, maxPx: Int): Visuals? {
+        val sbn = raw[key] ?: return null
+        val n = sbn.notification
+        val x = n.extras
+        val last = x.getParcelableArray(Notification.EXTRA_MESSAGES, Parcelable::class.java)?.lastOrNull() as? Bundle
+        val avatar = runCatching { last?.getParcelable("sender_person", Person::class.java)?.icon?.loadDrawable(ctx) }.getOrNull()
+            ?: runCatching { n.getLargeIcon()?.loadDrawable(ctx) }.getOrNull()
+        val pm = ctx.packageManager
+        val app = runCatching { pm.getApplicationInfo(sbn.packageName, 0) }.getOrNull()
+        val picture = runCatching { x.getParcelable(Notification.EXTRA_PICTURE, android.graphics.Bitmap::class.java) }.getOrNull()
+            ?: runCatching { x.getParcelable(Notification.EXTRA_PICTURE_ICON, android.graphics.drawable.Icon::class.java)?.loadDrawable(ctx)?.let { toBitmap(it) } }.getOrNull()
+            ?: messageImage(ctx, last)
+        return Visuals(avatar, app?.let { pm.getApplicationIcon(it) }, app?.let { pm.getApplicationLabel(it).toString() } ?: sbn.packageName,
+            picture?.let { scaled(it, maxPx) })
+    }
+
+    /** A photo sent in a chat message (MessagingStyle data: a content URI of an image type), if this app may read it. */
+    private fun messageImage(ctx: Context, message: Bundle?): android.graphics.Bitmap? {
+        if (message?.getString("type")?.startsWith("image/") != true) return null
+        val uri = message.getParcelable("uri", android.net.Uri::class.java) ?: return null
+        return runCatching {
+            android.graphics.ImageDecoder.decodeBitmap(android.graphics.ImageDecoder.createSource(ctx.contentResolver, uri)) { d, info, _ ->
+                val s = minOf(1f, 1080f / maxOf(info.size.width, info.size.height))
+                d.setTargetSize((info.size.width * s).toInt().coerceAtLeast(1), (info.size.height * s).toInt().coerceAtLeast(1))
+            }
+        }.getOrNull()
+    }
+
+    private fun toBitmap(d: android.graphics.drawable.Drawable): android.graphics.Bitmap =
+        android.graphics.Bitmap.createBitmap(d.intrinsicWidth.coerceAtLeast(1), d.intrinsicHeight.coerceAtLeast(1), android.graphics.Bitmap.Config.ARGB_8888)
+            .also { b -> d.setBounds(0, 0, b.width, b.height); d.draw(android.graphics.Canvas(b)) }
+
+    private fun scaled(b: android.graphics.Bitmap, maxPx: Int): android.graphics.Bitmap =
+        if (b.width <= maxPx) b else android.graphics.Bitmap.createScaledBitmap(b, maxPx, b.height * maxPx / b.width, true)
+
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("notifications", Context.MODE_PRIVATE)
     fun popupsEnabled(ctx: Context) = prefs(ctx).getBoolean("popups", true)
     fun setPopups(ctx: Context, on: Boolean) = prefs(ctx).edit().putBoolean("popups", on).apply()

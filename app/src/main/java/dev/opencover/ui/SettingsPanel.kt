@@ -90,11 +90,18 @@ fun SettingsPanel(
 /** Settings > Notifications: pop-ups, and edge lighting (its colours on their own page). */
 @Composable
 private fun NotificationSettings(popups: Boolean, onPopups: (Boolean) -> Unit, onBack: () -> Unit) {
+    val ctx = LocalContext.current
     var edge by remember { mutableStateOf(false) }
+    var calls by remember { mutableStateOf(dev.opencover.call.CallStore.enabled(ctx)) }
     if (edge) return EdgeSettings(onBack = { edge = false })
     SettingsPage("Notifications", onBack) {
         Group {
             SwitchRow("Notification pop-ups", "New notifications pop up over any app on the cover.", popups, onPopups)
+        }
+        Group {
+            SwitchRow("OpenCover call screen",
+                "Phone calls and every app's calls ring on OpenCover's call screen. Off: Samsung's and each app's own call screens.",
+                calls) { calls = it; dev.opencover.call.CallStore.setEnabled(ctx, it) }
         }
         Group {
             NavRow(null, "Edge lighting", "The edges glow in the app's colour for new notifications") { edge = true }

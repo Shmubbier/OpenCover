@@ -261,7 +261,7 @@ object NavBar {
     private val dropLater = Runnable { dropCurtain() }
 
     /** Covers the cover screen with the Home wallpaper until OpenCover's Home is in front ([dropCurtainSoon]). */
-    private fun raiseCurtain(service: AccessibilityService) {
+    fun raiseCurtain(service: AccessibilityService) {
         if (curtain != null) return
         val cover = service.getSystemService(android.hardware.display.DisplayManager::class.java).getDisplay(COVER_DISPLAY) ?: return
         val wm = service.createDisplayContext(cover).createWindowContext(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, null)

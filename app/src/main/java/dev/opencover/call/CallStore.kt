@@ -54,6 +54,10 @@ object CallStore {
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("calls", Context.MODE_PRIVATE)
 
+    /** The cover call screen at all, for every calling app (phone included); off leaves calls to Samsung and the apps. */
+    fun enabled(ctx: Context) = prefs(ctx).getBoolean("enabled", true)
+    fun setEnabled(ctx: Context, on: Boolean) = prefs(ctx).edit().putBoolean("enabled", on).apply()
+
     /** Internet calls (Messenger, Discord, Viber...) on the cover call screen: experimental, off by default. */
     fun voip(ctx: Context) = prefs(ctx).getBoolean("voip", false)
     fun setVoip(ctx: Context, on: Boolean) = prefs(ctx).edit().putBoolean("voip", on).apply()
@@ -68,7 +72,7 @@ object CallStore {
         if (n.category == Notification.CATEGORY_CALL || phase != null) android.util.Log.d(
             "CallStore", "${sbn.packageName} category=${n.category} type=${x.getInt(Notification.EXTRA_CALL_TYPE, 0)} buttons=$titles -> $phase",
         )
-        if (phase == null) return
+        if (phase == null || !enabled(ctx)) return
         if (handsOverOnAnswer(sbn.packageName) && !voip(ctx)) return // an app's internet call, while that's off
         val person = x.getParcelable(Notification.EXTRA_CALL_PERSON, Person::class.java)
         val caller = person?.name?.toString() ?: x.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()

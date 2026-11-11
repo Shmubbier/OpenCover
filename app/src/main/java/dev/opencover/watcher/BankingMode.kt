@@ -39,6 +39,9 @@ object BankingMode {
     private fun installed(ctx: Context, pkg: String) =
         runCatching { ctx.packageManager.getPackageInfo(pkg, 0) }.isSuccess
 
+    /** Left the banking app for Samsung's home: open OpenCover's as soon as the accessibility service is back. */
+    @Volatile var homeOnReconnect = false
+
     fun pausedFor(ctx: Context): String? = prefs(ctx).getString("paused", null)
 
     /** Turning the service back on by ourselves needs WRITE_SECURE_SETTINGS, granted once over adb. */

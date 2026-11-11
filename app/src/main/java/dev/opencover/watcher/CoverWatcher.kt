@@ -75,7 +75,7 @@ class CoverWatcher : Service() {
     private val bankingPoll = object : Runnable {
         override fun run() {
             val paused = BankingMode.pausedFor(this@CoverWatcher) ?: return
-            if (leftBankingApp(paused)) BankingMode.resume(this@CoverWatcher) else handler.postDelayed(this, 1000)
+            if (leftBankingApp(paused)) BankingMode.resume(this@CoverWatcher) else handler.postDelayed(this, 500)
         }
     }
 
@@ -96,6 +96,7 @@ class CoverWatcher : Service() {
                 left = shouldResume(paused, e.packageName, e.className, packageName, BankingMode.apps(this)) {
                     launcherApps.getActivityList(it, Process.myUserHandle()).isNotEmpty()
                 }
+                BankingMode.homeOnReconnect = left && e.className == dev.opencover.SAMSUNG_COVER_HOME
             }
             lastSeen = maxOf(lastSeen, e.timeStamp + 1)
         }
@@ -140,13 +141,17 @@ class CoverWatcher : Service() {
         KeepAwake.attach(this) // retries if the overlay permission arrived after we started
         val active = coverActive()
         if (active && !wasActive && !keyguard.isKeyguardLocked) openLauncher("fold")
-        if (displays.getDisplay(Display.DEFAULT_DISPLAY)?.state == Display.STATE_ON) KeepAwake.set(this, false)
+        if (displays.getDisplay(Display.DEFAULT_DISPLAY)?.state == Display.STATE_ON) {
+            KeepAwake.set(this, false)
+            CoverAccessibility.appInFront = null // opened: folding again starts from Home
+        }
         wasActive = active
     }
 
     /** [unlocked]: straight from the lock screen; Home plays its own entrance instead of the system's app-open animation. */
     private fun openLauncher(why: String, unlocked: Boolean = false) {
         if (MirrorService.instance != null) return // the forced unfolded state looks like a fold
+        if (CoverAccessibility.appInFront != null) return // an app was open when the screen went off: it stays
         Log.i(TAG, "open launcher ($why)")
         AppLauncher.start(this, Intent(this, CoverActivity::class.java).putExtra(CoverActivity.EXTRA_UNLOCKED, unlocked), animate = !unlocked)
     }

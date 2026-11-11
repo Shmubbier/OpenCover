@@ -91,10 +91,34 @@ class CoverActivity : ComponentActivity() {
     private var locked by mutableStateOf(false)
     // The locked-state listener is system-only; these broadcasts plus onResume cover every change.
     private val lockEvents = object : android.content.BroadcastReceiver() {
-        override fun onReceive(c: android.content.Context, i: Intent) = refreshLocked()
+        override fun onReceive(c: android.content.Context, i: Intent) {
+            refreshLocked()
+            // The keyguard can still say locked as USER_PRESENT arrives (fingerprint): look again, then stop waiting to
+            // step aside, so a later Home press isn't taken for the unlock.
+            if (i.action == Intent.ACTION_USER_PRESENT) {
+                window.decorView.postDelayed({ refreshLocked() }, 300)
+                window.decorView.postDelayed({ refreshLocked(); coveringApp = false }, 1_200)
+            }
+        }
     }
 
-    fun refreshLocked() { locked = getSystemService(KeyguardManager::class.java).isKeyguardLocked }
+    fun refreshLocked() {
+        val now = getSystemService(KeyguardManager::class.java).isKeyguardLocked
+        // Unlocked with an app left open underneath: it comes back, without Home showing on the way (onStop catches up).
+        // Samsung's PIN pauses this screen, so the unlock can land here while paused or in onResume.
+        if (!now && coveringApp) {
+            coveringApp = false
+            val moved = moveTaskToBack(true)
+            android.util.Log.i("OpenCoverLock", "unlocked over an app: stepping aside ($moved)")
+            if (moved && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) steppingAside = true
+        }
+        if (!steppingAside) locked = now
+    }
+
+    private var steppingAside = false
+
+    /** This lock screen is showing over an app that was left open when the screen went off. */
+    private var coveringApp = false
 
     /** Shows over the keyguard only while OpenCover's lock screen is switched on. */
     fun applyLockScreen() = setShowWhenLocked(LockPrefs.lockScreen)
@@ -183,9 +207,13 @@ class CoverActivity : ComponentActivity() {
                 opening = Opening(from, repo.icon(pkg, activity, user))
                 lifecycleScope.launch(UiClock) {
                     launch { runCatching { motion.animateTo(0.5f, androidx.compose.animation.core.tween(240, easing = androidx.compose.animation.core.FastOutSlowInEasing)) } }
+                    // The app starts while the card grows, not after: its own start-up is most of the wait.
+                    launch {
+                        kotlinx.coroutines.delay(90)
+                        // Didn't open: we're still in OpenCover, so turn accessibility straight back on.
+                        AppLauncher.launch(this@CoverActivity, pkg, activity, user, { BankingMode.resume(this@CoverActivity) }, window.decorView, from)
+                    }
                     runCatching { grow.snapTo(0f); grow.animateTo(1f, androidx.compose.animation.core.tween(240, easing = androidx.compose.animation.core.FastOutSlowInEasing)) }
-                    // Didn't open: we're still in OpenCover, so turn accessibility straight back on.
-                    AppLauncher.launch(this@CoverActivity, pkg, activity, user, { BankingMode.resume(this@CoverActivity) }, window.decorView, from)
                     kotlinx.coroutines.delay(1_500)
                     if (current == this@CoverActivity && opening != null) {
                         launch { runCatching { motion.animateTo(1f, enter) }.onFailure { motion.snapTo(1f) } }
@@ -227,7 +255,7 @@ class CoverActivity : ComponentActivity() {
                     when {
                         isLocked && LockPrefs.lockScreen -> LockLayer(this@CoverActivity)
                         isLocked -> Box(Modifier.fillMaxSize().background(Color.Black)) // not shown over the keyguard then
-                        required && !showSetup -> Entrance(motion.value) { Shell(layout, apps, actions, prompt, Wallpaper.homeStill, homeRequests, quickSettingsRequests) }
+                        required && !showSetup -> Entrance({ motion.value }) { Shell(layout, apps, actions, prompt, Wallpaper.homeStill, homeRequests, quickSettingsRequests) }
                         pickingBanking -> {
                             var selected by remember { mutableStateOf(BankingMode.apps(this@CoverActivity)) }
                             BankingPicker(
@@ -381,6 +409,7 @@ class CoverActivity : ComponentActivity() {
 
     override fun onStop() {
         hiddenAt = android.os.SystemClock.uptimeMillis()
+        if (steppingAside) { steppingAside = false; refreshLocked() }
         widgets.stopListening()
         super.onStop()
     }
@@ -398,9 +427,13 @@ class CoverActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        refreshLocked()
-        if (ShizukuShell.allowed()) RotationFeature.upright(this) // shell call runs on its own thread
         current = this
+        steppingAside = false
+        if (getSystemService(KeyguardManager::class.java).isKeyguardLocked)
+            coveringApp = dev.opencover.watcher.CoverAccessibility.appInFront != null
+        refreshLocked()
+        if (!locked && !steppingAside) dev.opencover.watcher.CoverAccessibility.appInFront = null
+        if (ShizukuShell.allowed()) RotationFeature.upright(this) // shell call runs on its own thread
         // Settle in only when Home was really out of sight for a moment (an app, the lock screen): a Home swipe on Home
         // only passes through Samsung's cover home for an instant, and replaying would flash.
         if (hiddenAt != 0L && android.os.SystemClock.uptimeMillis() - hiddenAt > 400) playEntrance()
@@ -489,8 +522,10 @@ class CoverActivity : ComponentActivity() {
         }
     }
 
+    // repo.load reads 30 days of usage stats: on the main thread at every return to Home, it stalled the entrance.
     private fun refreshApps() {
-        apps = repo.load()
+        if (!loaded) { apps = repo.load(); return } // the first layout needs them now
+        lifecycleScope.launch { apps = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { repo.load() } }
     }
 
     private fun loadLayout() {
@@ -552,12 +587,13 @@ class CoverActivity : ComponentActivity() {
  * so Home settles back into place as the app shrinks away.
  */
 @androidx.compose.runtime.Composable
-private fun Entrance(shown: Float, content: @androidx.compose.runtime.Composable () -> Unit) {
+private fun Entrance(shown: () -> Float, content: @androidx.compose.runtime.Composable () -> Unit) {
     // Fades through black, not to transparent: the window behind Home is Samsung's cover home.
     androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.background(Color.Black)) {
         androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.graphicsLayer {
-            alpha = shown
-            scaleX = 1f + 0.08f * (1f - shown)
+            val s = shown() // read here, at draw: Home isn't recomposed for every frame
+            alpha = s
+            scaleX = 1f + 0.08f * (1f - s)
             scaleY = scaleX
         }) { content() }
     }

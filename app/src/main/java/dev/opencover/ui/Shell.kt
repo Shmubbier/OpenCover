@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -158,18 +159,23 @@ fun Shell(
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         val heightPx = constraints.maxHeight.toFloat()
         // How far a page or panel covers Home, 0..1: the wallpaper blurs by as much as it is covered.
-        val pageAway = minOf(1f, kotlin.math.abs(pager.currentPage + pager.currentPageOffsetFraction - HOME_PAGE))
-        val panelOver = if (panel != null && panel != Panel.MEDIA) reveal.value else 0f
-        val covered = maxOf(pageAway, panelOver)
+        // Lambdas, read only at draw: read here they would recompose the whole shell on every frame of a swipe.
+        val panelOver = { if (panel != null && panel != Panel.MEDIA) reveal.value else 0f }
+        val covered = { maxOf(minOf(1f, kotlin.math.abs(pager.currentPage + pager.currentPageOffsetFraction - HOME_PAGE)), panelOver()) }
+        val atRest by remember { derivedStateOf { covered() == 0f } }
         // One wallpaper for every page: it plays on Home and holds its frame elsewhere.
         Background(
             wallpaper, dev.opencover.home.Wallpaper.homeAnim, dev.opencover.look.Playheads.home,
-            playing = covered == 0f, // a video can't be blurred: it pauses (on a captured frame) as soon as anything covers Home
+            playing = atRest, // a video can't be blurred: it pauses (on a captured frame) as soon as anything covers Home
             crop = dev.opencover.home.Wallpaper.homeCrop, video = dev.opencover.home.Wallpaper.homeVideo,
-            modifier = Modifier.blur((dev.opencover.look.LookPrefs.current.blur * covered).dp, BlurredEdgeTreatment.Rectangle),
+            modifier = Modifier.graphicsLayer {
+                val r = (dev.opencover.look.LookPrefs.current.blur * covered()).dp.toPx()
+                renderEffect = if (r > 0f) androidx.compose.ui.graphics.BlurEffect(r, r, androidx.compose.ui.graphics.TileMode.Clamp) else null
+                clip = true
+            },
         )
         // A panel slides in over the wallpaper, not over the page under it: fade the page out as it comes.
-        Column(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - panelOver }) {
+        Column(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - panelOver() }) {
             if (editing) {
                 val removed = layoutPageFor(pager.currentPage)?.let { layout.removePage(it) }
                 EditBar(
