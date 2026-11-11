@@ -100,7 +100,7 @@ private fun NotificationSettings(popups: Boolean, onPopups: (Boolean) -> Unit, o
         }
         Group {
             SwitchRow("OpenCover call screen",
-                "Phone calls and every app's calls ring on OpenCover's call screen. Off: Samsung's and each app's own call screens.",
+                "Off by default: calls use Samsung's and each app's own call screens. On: phone calls and every app's calls ring on OpenCover's.",
                 calls) { calls = it; dev.opencover.call.CallStore.setEnabled(ctx, it) }
         }
         Group {

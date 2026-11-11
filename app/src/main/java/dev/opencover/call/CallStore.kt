@@ -55,8 +55,8 @@ object CallStore {
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("calls", Context.MODE_PRIVATE)
 
     /** The cover call screen at all, for every calling app (phone included); off leaves calls to Samsung and the apps. */
-    fun enabled(ctx: Context) = prefs(ctx).getBoolean("enabled", true)
-    fun setEnabled(ctx: Context, on: Boolean) = prefs(ctx).edit().putBoolean("enabled", on).apply()
+    fun enabled(ctx: Context) = prefs(ctx).getBoolean("calls_on", false)
+    fun setEnabled(ctx: Context, on: Boolean) = prefs(ctx).edit().putBoolean("calls_on", on).apply()
 
     /** Internet calls (Messenger, Discord, Viber...) on the cover call screen: experimental, off by default. */
     fun voip(ctx: Context) = prefs(ctx).getBoolean("voip", false)
@@ -228,7 +228,7 @@ object CallStore {
 
     fun show(ctx: Context) {
         val dm = ctx.getSystemService(DisplayManager::class.java)
-        if (dm.getDisplay(COVER_DISPLAY) == null) return
+        if (dm.getDisplay(COVER_DISPLAY) == null || !enabled(ctx)) return
         AppLauncher.start(ctx, Intent(ctx, CallActivity::class.java), animate = false)
     }
 

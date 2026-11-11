@@ -110,7 +110,13 @@ class CoverActivity : ComponentActivity() {
             coveringApp = false
             val moved = moveTaskToBack(true)
             android.util.Log.i("OpenCoverLock", "unlocked over an app: stepping aside ($moved)")
-            if (moved && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) steppingAside = true
+            if (moved && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) {
+                steppingAside = true
+                // The app behind didn't come up (we're still showing): stop waiting and show the unlocked launcher.
+                window.decorView.postDelayed({
+                    if (steppingAside) { steppingAside = false; android.util.Log.i("OpenCoverLock", "app didn't come back: unlocking here"); refreshLocked() }
+                }, 800)
+            }
         }
         if (!steppingAside) locked = now
     }
