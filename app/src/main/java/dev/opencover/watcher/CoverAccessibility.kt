@@ -65,6 +65,9 @@ class CoverAccessibility : AccessibilityService() {
             // last one: redraw it once things have settled, so it doesn't stay hidden until the next change.
             if (i.action == Intent.ACTION_USER_PRESENT || i.action == Intent.ACTION_SCREEN_ON)
                 listOf(300L, 1_000L).forEach { handler.postDelayed({ updateNavBar() }, it) }
+            // The app that was left open may have died while the phone slept: nothing tells us, Samsung's home is just there.
+            if (i.action == Intent.ACTION_USER_PRESENT) unlockedAt = android.os.SystemClock.uptimeMillis()
+            if (i.action == Intent.ACTION_USER_PRESENT && appInFront != null) handler.postDelayed({ homeIfAppGone() }, 800)
         }
     }
 
@@ -90,6 +93,11 @@ class CoverAccessibility : AccessibilityService() {
         refreshScope()
         dev.opencover.nav.NavPrefs.syncHint(this)
         handler.post { updateNavBar() } // the window list is ready once connected
+        // Back on after a banking app that was left for Samsung's home: nothing else will notice that home is showing.
+        if (BankingMode.homeOnReconnect) {
+            BankingMode.homeOnReconnect = false
+            handler.post { openHomeOverSamsung() }
+        }
         // Shizuku state does not survive a reboot, and after one Shizuku starts later than this service: redo it
         // whenever Shizuku comes up (sticky: also right now if it already is).
         rikka.shizuku.Shizuku.addBinderReceivedListenerSticky(shizukuUp, handler)
@@ -202,7 +210,10 @@ class CoverAccessibility : AccessibilityService() {
             imePackage() -> {} // the keyboard opens over the app; it must not turn the cover back upright
             else -> {
                 // An app in the background still reports its window when the cover's density changes: only one in front counts.
-                if (dev.opencover.ui.CoverActivity.current == null) RotationFeature.onWindow(this, pkg)
+                if (dev.opencover.ui.CoverActivity.current == null) {
+                    RotationFeature.onWindow(this, pkg)
+                    if (packageManager.getLaunchIntentForPackage(pkg) != null) appInFront = pkg
+                }
                 CallStore.otherWindow(this, pkg)
             }
         }
@@ -220,8 +231,40 @@ class CoverAccessibility : AccessibilityService() {
             handler.postDelayed({ LockScreen.maybeShow(this) }, 250) // Home pressed on our lock screen
             return
         }
+        // Samsung's home also comes up as the screen goes off, before the keyguard: an app left open must stay on top.
+        if (!getSystemService(android.os.PowerManager::class.java).isInteractive) return
+        // Samsung puts its cover home over the app a moment after unlocking: put the app back instead of Home.
+        val app = appInFront
+        if (app != null && android.os.SystemClock.uptimeMillis() - unlockedAt < 3_000) {
+            val intent = packageManager.getLaunchIntentForPackage(app)
+            if (intent != null && runCatching { AppLauncher.startApp(this, intent.addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)) }.isSuccess) {
+                Log.i(TAG, "back to $app after unlock")
+                return
+            }
+        }
+        openHomeOverSamsung()
+    }
+
+    /** When the phone was last unlocked (uptime ms). */
+    private var unlockedAt = 0L
+
+    /** Samsung's cover home is showing: OpenCover's Home instead, the wallpaper covering the switch. */
+    private fun openHomeOverSamsung() {
+        val pm = getSystemService(android.os.PowerManager::class.java)
+        if (!pm.isInteractive || getSystemService(KeyguardManager::class.java).isKeyguardLocked) return
+        appInFront = null
         Log.i(TAG, "open launcher (home)")
-        AppLauncher.start(this, Intent(this, CoverActivity::class.java))
+        dev.opencover.nav.NavBar.raiseCurtain(this)
+        AppLauncher.start(this, Intent(this, CoverActivity::class.java), animate = false)
+    }
+
+    private fun homeIfAppGone() {
+        val top = runCatching {
+            windowsOnAllDisplays[COVER_DISPLAY]?.firstOrNull {
+                it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION
+            }?.root?.packageName?.toString()
+        }.getOrNull()
+        if (top == "com.android.systemui" && !CoverWatcher.paused) openHomeOverSamsung()
     }
 
     // The window list comes from the system, which can take many seconds to answer (seen with a USB-C monitor plugged
@@ -303,5 +346,8 @@ class CoverAccessibility : AccessibilityService() {
         private const val TAG = "CoverWatcher"
         var instance: CoverAccessibility? = null
             private set
+
+        /** The app on the cover when last seen; null once Home or Samsung's home replaced it. Survives the screen going off. */
+        @Volatile var appInFront: String? = null
     }
 }

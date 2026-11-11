@@ -27,8 +27,11 @@ android {
         }
     }
     buildTypes {
-        // ponytail: no R8. Much of OpenCover reaches hidden APIs by reflection; shrinking would need keep rules for each.
-        release { signingConfig = signingConfigs.findByName("release") }
+        release {
+            signingConfig = signingConfigs.findByName("release")
+            isMinifyEnabled = true // Compose runs far smoother optimized; proguard-rules.pro leaves OpenCover's own code alone
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
     }
     buildFeatures { compose = true; aidl = true; buildConfig = true }
 }

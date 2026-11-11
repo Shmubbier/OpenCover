@@ -23,6 +23,10 @@ object LockPrefs {
     var aodMinutes by mutableStateOf(0)
         private set
 
+    /** Swiping the lock screen opens Samsung's password screen; off: only the fingerprint unlocks. */
+    var swipeForPin by mutableStateOf(true)
+        private set
+
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("lock", Context.MODE_PRIVATE)
 
     fun load(ctx: Context) {
@@ -32,6 +36,7 @@ object LockPrefs {
         clock = ClockStyle.entries.find { it.name == p.getString("clock", null) } ?: ClockStyle.CURRENT
         layout = parseLayout(p.getString("layout", null))
         aodBlack = p.getBoolean("aod_black", false)
+        swipeForPin = p.getBoolean("swipe_for_pin", true)
         aodMinutes = p.getInt("aod_minutes", 0)
     }
 
@@ -43,6 +48,7 @@ object LockPrefs {
     fun setAodOffByUs(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean("aod_off_by_us", on).commit() }
 
     fun setAod(ctx: Context, on: Boolean) { aod = on; prefs(ctx).edit().putBoolean("aod", on).apply() }
+    fun setSwipeForPin(ctx: Context, on: Boolean) { swipeForPin = on; prefs(ctx).edit().putBoolean("swipe_for_pin", on).apply() }
     fun setLockScreen(ctx: Context, on: Boolean) { lockScreen = on; prefs(ctx).edit().putBoolean("lock_screen", on).apply() }
     fun setClock(ctx: Context, s: ClockStyle) { clock = s; prefs(ctx).edit().putString("clock", s.name).apply() }
     fun setLayout(ctx: Context, m: Map<Module, Spot>) { layout = m; prefs(ctx).edit().putString("layout", formatLayout(m)).apply() }

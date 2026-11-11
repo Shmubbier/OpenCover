@@ -107,13 +107,13 @@ fun LockFace(
         // The AOD on black (battery): only the clock and modules are lit.
         if (!(dim && LockPrefs.aodBlack)) Background(
             Wallpaper.lockStill ?: Wallpaper.homeStill, Wallpaper.lockAnim, dev.opencover.look.Playheads.lock,
-            playing = !dim, alpha = if (dim) 0.3f else 0.6f, crop = Wallpaper.lockAnimCrop, video = Wallpaper.lockVideo,
+            playing = !dim, alpha = if (dim) 0.4f else 0.6f, crop = Wallpaper.lockAnimCrop, video = Wallpaper.lockVideo,
         )
         BoxWithConstraints(Modifier.fillMaxSize().offset(shift.x, shift.y).graphicsLayer {
             alpha = 1f - 0.7f * pull
             scaleX = 1f - 0.06f * pull; scaleY = scaleX
         }) {
-            Placed(layout, onMove, selected, onSelect, onAlpha = if (dim) 0.55f else 1f) { module ->
+            Placed(layout, onMove, selected, onSelect, onAlpha = if (dim) 0.72f else 1f) { module ->
                 ModuleView(module, locked || onMove != null, onPeek)
             }
         }
