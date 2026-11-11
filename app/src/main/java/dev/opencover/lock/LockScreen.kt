@@ -79,6 +79,7 @@ fun LockLayer(activity: android.app.Activity) {
     val km = activity.getSystemService(KeyguardManager::class.java)
     fun unlock() {
         if (!km.isKeyguardLocked) return (activity as? CoverActivity)?.refreshLocked() ?: Unit // already unlocked: just leave
+        if (!LockPrefs.swipeForPin) return // fingerprint only: the unlock check below takes it from there
         km.requestDismissKeyguard(activity, object : KeyguardManager.KeyguardDismissCallback() {
             override fun onDismissSucceeded() { (activity as? CoverActivity)?.refreshLocked() }
             override fun onDismissCancelled() { LockScreen.pendingOpen = null }
@@ -126,7 +127,7 @@ fun LockLayer(activity: android.app.Activity) {
 
 private const val UNLOCK_PX = 160f
 
-/** "Swipe to unlock", breathing slowly so it's noticed without drawing the eye all the time. */
+/** "Swipe to unlock" (or the fingerprint hint), breathing slowly so it's noticed without drawing the eye all the time. */
 @androidx.compose.runtime.Composable
 private fun UnlockHint(modifier: Modifier) {
     val breath by androidx.compose.animation.core.rememberInfiniteTransition(label = "hint").animateFloat(
@@ -135,7 +136,7 @@ private fun UnlockHint(modifier: Modifier) {
             androidx.compose.animation.core.RepeatMode.Reverse,
         ), label = "breath",
     )
-    androidx.compose.material3.Text("Swipe to unlock", color = Color.White, fontSize = 14.sp, modifier = modifier.graphicsLayer { alpha *= breath })
+    androidx.compose.material3.Text(if (LockPrefs.swipeForPin) "Swipe to unlock" else "Unlock with your fingerprint", color = Color.White, fontSize = 14.sp, modifier = modifier.graphicsLayer { alpha *= breath })
 }
 
 object LockScreen {

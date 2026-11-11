@@ -82,6 +82,9 @@ fun LockSettings(onBack: () -> Unit) {
         Group("Lock screen") {
             SwitchRow("OpenCover lock screen", "Swipe up for Samsung's PIN. Samsung's quick panel still pulls down.",
                 LockPrefs.lockScreen) { LockPrefs.setLockScreen(ctx, it); CoverAccessibility.instance?.refreshScope(); CoverActivity.current?.applyLockScreen() }
+            if (LockPrefs.lockScreen) SwitchRow("Swipe opens the password screen",
+                if (LockPrefs.swipeForPin) "Swiping the lock screen brings up Samsung's PIN." else "Swiping does nothing; unlock with your fingerprint.",
+                LockPrefs.swipeForPin) { LockPrefs.setSwipeForPin(ctx, it) }
             SwitchRow("Fingerprint opens Home",
                 if (!ShizukuShell.allowed()) "Needs Shizuku." else if (straightHome) "Power key with your fingerprint goes straight to Home."
                 else "Power key with your fingerprint stays on the lock screen; swipe up to open, no PIN.",
